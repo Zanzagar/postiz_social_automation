@@ -1,0 +1,13 @@
+{
+  "pattern": "dataclass-enum-results",
+  "trigger": "When creating structured result types for service checks or status reporting",
+  "action": "Use @dataclass for result containers and Enum for finite status values. This enables clean assertions in tests (result.status == HealthStatus.HEALTHY) and serialization via .value.",
+  "confidence": 0.5,
+  "source": "session",
+  "category": "python-patterns",
+  "created": "2026-02-20",
+  "examples": [
+    "HealthStatus(Enum) with HEALTHY/UNHEALTHY/MISSING values",
+    "HealthResult(@dataclass) with service_name, status, response_time_ms, details"
+  ]
+}

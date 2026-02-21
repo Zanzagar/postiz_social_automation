@@ -1,0 +1,13 @@
+{
+  "pattern": "scripts-pythonpath-pattern",
+  "trigger": "When this project's scripts/ modules need to be imported in tests or other scripts",
+  "action": "Use PYTHONPATH=scripts when running pytest. In conftest.py, add scripts_dir to sys.path. In scripts that import siblings, add the scripts dir to sys.path at the top.",
+  "confidence": 0.5,
+  "source": "session",
+  "category": "project-conventions",
+  "created": "2026-02-20",
+  "examples": [
+    "PYTHONPATH=scripts pytest -q",
+    "sys.path.insert(0, str(Path(__file__).parent.parent / 'scripts')) in conftest.py"
+  ]
+}

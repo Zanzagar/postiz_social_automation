@@ -1,0 +1,13 @@
+{
+  "pattern": "gitignored-config-force-add",
+  "trigger": "When .claude/settings.local.json or .claude/instincts/ need to be tracked in git for sharing or testing",
+  "action": "Use git add -f to force-add gitignored files. These are gitignored by the template's default .gitignore but may need tracking for hook configuration sharing or instinct preservation.",
+  "confidence": 0.4,
+  "source": "session",
+  "category": "git-workflow",
+  "created": "2026-02-20",
+  "examples": [
+    "git add -f .claude/settings.local.json",
+    "git add -f .claude/instincts/candidates/.gitkeep"
+  ]
+}

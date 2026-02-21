@@ -1,0 +1,13 @@
+{
+  "pattern": "mock-boundary-tdd",
+  "trigger": "When writing tests for code that depends on external services (Docker, HTTP APIs, databases)",
+  "action": "Mock at the module/import boundary using unittest.mock.patch on the module-level import, not on individual instances. Create mock error types to match the real SDK's exception hierarchy.",
+  "confidence": 0.5,
+  "source": "session",
+  "category": "testing",
+  "created": "2026-02-20",
+  "examples": [
+    "patch('health_checker.docker') to mock entire Docker SDK",
+    "Create mock_docker.errors.NotFound = type('NotFound', (Exception,), {}) for exception matching"
+  ]
+}
