@@ -2,3 +2,17 @@
 *.log
 __pycache__/
 .DS_Store
+
+# SQLite databases
+var/*.sqlite
+
+# Claude Code session data (not project config)
+.claude/sessions/
+.claude/instincts/
+.claude/plugins/
+.claude/project-index.json
+.claude/settings.local.json
+.claude/work-log.md
+
+# Zone.Identifier files (WSL artifact)
+*:Zone.Identifier

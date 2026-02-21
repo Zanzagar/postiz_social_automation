@@ -1,0 +1,145 @@
+# PRD: Postiz Stack Health Monitoring
+
+## Overview
+
+Create a health monitoring system for the Postiz Docker Compose stack that provides proactive alerting when services are unhealthy, tracks uptime history, and integrates with the n8n automation platform for notifications.
+
+## Problem Statement
+
+Currently, the only way to check service health is manually running `make status` (docker compose ps). There's no proactive monitoring, no history, and no alerting when services go down. For a social media automation platform that needs to post on schedule, undetected downtime means missed posts.
+
+## Goals
+
+1. Automated health checks for all 7 Docker Compose services
+2. Health history tracking (SQLite-based, lightweight)
+3. Webhook-based alerting when services transition healthy → unhealthy
+4. CLI for quick status overview and history queries
+5. Integration with n8n for notification routing (email, Discord, etc.)
+
+## Non-Goals
+
+- Full APM/observability platform (use Datadog/Grafana for that)
+- Custom metrics collection beyond health status
+- Web dashboard (CLI + n8n handles visibility)
+
+## Technical Design
+
+### Architecture
+
+```
+scripts/health_monitor.py     # Main monitoring script
+  ├── check_services()        # Docker API health checks
+  ├── record_status()         # SQLite persistence
+  ├── detect_transitions()    # State change detection
+  └── send_webhook()          # n8n webhook for alerts
+
+scripts/health_cli.py         # CLI interface
+  ├── status                  # Current status (like make status but richer)
+  ├── history [--hours N]     # Recent health history
+  └── uptime [--days N]       # Uptime percentages
+
+var/health.sqlite             # Health check database
+```
+
+### Stack
+
+- Python 3.11+ (no additional frameworks — stdlib + docker SDK + sqlite3)
+- `docker` Python package for Docker API access
+- SQLite for lightweight persistence (matches existing pattern from donor_ack project)
+- httpx for webhook delivery to n8n
+
+### Service Checks
+
+Each service gets a health check appropriate to its type:
+
+| Service | Check Method | Healthy Criteria |
+|---------|-------------|-----------------|
+| postiz | HTTP GET /api/health (or container health) | 200 OK |
+| postiz-postgres | Container health status | pg_isready passes |
+| postiz-redis | Container health status | redis-cli ping |
+| temporal | Container health + gRPC port 7233 | Port responsive |
+| temporal-postgresql | Container health status | pg_isready passes |
+| temporal-elasticsearch | HTTP GET /_cluster/health | status != red |
+| temporal-ui | HTTP GET on port 8080 | 200 OK |
+
+### Data Model
+
+```sql
+CREATE TABLE health_checks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service_name TEXT NOT NULL,
+    status TEXT NOT NULL,  -- 'healthy', 'unhealthy', 'missing'
+    response_time_ms INTEGER,
+    details TEXT,  -- JSON: error message, HTTP status, etc.
+    checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE state_transitions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service_name TEXT NOT NULL,
+    from_status TEXT NOT NULL,
+    to_status TEXT NOT NULL,
+    webhook_sent BOOLEAN DEFAULT FALSE,
+    transitioned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Webhook Payload (to n8n)
+
+```json
+{
+  "event": "service_status_change",
+  "service": "postiz",
+  "from_status": "healthy",
+  "to_status": "unhealthy",
+  "details": "HTTP health check failed: Connection refused",
+  "timestamp": "2026-02-20T12:00:00Z",
+  "stack": "postiz-social-automation"
+}
+```
+
+### Configuration
+
+Via environment variables (added to .env.example):
+
+```
+# Health Monitoring (optional)
+HEALTH_CHECK_INTERVAL=60          # seconds between checks
+HEALTH_WEBHOOK_URL=               # n8n webhook URL for alerts
+HEALTH_DB_PATH=var/health.sqlite  # SQLite database location
+```
+
+## Requirements
+
+### P0 (Must Have)
+1. Health check script that checks all 7 services via Docker API
+2. SQLite storage for health check results
+3. State transition detection (healthy → unhealthy and back)
+4. CLI `status` command showing current health of all services
+5. CLI `history` command showing recent check results
+6. Webhook notification on state transitions
+
+### P1 (Should Have)
+7. CLI `uptime` command showing uptime percentages over N days
+8. Configurable check interval via environment variable
+9. Graceful handling of Docker daemon not running
+10. Retry logic for webhook delivery (3 attempts with backoff)
+
+### P2 (Nice to Have)
+11. Makefile integration (`make health`, `make health-history`)
+12. Docker Compose integration (run monitor as a service in the stack)
+
+## Test Strategy
+
+- Unit tests for each component (health check, storage, transition detection, webhook)
+- Integration test with Docker (requires running Docker daemon)
+- Mock Docker API responses for unit tests
+- Mock webhook endpoint for notification tests
+
+## Success Criteria
+
+- Running `python scripts/health_monitor.py` checks all services and records results
+- Running `python scripts/health_cli.py status` shows a clean table of service health
+- When a service goes down, a webhook fires within one check interval
+- When a service recovers, another webhook fires
+- History and uptime queries return accurate data from SQLite
