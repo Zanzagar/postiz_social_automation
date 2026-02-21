@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-02-20T21:00:00Z",
+  "metrics": {
+    "test_count": 106,
+    "test_passed": 106,
+    "test_failed": 0,
+    "lint_issues": 4,
+    "lint_density_per_kloc": 6.7,
+    "source_lines": 597,
+    "type_coverage": null,
+    "avg_complexity": null
+  },
+  "details": {
+    "tests": {
+      "passed": 106,
+      "failed": 0,
+      "skipped": 0,
+      "duration_s": 1.46
+    },
+    "lint_issues": [
+      {"file": "scripts/health_monitor.py", "rule": "E402", "count": 3},
+      {"file": "scripts/health_storage.py", "rule": "F401", "count": 1}
+    ],
+    "tools_missing": ["mypy", "radon", "bandit"]
+  }
+}
