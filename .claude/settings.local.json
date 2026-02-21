@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./scripts/sync-template.sh status:*)",
+      "Bash(echo Tests not available:*)",
+      "Bash(echo:*)",
+      "mcp__task-master-ai__get_tasks",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(task-master tags:*)",
+      "Bash(task-master parse-prd:*)",
+      "Bash(task-master list:*)",
+      "Bash(task-master analyze-complexity:*)",
+      "Bash(task-master complexity-report:*)",
+      "Bash(task-master expand:*)",
+      "Bash(task-master show:*)",
+      "Bash(task-master set-status:*)",
+      "Bash(tail:*)",
+      "Bash(pytest:*)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-end.sh" },
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pattern-extraction.sh" }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-init.sh" }
+        ]
+      }
+    ]
+  }
+}
