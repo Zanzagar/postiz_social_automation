@@ -20,3 +20,4 @@ var/*.sqlite
 # Python
 *.pyc
 .venv/
+*.egg-info/
