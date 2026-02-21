@@ -19,6 +19,12 @@ mkdir -p "$INSTINCT_DIR"
 RECENT_COMMITS=$(git log --since="4 hours ago" --oneline 2>/dev/null)
 [ -z "$RECENT_COMMITS" ] && exit 0
 
+# Dedup: skip if a candidate already exists for the current HEAD commit
+HEAD_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+if grep -rl "\"head_commit\": \"$HEAD_SHA\"" "$INSTINCT_DIR" >/dev/null 2>&1; then
+    exit 0
+fi
+
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 SESSION_ID=$(date +"%Y%m%d_%H%M%S")
 
@@ -40,6 +46,7 @@ cat > "$INSTINCT_DIR/session_${SESSION_ID}.json" << INSTINCT_EOF
 {
   "extracted_at": "$TIMESTAMP",
   "session_id": "$SESSION_ID",
+  "head_commit": "$HEAD_SHA",
   "commit_count": $TOTAL_COMMITS,
   "commit_types": {
     "feat": $FEAT_COUNT,

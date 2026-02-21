@@ -7,16 +7,11 @@
 # modified files, and task progress for cross-session continuity.
 # Replaces session-summary.sh with richer context capture.
 
-set -e
+# Best-effort: never block session exit
+set +e
 
-# Read the input JSON from stdin
-INPUT=$(cat)
-
-# Only generate on end_turn (not on interrupts)
-STOP_REASON=$(echo "$INPUT" | jq -r '.stop_hook_reason // "unknown"')
-if [ "$STOP_REASON" != "end_turn" ]; then
-    exit 0
-fi
+# Consume stdin (Claude Code passes JSON on Stop events)
+cat > /dev/null 2>&1
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 SESSIONS_DIR="$PROJECT_DIR/.claude/sessions"
