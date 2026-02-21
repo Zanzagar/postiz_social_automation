@@ -1,0 +1,34 @@
+[
+  {
+    "pattern": "mock-boundary-tdd",
+    "trigger": "When writing tests for code that depends on external services (Docker, HTTP APIs, databases)",
+    "action": "Mock at the module/import boundary using unittest.mock.patch on the module-level import, not on individual instances. Create mock error types to match the real SDK's exception hierarchy.",
+    "confidence": 0.5,
+    "category": "testing",
+    "created": "2026-02-20"
+  },
+  {
+    "pattern": "dataclass-enum-results",
+    "trigger": "When creating structured result types for service checks or status reporting",
+    "action": "Use @dataclass for result containers and Enum for finite status values. This enables clean assertions in tests (result.status == HealthStatus.HEALTHY) and serialization via .value.",
+    "confidence": 0.5,
+    "category": "python-patterns",
+    "created": "2026-02-20"
+  },
+  {
+    "pattern": "scripts-pythonpath-pattern",
+    "trigger": "When this project's scripts/ modules need to be imported in tests or other scripts",
+    "action": "Use PYTHONPATH=scripts when running pytest. In conftest.py, add scripts_dir to sys.path. In scripts that import siblings, add the scripts dir to sys.path at the top.",
+    "confidence": 0.5,
+    "category": "project-conventions",
+    "created": "2026-02-20"
+  },
+  {
+    "pattern": "gitignored-config-force-add",
+    "trigger": "When .claude/settings.local.json or .claude/instincts/ need to be tracked in git for sharing or testing",
+    "action": "Use git add -f to force-add gitignored files. These are gitignored by the template's default .gitignore but may need tracking for hook configuration sharing or instinct preservation.",
+    "confidence": 0.4,
+    "category": "git-workflow",
+    "created": "2026-02-20"
+  }
+]
