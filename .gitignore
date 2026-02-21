@@ -16,3 +16,7 @@ var/*.sqlite
 
 # Zone.Identifier files (WSL artifact)
 *:Zone.Identifier
+
+# Python
+*.pyc
+.venv/
