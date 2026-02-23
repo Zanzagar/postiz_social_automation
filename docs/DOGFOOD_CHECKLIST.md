@@ -162,16 +162,42 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 - **Enforcement**: NORMATIVE (Superpowers) — skill should be invoked for any creative/feature work
 - **Gotcha**: If Superpowers not installed, brainstorming is advisory only
 
-### 2.2 Brainstorming Process
+### 2.2 Research & Context Intake
 
-- **Trigger**: `superpowers:brainstorming` skill loaded
+- **Trigger**: Brainstorming skill's first step: "Explore project context — check files, docs, recent commits"
+- [ ] Claude reads ALL existing research docs in `docs/` (non-dogfood files)
+  - `gita-valley-context.md` — Client profile, social accounts, content strategy
+  - `gita-valley-online-presence-audit-v2.md` — Platform audit, rebranding gaps
+  - `social-media-automation-assessment.md` — Postiz vs SaaS comparison
+  - `N8N_INTEGRATION.md` — n8n ↔ Postiz connection setup
+- [ ] Claude reads/analyzes existing infrastructure (Docker Compose, service config) if present
+- [ ] Research findings are explicitly referenced when proposing approaches (not generic suggestions)
+- [ ] Technology constraints from research are acknowledged (Postiz API beta limits, n8n capabilities, platform app approvals)
+- **Enforcement**: NORMATIVE (Superpowers brainstorming skill step 1 + startup prompt)
+- **Context**: In α2, comprehensive domain audits (online presence audit, tech assessment) were created as part of the workflow and informed all subsequent design. These docs already exist in the project — the brainstorming must incorporate them, not ignore them.
+- **Gotcha**: The brainstorming skill says "check files, docs, recent commits" but doesn't enforce it. If Claude skips this step, the design doc and PRD will be generic rather than domain-informed.
+
+### 2.3 Brainstorming Process
+
+- **Trigger**: `superpowers:brainstorming` skill loaded, research intake complete
 - [ ] Claude explores user intent before jumping to solutions
 - [ ] Multiple approaches considered (at least 2-3)
-- [ ] Trade-offs discussed
+- [ ] Approaches reference specific findings from research docs (e.g., API rate limits, platform rebrand status, content pillar weights)
+- [ ] Trade-offs discussed with domain-specific context (not abstract pros/cons)
 - [ ] User confirms direction before proceeding
 - **Enforcement**: NORMATIVE (Superpowers skill instructions)
 
-### 2.3 Brainstorming Exit — CRITICAL OVERRIDE
+### 2.4 Design Doc Quality Check
+
+- **Trigger**: Brainstorming produces design doc
+- [ ] Design doc references specific data from research docs (follower counts, API limits, platform statuses)
+- [ ] Architecture decisions are grounded in the technology assessment (not reinvented from scratch)
+- [ ] Content strategy alignment: design doc reflects the 40/25/15/10/5/5 pillar weights and 70/20/10 mix
+- [ ] Infrastructure constraints captured: Docker stack, Postiz API beta limits, separate hosts for n8n/Postiz
+- **Enforcement**: NORMATIVE (quality verification)
+- **Context**: α1's design doc was 185 lines with detailed architecture, data flow, and phased rollout — all informed by the research docs. This is the quality bar.
+
+### 2.5 Brainstorming Exit — CRITICAL OVERRIDE
 
 - **Trigger**: Brainstorming skill completes
 - [ ] Design doc saved to `docs/plans/YYYY-MM-DD-<topic>-design.md`
@@ -188,10 +214,17 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 
 - **Trigger**: After brainstorming completes (or if requirements are already clear)
 - [ ] PRD written to `.taskmaster/docs/prd_<slug>.txt`
-- [ ] PRD contains: overview, features, technical requirements, constraints
+- [ ] PRD contains: overview, architecture, technology stack, requirements, success criteria
+- [ ] PRD contains a **Dependency Graph** section with layered dependencies
+  - [ ] Foundation layer modules have NO dependencies
+  - [ ] Each non-foundation module has explicit `Depends on [X, Y]` markers
+  - [ ] Dependencies form a DAG (no circular references)
+  - [ ] Modules within the same layer that don't depend on each other are identifiable as parallelizable
 - [ ] PRD is NOT in random location (should be in `.taskmaster/docs/`)
 - **Enforcement**: NORMATIVE (CLAUDE.md: "ALWAYS create a PRD before generating tasks")
+- **Context**: The dependency graph is the most valuable section for `task-master parse-prd`. Without it, the parser must infer dependencies from prose — often incorrectly. `/prd-generate` now includes Phase 3.5 (Dependency Analysis) that produces this structure automatically.
 - **Gotcha**: doc-file-blocker.sh may block `.md` files outside `docs/` — PRD uses `.txt` extension intentionally
+- **Gotcha**: α1's PRD lacked explicit dependency chains. Combined with skipping `analyze-complexity` (which caused the default 5 subtasks per task), this produced poorly-ordered, flat task decomposition.
 
 ### 3.2 Create Tag for This Phase
 
