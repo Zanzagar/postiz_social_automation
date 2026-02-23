@@ -601,14 +601,58 @@ These hooks fire during normal coding work:
 - [ ] Bugfix branches named `bugfix/<description>`
 - **Enforcement**: HOOK (pre-commit-check.sh blocks main commits)
 
-### C.5 PRD-First Rule
+### C.5 Continuous Learning Pipeline
+
+The full pipeline: observations → instinct candidates → active instincts → skill evolution.
+
+#### C.5a Observations (observe.sh)
+- **Trigger**: Every tool use (PreToolUse + PostToolUse, matcher `*`)
+- [ ] `observations.jsonl` file created in `.claude/` or project root
+- [ ] Entries accumulate as tools are used throughout the session
+- [ ] No visible output to user (silent capture)
+- **Enforcement**: HOOK (observe.sh fires on every tool use)
+
+#### C.5b Instinct Candidate Extraction (pattern-extraction.sh)
+- **Trigger**: Stop hook fires after Claude responses
+- [ ] pattern-extraction.sh runs and analyzes recent git history
+- [ ] Instinct candidates written to `.claude/instincts/` as JSON files
+- [ ] Each candidate has: pattern, confidence score (0.3-0.7 for new candidates), context
+- **Enforcement**: HOOK (Stop event)
+- **Gotcha**: Only extracts from git history — sessions with no commits produce no candidates
+
+#### C.5c Instinct Activation
+- **Trigger**: Candidate reinforced across multiple sessions (confidence > 0.7)
+- [ ] Check `/instinct-status` — shows candidate vs active instincts
+- [ ] Active instincts (confidence > 0.7) are loaded and influence behavior
+- [ ] Instincts with confidence < 0.3 decay and are removed
+- **Enforcement**: NORMATIVE (authority-hierarchy.md: instincts supplement but never override rules)
+- **Gotcha**: Single-session dogfood may not produce enough reinforcement for activation — candidates are still a valid outcome
+
+#### C.5d Memory Persistence (MEMORY.md)
+- **Trigger**: Claude discovers stable patterns worth remembering across sessions
+- [ ] `~/.claude/projects/<project-path>/memory/MEMORY.md` created if useful patterns emerge
+- [ ] Memories are semantic (by topic), not chronological
+- [ ] No duplicate memories — check existing before writing
+- [ ] Memories don't contradict CLAUDE.md instructions
+- **Enforcement**: NORMATIVE (auto-memory system prompt instructions)
+- **Gotcha**: MEMORY.md is auto-loaded every session — keep it lean. Use separate topic files for detail.
+
+#### C.5e Skill Evolution (optional, multi-session)
+- **Trigger**: Instinct clusters detected after multiple sessions
+- **Command**: `/evolve`
+- [ ] If enough instincts cluster around a theme, `/evolve` suggests promoting to a skill
+- [ ] New skill created in `.claude/skills/` with proper SKILL.md format
+- **Enforcement**: NORMATIVE (continuous-learning-v2 skill)
+- **Gotcha**: Unlikely in a single dogfood session — this validates over weeks. Mark `[-]` skipped if single-session.
+
+### C.6 PRD-First Rule
 
 - [ ] No tasks created via `add-task` from scratch
 - [ ] All tasks originate from a parsed PRD
 - [ ] PRD stored in `.taskmaster/docs/`
 - **Enforcement**: NORMATIVE (CLAUDE.md: "ALWAYS create a PRD before generating tasks")
 
-### C.6 Tag Discipline
+### C.7 Tag Discipline
 
 - [ ] Each workflow phase gets its own tag
 - [ ] `master` tag not polluted with phase-specific work
