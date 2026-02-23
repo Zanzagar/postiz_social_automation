@@ -11,6 +11,7 @@ yarn-error.log*
 dev-debug.log
 # Dependency directories
 node_modules/
+.mcp.json
 # Environment variables
 # Editor directories and files
 .idea

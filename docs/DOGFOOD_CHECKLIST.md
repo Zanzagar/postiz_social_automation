@@ -93,11 +93,12 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 
 - **Trigger**: Manual — after completing steps 0.1–0.5
 - **Action**: Exit Claude Code (`/exit` or Ctrl+C), then restart in the project directory
-- [ ] Claude Code exited cleanly
-- [ ] Claude Code restarted in the project directory
-- [ ] Hooks, rules, and CLAUDE.md are now loaded (verified by session-init output in Phase 1.1)
+- [x] Claude Code exited cleanly — user restarted session after Phase 0.1–0.5
+- [x] Claude Code restarted in the project directory — confirmed by new session context
+- [x] Hooks, rules, and CLAUDE.md are now loaded — confirmed: 2 SessionStart hooks fired ("Success" + "Project Status" box), UserPromptSubmit hook fired (pre-compact state saved), all 14 rule files loaded
 - **Enforcement**: PREREQUISITE — hooks, rules, and CLAUDE.md only load at session startup. Without restart, none of the behavioral enforcement installed in 0.2–0.4 is active.
 - **Gotcha**: Skipping this restart is invisible — everything appears to work, but hooks don't fire and rules aren't loaded. This is the most common onboarding mistake.
+- **New finding**: On restart, Claude Code prompted user to enable Task Master AI as a local MCP, creating `.mcp.json` with placeholder API keys and `core` tier — this OVERRIDES the working global config. See Failure #5.
 
 ### 0.6 Install Superpowers Plugin
 
@@ -107,19 +108,22 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
   /plugin marketplace add obra/superpowers-marketplace
   /plugin install superpowers@superpowers-marketplace
   ```
-- [ ] Superpowers skills appear in skill list (brainstorming, test-driven-development, etc.)
-- [ ] `superpowers:brainstorming` is invocable
-- [ ] `superpowers:test-driven-development` is invocable
+- [x] Superpowers skills appear in skill list (brainstorming, test-driven-development, etc.) — confirmed: 12 `superpowers:*` skills listed in session system-reminder (brainstorming, test-driven-development, writing-plans, executing-plans, systematic-debugging, requesting-code-review, finishing-a-development-branch, verification-before-completion, dispatching-parallel-agents, subagent-driven-development, receiving-code-review, using-git-worktrees)
+- [x] `superpowers:brainstorming` is invocable — listed as available skill in Skill tool
+- [x] `superpowers:test-driven-development` is invocable — listed as available skill in Skill tool
 - **Enforcement**: PREREQUISITE — without Superpowers, TDD is advisory-only (not enforced)
 - **Gotcha**: Superpowers detection in session-init.sh checks `find` + skills directory — improved in v2.3.1
+- **Note**: Superpowers was already installed from a prior session — no need to re-install. All 12 skills loaded successfully.
 
 ### 0.7 Verify MCP Servers Connected
 
 - **Trigger**: Start a Claude Code session in the project
-- [ ] Task Master MCP responds (test: `task-master list`)
-- [ ] Context7 MCP responds (test: resolve a library ID)
+- [!] Task Master MCP responds (test: `task-master list`) — **PARTIAL FAIL**: MCP responds (v0.43.0, basic ops work) BUT local `.mcp.json` overrides global config with placeholder API keys and `core` tier (7 tools vs `all` 44+). AI operations (parse_prd, expand_task) will fail due to placeholder keys. **Fix applied**: deleted `.mcp.json`, added to `.gitignore`. Takes effect on next restart. See Failure #5.
+- [x] Context7 MCP responds (test: resolve a library ID) — confirmed: resolved FastAPI to `/websites/fastapi_tiangolo` with 21.4k snippets, High reputation
 - **Enforcement**: PREREQUISITE — Task Master MCP needed for data ops
 - **Gotcha**: MCP servers are user-level config (`~/.claude/settings.json`), not project-level
+- **Gotcha confirmed**: Local `.mcp.json` OVERRIDES global `~/.claude.json` for servers with the same name. Claude Code prompted user to create local MCP config on restart, which silently replaced the working global config with a broken local one.
+- **Future feature needed**: Template should encourage GLOBAL MCP installation and verify global config exists before suggesting local. Local `.mcp.json` should be opt-in with warnings about overriding global config. Template init should check for existing global MCPs and skip local creation if they exist with real credentials.
 
 ---
 
@@ -128,40 +132,42 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 ### 1.1 session-init.sh Fires
 
 - **Trigger**: `SessionStart` hook — fires when Claude Code session begins
-- [ ] Hook runs without errors (check for `SessionStart:startup hook success` in system message)
-- [ ] Project phase detected and displayed (IDEATION for new project)
-- [ ] Template version shown: `v2.3.1`
-- [ ] No stale session summaries loaded (fresh project)
-- [ ] Update banner NOT shown (installed version should match current)
+- [x] Hook runs without errors (check for `SessionStart:startup hook success` in system message) — confirmed: `SessionStart:startup hook success: Success`
+- [!] Project phase detected and displayed (IDEATION for new project) — **NOT SHOWN**. Output was just "Success". No phase indicator like "IDEATION" displayed. The second SessionStart message showed "PROTO-TEMPLATE DETECTED" (from project-index.sh), not a workflow phase. **Possible cause**: `.template/version` file doesn't exist, so phase detection may have been skipped or limited.
+- [!] Template version shown: `v2.3.1` — **NOT SHOWN**. No template version appeared in any system message. Likely because `.template/version` file is missing (init-project.sh may not create it in copy mode). **Template bug**: phase detection and version display depend on `.template/version` which isn't guaranteed to exist.
+- [x] No stale session summaries loaded (fresh project) — confirmed: no session summaries exist in `.claude/sessions/`
+- [x] Update banner NOT shown (installed version should match current) — confirmed: no update banner
 - **Enforcement**: HOOK — fires automatically
 - **Gotchas**:
   - If `.template/version` file doesn't exist, version comparison may error
   - Hook assumes `jq` is installed for some operations
+- **Gotcha confirmed**: Without `.template/version`, session-init.sh can't display phase or version info. The hook ran successfully but produced minimal output ("Success") instead of the rich status display expected.
 
 ### 1.2 project-index.sh Fires
 
 - **Trigger**: `SessionStart` hook — runs after session-init.sh
-- [ ] `Project index updated` message appears in system reminders
-- [ ] `.claude/project-index.json` created/updated
-- [ ] Index contains file tree of the project
+- [!] `Project index updated` message appears in system reminders — **NOT SHOWN**. Instead showed "PROTO-TEMPLATE DETECTED" with recommendation to sync template. The hook ran but produced a template detection message, not a project index update message.
+- [!] `.claude/project-index.json` created/updated — **NOT CREATED**. File does not exist. The project-index.sh hook focused on template detection instead of generating the index file.
+- [!] Index contains file tree of the project — **N/A** — index file not created
 - **Enforcement**: HOOK — fires automatically
 - **Gotcha**: On empty projects, index will be minimal (just CLAUDE.md, .claude/, .taskmaster/)
+- **Gotcha confirmed**: project-index.sh detected "PROTO-TEMPLATE" status (template-like structure but not officially synced) and displayed a sync recommendation instead of generating the project index. This may be expected behavior for copy-mode projects — the hook may require `sync-template.sh` and `mcp-registry.json` (listed as "Missing components") to function fully. **Template bug or expected?** — needs investigation.
 
 ### 1.3 pre-compact.sh Fires
 
 - **Trigger**: `UserPromptSubmit` hook — fires on EVERY user message
-- [ ] `Pre-compaction state saved` message appears
-- [ ] `.claude/sessions/pre-compact-state.md` created
+- [x] `Pre-compaction state saved` message appears — confirmed: `UserPromptSubmit hook success: Pre-compaction state saved to .../pre-compact-state.md`
+- [x] `.claude/sessions/pre-compact-state.md` created — confirmed: file exists (392 bytes, 16:46 today), contains active task (none), TM tag (master), TDD phase (N/A), branch (main), uncommitted changes
 - **Enforcement**: HOOK — fires every prompt
 - **Gotcha**: This fires on every single user message, not just before compaction — it's preemptive
 
 ### 1.4 suggest-compact.sh Fires
 
 - **Trigger**: `UserPromptSubmit` hook — fires on every user message
-- [ ] Silent on early messages (no output until 50+ tool calls)
-- [ ] At 50 tool calls: advisory suggestion appears
-- [ ] At 75 tool calls: stronger suggestion
-- [ ] At 100 tool calls: urgent suggestion
+- [x] Silent on early messages (no output until 50+ tool calls) — confirmed: no compact suggestion shown after ~15 tool calls in this session
+- [-] At 50 tool calls: advisory suggestion appears — skipped: session not long enough to reach 50 tool calls yet
+- [-] At 75 tool calls: stronger suggestion — skipped: same reason
+- [-] At 100 tool calls: urgent suggestion — skipped: same reason
 - **Enforcement**: ADVISORY — suggestions only, no blocking
 - **Gotcha**: Counter resets on session restart. Token-based, not message-based.
 
@@ -719,7 +725,10 @@ Track any failures here with details for post-dogfood debugging:
 | 2 | 0.5 | projectName correct | Non-default project name | "Taskmaster" (MCP init default) | **Medium** — cosmetic but misleading in reports | Manual edit to "postiz-social-automation". Template should auto-detect project name from directory or git remote. |
 | 3 | 0.5 | maxTokens: 200000 | 200000 | 120000 (MCP init default, different from CLI's 32000) | **Medium** — may cause truncated AI responses | Manual edit. Template should set this globally or init-project.sh should patch config.json after init. |
 | 4 | 0.5 | Model config from template | Template's `.taskmaster/config.json` (provider: `claude-code`, models: opus/sonnet, maxTokens: 200000) | MCP init wrote its own defaults: provider `anthropic`, model `claude-3-7-sonnet`, maxTokens 120000 | **High** — wrong provider and models | Manual overwrite with template config. **Template bug**: `init-project.sh` doesn't copy `.taskmaster/config.json` from template. `task-master init` (both MCP and CLI) overwrites any existing config with its own defaults. Need: (a) init-project.sh copies template config, OR (b) init-project.sh runs AFTER task-master init and patches the config. |
-| 5 | | | | | | |
+| 5 | 0.7 | Task Master MCP config | Global config used (real keys, `all` tools) | Local `.mcp.json` created on restart with placeholder keys, `core` tier (7 tools), overriding working global config | **High** — AI ops (parse_prd, expand) will fail with placeholder keys; only 7/44+ tools available | Claude Code prompted user to enable TM as local MCP on restart. Local `.mcp.json` overrides global `~/.claude.json` for same-name servers. **Fix**: deleted `.mcp.json`, added to `.gitignore`. **Template feature needed**: init-project.sh should check for global MCP config before suggesting local; encourage global installation; warn about override risk. |
+| 6 | 1.1 | Project phase displayed | "IDEATION" phase shown | No phase indicator — just "Success" | **Low** — cosmetic, doesn't block workflow | `.template/version` file missing (init-project.sh in copy mode doesn't create it). Phase detection and version display depend on this file. **Template bug**: init-project.sh should create `.template/version` in copy mode. |
+| 7 | 1.2 | Project index created | `.claude/project-index.json` created | File not created; hook showed "PROTO-TEMPLATE DETECTED" instead of indexing | **Medium** — project index helps sub-agents navigate codebase | Hook detected "proto-template" (missing `sync-template.sh`, `mcp-registry.json`) and showed sync recommendation instead of generating index. May be expected for copy-mode projects that haven't run sync-template.sh. **Template issue**: project-index.sh should still generate index even for proto-templates. |
+| 8 | | | | | | |
 
 ---
 
