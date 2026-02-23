@@ -30,8 +30,8 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
   git init
   git commit --allow-empty -m "chore: Initial commit"
   ```
-- [ ] Directory exists at `~/projects/postiz-social-automation`
-- [ ] Git repo initialized with at least one commit (required for hooks)
+- [x] Directory exists at `~/projects/postiz-social-automation` — actual path is `~/projects/ISKCON-GN/postiz_social_automation` (nested under ISKCON-GN org dir, underscore not hyphen). Pre-existing from prior α2 work.
+- [x] Git repo initialized with at least one commit (required for hooks) — repo has 8+ commits from prior docs/dogfood prep work
 - **Enforcement**: PREREQUISITE — hooks and Task Master require a git repo
 - **Gotcha**: Some hooks call `git log` or `git diff` and fail on repos with zero commits
 
@@ -39,13 +39,13 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 
 - **Trigger**: Manual — run from inside the postiz project directory
 - **Command**: `~/projects/project-template/scripts/init-project.sh`
-- [ ] Auto-detects template at `~/projects/project-template` (parent walk or script-path detection)
-- [ ] Mode reported: `symlink` (projects are siblings, so should be copy mode — verify which!)
-- [ ] `.claude/` directory created
-- [ ] Symlinks OR copies created for: `rules/`, `commands/`, `skills/`, `agents/`, `contexts/`, `hooks/`
-- [ ] Each directory has files (not empty)
-- [ ] Summary shows `Created: 6` (or appropriate count)
-- [ ] No errors or warnings about missing directories
+- [x] Auto-detects template at `~/projects/project-template` — detected via script-path, reported `Template: /home/cjh5690/projects/project-template`
+- [x] Mode reported: `symlink` (projects are siblings, so should be copy mode — verify which!) — reported `copy` mode, which is correct since projects are in different parent dirs (`ISKCON-GN/` vs `project-template/`). Checklist note about expecting symlink was misleading.
+- [x] `.claude/` directory created — confirmed
+- [x] Symlinks OR copies created for: `rules/`, `commands/`, `skills/`, `agents/`, `contexts/`, `hooks/` — all 6 copied: rules/ (14 files), commands/ (48), skills/ (40), agents/ (14), contexts/ (3), hooks/ (20)
+- [x] Each directory has files (not empty) — confirmed, 139 files total across 6 dirs
+- [x] Summary shows `Created: 6` (or appropriate count) — exactly `Created: 6, Skipped: 0, Warnings: 0`
+- [x] No errors or warnings about missing directories — confirmed clean run
 - **Enforcement**: PREREQUISITE — without this, no commands/skills/hooks work
 - **Gotchas**:
   - Script uses `python3` for `calc_relative_path` — must be installed
@@ -55,20 +55,22 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 ### 0.3 Verify settings.json Copied/Created
 
 - **Trigger**: Part of init-project.sh (hooks/ directory includes settings.json reference)
-- [ ] `.claude/settings.json` exists in the project
-- [ ] Contains all hook definitions (SessionStart, PreToolUse, PostToolUse, UserPromptSubmit, Stop)
-- [ ] Hook paths use `$CLAUDE_PROJECT_DIR` prefix (portable across machines)
+- [!] `.claude/settings.json` exists in the project — **FAILED initially**. `init-project.sh` copies subdirectories (rules/, commands/, etc.) but does NOT copy the root-level `.claude/settings.json`. Only a `settings.local.json` (with permissions) and `hooks/settings-example.json` were present. **Fix**: Manually copied from template: `cp ~/projects/project-template/.claude/settings.json .claude/settings.json`. Fix worked — file now present.
+- [x] Contains all hook definitions (SessionStart, PreToolUse, PostToolUse, UserPromptSubmit, Stop) — confirmed after manual copy, all 5 event types with 18 hooks including observe.sh wildcard matchers
+- [x] Hook paths use `$CLAUDE_PROJECT_DIR` prefix (portable across machines) — confirmed
 - **Enforcement**: PREREQUISITE — without settings.json, zero hooks fire
 - **Gotcha**: settings.json is in `.claude/hooks/` in the template but Claude Code reads from `.claude/settings.json`. Verify init-project.sh handles this correctly OR document that settings.json must be manually copied/symlinked to `.claude/settings.json`.
+- **Gotcha confirmed**: init-project.sh does NOT handle this. The template's `.claude/settings.json` is a root-level file, not inside any of the 6 subdirectories that init-project.sh copies. This is a **template bug** — settings.json must be manually copied every time.
 
 ### 0.4 Create CLAUDE.md
 
 - **Trigger**: Manual — copy template CLAUDE.md and customize for postiz project
-- [ ] `CLAUDE.md` exists at project root
-- [ ] Project name, tech stack, and structure sections filled in
-- [ ] Taskmaster workflow section preserved (PRD first, new tag per phase, etc.)
+- [x] `CLAUDE.md` exists at project root — created from template, customized for Postiz project
+- [x] Project name, tech stack, and structure sections filled in — "Postiz Social Media Automation", Docker/PostgreSQL/Redis/Temporal/Python stack, project structure with Docker infra + automation layer
+- [x] Taskmaster workflow section preserved (PRD first, new tag per phase, etc.) — all 5 mandatory workflow rules preserved verbatim
 - **Enforcement**: NORMATIVE — Claude reads CLAUDE.md every session
 - **Gotcha**: CLAUDE.md is project-specific and should NOT be symlinked from template
+- **Note**: Task Master init (step 0.5) auto-appended a `@./.taskmaster/CLAUDE.md` import reference to the bottom of CLAUDE.md
 
 ### 0.5 Initialize Task Master
 
@@ -710,7 +712,7 @@ Track any failures here with details for post-dogfood debugging:
 
 | # | Phase | Check | Expected | Actual | Severity | Fix/Notes |
 |---|-------|-------|----------|--------|----------|-----------|
-| 1 | | | | | | |
+| 1 | 0.3 | settings.json exists | init-project.sh copies settings.json to `.claude/settings.json` | NOT copied — only subdirs (rules/, commands/, etc.) are copied, root-level settings.json is skipped | **High** — zero hooks fire without it | Manual `cp` from template fixes it. Template bug: init-project.sh needs to also copy root-level `.claude/settings.json`. |
 | 2 | | | | | | |
 | 3 | | | | | | |
 
