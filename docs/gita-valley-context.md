@@ -19,6 +19,8 @@
 - Both services on Seth's server behind reverse proxies — must communicate via public URLs
 - Postiz internal: 192.168.0.232:4007 / n8n internal: 192.168.0.133:5678
 
+**Deployment constraint**: The live Postiz + n8n stack at sethpc.xyz is managed by Seth. We do NOT have direct access to push updates to the live server. Any changes to the Docker Compose configuration or container setup must be handed off to Seth for deployment. Our repo tracks the desired state; Seth deploys it.
+
 ---
 
 ## The Client: Gita Valley
