@@ -84,6 +84,16 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
   - If `.taskmaster/tasks/` doesn't exist, `task-master tags add` fails silently
   - init-project.sh creates `.taskmaster/{tasks,reports,docs}/` IF `.taskmaster/` already exists — so run `task-master init` FIRST, then re-run init-project.sh, OR manually mkdir
 
+### 0.5.5 Restart Claude Code
+
+- **Trigger**: Manual — after completing steps 0.1–0.5
+- **Action**: Exit Claude Code (`/exit` or Ctrl+C), then restart in the project directory
+- [ ] Claude Code exited cleanly
+- [ ] Claude Code restarted in the project directory
+- [ ] Hooks, rules, and CLAUDE.md are now loaded (verified by session-init output in Phase 1.1)
+- **Enforcement**: PREREQUISITE — hooks, rules, and CLAUDE.md only load at session startup. Without restart, none of the behavioral enforcement installed in 0.2–0.4 is active.
+- **Gotcha**: Skipping this restart is invisible — everything appears to work, but hooks don't fire and rules aren't loaded. This is the most common onboarding mistake.
+
 ### 0.6 Install Superpowers Plugin
 
 - **Trigger**: Manual — follow CLAUDE.md instructions
