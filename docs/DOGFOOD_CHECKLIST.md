@@ -76,15 +76,18 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 
 - **Trigger**: Manual — `task-master init` in the project
 - **Command**: `task-master init`
-- [ ] `.taskmaster/` directory created with `tasks/`, `reports/`, `docs/` subdirectories
-- [ ] `.taskmaster/config.json` created
-- [ ] Config has correct `projectName` (not template default)
-- [ ] Config has `maxTokens: 200000` (not the `task-master init` default of 32000)
+- [x] `.taskmaster/` directory created with `tasks/`, `reports/`, `docs/` subdirectories — confirmed via MCP `initialize_project` tool (not CLI)
+- [x] `.taskmaster/config.json` created — yes, but with wrong defaults
+- [!] Config has correct `projectName` (not template default) — **FAILED initially**: was "Taskmaster". Manually edited to "postiz-social-automation". Fix worked.
+- [!] Config has `maxTokens: 200000` (not the `task-master init` default of 32000) — **FAILED initially**: was 120000 (MCP init default differs from CLI default). Manually edited to 200000. Fix worked.
 - **Enforcement**: PREREQUISITE — Task Master CLI won't work without init
 - **Gotchas**:
   - `task-master init` creates config with its own defaults (32k tokens, wrong project name) — MUST manually edit
   - If `.taskmaster/tasks/` doesn't exist, `task-master tags add` fails silently
   - init-project.sh creates `.taskmaster/{tasks,reports,docs}/` IF `.taskmaster/` already exists — so run `task-master init` FIRST, then re-run init-project.sh, OR manually mkdir
+- **New finding**: Used MCP `initialize_project` instead of `task-master init` CLI — MCP defaults differ (120k tokens vs 32k, different provider/model). Both overwrite any existing config.
+- **New finding**: Template has correct config at `~/projects/project-template/.taskmaster/config.json` with provider `claude-code`, models `opus`/`sonnet`, maxTokens 200000, placeholder `__PROJECT_NAME__`. But `init-project.sh` doesn't copy it, and `task-master init` overwrites it with its own defaults regardless.
+- **Template bug**: Two-part issue: (1) `init-project.sh` only copies `.claude/` subdirectories, not `.taskmaster/config.json`; (2) `task-master init` always creates its own config, ignoring any template config. **Fix needed**: `init-project.sh` should copy template's `.taskmaster/config.json` AFTER `task-master init`, replacing `__PROJECT_NAME__` with directory name. Manual fix applied: overwrote local config with template config + correct project name.
 
 ### 0.5.5 Restart Claude Code
 
@@ -713,8 +716,10 @@ Track any failures here with details for post-dogfood debugging:
 | # | Phase | Check | Expected | Actual | Severity | Fix/Notes |
 |---|-------|-------|----------|--------|----------|-----------|
 | 1 | 0.3 | settings.json exists | init-project.sh copies settings.json to `.claude/settings.json` | NOT copied — only subdirs (rules/, commands/, etc.) are copied, root-level settings.json is skipped | **High** — zero hooks fire without it | Manual `cp` from template fixes it. Template bug: init-project.sh needs to also copy root-level `.claude/settings.json`. |
-| 2 | | | | | | |
-| 3 | | | | | | |
+| 2 | 0.5 | projectName correct | Non-default project name | "Taskmaster" (MCP init default) | **Medium** — cosmetic but misleading in reports | Manual edit to "postiz-social-automation". Template should auto-detect project name from directory or git remote. |
+| 3 | 0.5 | maxTokens: 200000 | 200000 | 120000 (MCP init default, different from CLI's 32000) | **Medium** — may cause truncated AI responses | Manual edit. Template should set this globally or init-project.sh should patch config.json after init. |
+| 4 | 0.5 | Model config from template | Template's `.taskmaster/config.json` (provider: `claude-code`, models: opus/sonnet, maxTokens: 200000) | MCP init wrote its own defaults: provider `anthropic`, model `claude-3-7-sonnet`, maxTokens 120000 | **High** — wrong provider and models | Manual overwrite with template config. **Template bug**: `init-project.sh` doesn't copy `.taskmaster/config.json` from template. `task-master init` (both MCP and CLI) overwrites any existing config with its own defaults. Need: (a) init-project.sh copies template config, OR (b) init-project.sh runs AFTER task-master init and patches the config. |
+| 5 | | | | | | |
 
 ---
 
