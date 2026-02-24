@@ -23,6 +23,20 @@ node_modules/
 *.sw?
 # OS specific
 
+# Python
+*.egg-info/
+*.egg
+dist/
+build/
+.venv/
+venv/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+
 # Task files
 # tasks.json
 # tasks/ 
