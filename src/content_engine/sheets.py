@@ -352,3 +352,56 @@ class SheetsClient:
             except Exception:
                 logger.exception("Failed to parse suggestion row")
         return suggestions
+
+    @_retry
+    def log_error(self, source: str, error: str, row_number: int | None = None) -> None:
+        """Log an error to the Errors tab.
+
+        Args:
+            source: Pipeline that failed ('enhance', 'suggest', 'learn').
+            error: Error message.
+            row_number: Optional content row that triggered the error.
+        """
+        error_row = [
+            datetime.now().isoformat(),
+            source,
+            str(row_number) if row_number else "",
+            error,
+        ]
+        (
+            self.sheet.values()
+            .append(
+                spreadsheetId=self.spreadsheet_id,
+                range="Errors!A:D",
+                valueInputOption="RAW",
+                body={"values": [error_row]},
+            )
+            .execute()
+        )
+
+    @_retry
+    def get_recent_errors(self, limit: int = 10) -> list[dict]:
+        """Read the most recent errors from the Errors tab.
+
+        Returns list of dicts with keys: timestamp, source, row, message.
+        """
+        result = (
+            self.sheet.values().get(spreadsheetId=self.spreadsheet_id, range="Errors!A:D").execute()
+        )
+        all_rows = result.get("values", [])
+        if len(all_rows) <= 1:
+            return []
+
+        errors = []
+        for row in all_rows[1:]:
+            errors.append(
+                {
+                    "timestamp": _safe_get(row, 0),
+                    "source": _safe_get(row, 1),
+                    "row": _safe_get(row, 2),
+                    "message": _safe_get(row, 3),
+                }
+            )
+
+        # Return most recent (last N rows)
+        return errors[-limit:]

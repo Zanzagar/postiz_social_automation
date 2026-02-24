@@ -222,3 +222,73 @@ class TestRetryLogic:
             rows = client.get_rows_by_status(ContentStatus.READY)
 
         assert len(rows) == 1
+
+
+class TestLogError:
+    def test_appends_error_to_errors_tab(self, client, mock_service) -> None:
+        """log_error writes a row to the Errors tab."""
+        client.log_error(source="enhance", error="API timeout", row_number=5)
+
+        mock_service.spreadsheets().values().append.assert_called_once()
+        call_kwargs = mock_service.spreadsheets().values().append.call_args
+        assert "Errors!A:D" in str(call_kwargs)
+
+    def test_error_row_contains_all_fields(self, client, mock_service) -> None:
+        """Error row has timestamp, source, row_number, and message."""
+        client.log_error(source="suggest", error="Rate limit hit", row_number=10)
+
+        call_kwargs = mock_service.spreadsheets().values().append.call_args
+        body = call_kwargs.kwargs.get("body") or call_kwargs[1].get("body")
+        row = body["values"][0]
+        assert len(row) == 4
+        assert row[1] == "suggest"
+        assert row[2] == "10"
+        assert row[3] == "Rate limit hit"
+
+    def test_error_without_row_number(self, client, mock_service) -> None:
+        """row_number is optional — empty string when not provided."""
+        client.log_error(source="learn", error="No data found")
+
+        call_kwargs = mock_service.spreadsheets().values().append.call_args
+        body = call_kwargs.kwargs.get("body") or call_kwargs[1].get("body")
+        row = body["values"][0]
+        assert row[2] == ""
+
+
+class TestGetRecentErrors:
+    def test_returns_error_dicts(self, client, mock_service) -> None:
+        """get_recent_errors returns list of dicts with timestamp, source, message."""
+        mock_service.spreadsheets().values().get().execute.return_value = {
+            "values": [
+                ["timestamp", "source", "row", "message"],  # header
+                ["2026-02-24T10:00:00", "enhance", "5", "API timeout"],
+                ["2026-02-24T11:00:00", "suggest", "", "Rate limit"],
+            ]
+        }
+
+        errors = client.get_recent_errors(limit=10)
+
+        assert len(errors) == 2
+        assert errors[0]["timestamp"] == "2026-02-24T10:00:00"
+        assert errors[0]["source"] == "enhance"
+        assert errors[0]["message"] == "API timeout"
+        assert errors[1]["source"] == "suggest"
+
+    def test_respects_limit(self, client, mock_service) -> None:
+        """Only returns the most recent N errors."""
+        rows = [["timestamp", "source", "row", "message"]]
+        for i in range(20):
+            rows.append([f"2026-02-24T{i:02d}:00:00", "test", "", f"error {i}"])
+
+        mock_service.spreadsheets().values().get().execute.return_value = {"values": rows}
+
+        errors = client.get_recent_errors(limit=5)
+        assert len(errors) == 5
+
+    def test_empty_errors_tab(self, client, mock_service) -> None:
+        mock_service.spreadsheets().values().get().execute.return_value = {
+            "values": [["timestamp", "source", "row", "message"]]
+        }
+
+        errors = client.get_recent_errors(limit=10)
+        assert errors == []
