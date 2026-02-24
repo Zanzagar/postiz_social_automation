@@ -174,6 +174,25 @@ class SheetsClient:
         return rows
 
     @_retry
+    def get_all_content_rows(self, tab: str = "Content Calendar") -> list[ContentRow]:
+        """Fetch all content rows regardless of status."""
+        result = (
+            self.sheet.values()
+            .get(spreadsheetId=self.spreadsheet_id, range=f"'{tab}'!A:S")
+            .execute()
+        )
+        all_rows = result.get("values", [])
+        if len(all_rows) <= 1:
+            return []
+
+        rows = []
+        for i, row in enumerate(all_rows[1:], start=2):
+            parsed = _parse_content_row(row, row_number=i)
+            if parsed:
+                rows.append(parsed)
+        return rows
+
+    @_retry
     def update_captions(self, row_number: int, captions: dict[Platform, str]) -> None:
         """Write AI-generated captions to columns K-O for the given row."""
         values = []
