@@ -36,6 +36,32 @@ def check_postiz_health(postiz_client=None) -> tuple[bool, str]:
         return False, str(e)
 
 
+def check_oauth_health() -> tuple[bool, str]:
+    """Check if Claude OAuth token is valid by running a simple prompt.
+
+    Returns (ok, message) tuple. On failure, message includes re-auth hint.
+    """
+    try:
+        result = subprocess.run(
+            ["claude", "-p", "Say OK"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0 and "OK" in result.stdout:
+            return True, "OAuth token valid"
+
+        stderr = result.stderr.lower()
+        if "not authenticated" in stderr or "login" in stderr:
+            return False, "OAuth token expired — run 'claude login' to re-authenticate"
+
+        return False, f"Claude CLI error: {result.stderr.strip()}"
+    except subprocess.TimeoutExpired:
+        return False, "Claude CLI timeout — token check took too long"
+    except Exception as e:
+        return False, str(e)
+
+
 def check_claude_health() -> tuple[bool, str]:
     """Check Claude CLI availability.
 

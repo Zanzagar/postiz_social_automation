@@ -4,7 +4,12 @@ import os
 
 import streamlit as st
 
-from content_engine.health import check_claude_health, check_postiz_health, check_sheets_health
+from content_engine.health import (
+    check_claude_health,
+    check_oauth_health,
+    check_postiz_health,
+    check_sheets_health,
+)
 
 st.set_page_config(page_title="System Health", page_icon="\U0001f3e5", layout="wide")
 
@@ -38,11 +43,12 @@ if os.getenv("POSTIZ_API_KEY"):
         st.error(f"Failed to initialize Postiz client: {e}")
 
 # Run health checks
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
 sheets_ok, sheets_msg = check_sheets_health(sheets_client=sheets_client, skip_if_none=True)
 postiz_ok, postiz_msg = check_postiz_health(postiz_client=postiz_client)
 claude_ok, claude_msg = check_claude_health()
+oauth_ok, oauth_msg = check_oauth_health()
 
 with col1:
     status = "OK" if sheets_ok else "Error"
@@ -67,6 +73,14 @@ with col3:
         st.success(claude_msg)
     else:
         st.error(claude_msg)
+
+with col4:
+    status = "OK" if oauth_ok else "Error"
+    st.metric("OAuth Token", status)
+    if oauth_ok:
+        st.success(oauth_msg)
+    else:
+        st.error(oauth_msg)
 
 # Recent errors section
 st.divider()
