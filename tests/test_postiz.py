@@ -1,12 +1,22 @@
 """Tests for Postiz API client with mocked HTTP responses."""
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 
 from content_engine.models import ContentPillar
-from content_engine.postiz import PostizAPIError, PostizClient
+from content_engine.postiz import (
+    MAX_IMAGE_SIZE,
+    MAX_VIDEO_SIZE,
+    SUPPORTED_IMAGE_TYPES,
+    SUPPORTED_VIDEO_TYPES,
+    MediaValidationError,
+    PostizAPIError,
+    PostizClient,
+    parse_google_drive_url,
+)
 
 
 @pytest.fixture
@@ -154,3 +164,158 @@ class TestErrorHandling:
 
         with pytest.raises(requests.HTTPError):
             client.list_integrations()
+
+
+class TestParseGoogleDriveUrl:
+    """Subtask 18.1: Google Drive URL parsing."""
+
+    def test_converts_file_view_url(self) -> None:
+        url = "https://drive.google.com/file/d/abc123xyz/view?usp=sharing"
+        assert (
+            parse_google_drive_url(url)
+            == "https://drive.google.com/uc?export=download&id=abc123xyz"
+        )
+
+    def test_converts_open_url(self) -> None:
+        url = "https://drive.google.com/open?id=abc123xyz"
+        assert (
+            parse_google_drive_url(url)
+            == "https://drive.google.com/uc?export=download&id=abc123xyz"
+        )
+
+    def test_passes_through_direct_url(self) -> None:
+        """Non-Google-Drive URLs are returned as-is."""
+        url = "https://example.com/image.jpg"
+        assert parse_google_drive_url(url) == url
+
+    def test_converts_uc_export_url(self) -> None:
+        """Already-direct Google Drive URLs are returned as-is."""
+        url = "https://drive.google.com/uc?export=download&id=abc123xyz"
+        assert parse_google_drive_url(url) == url
+
+    def test_raises_on_unrecognized_drive_url(self) -> None:
+        """Google Drive URL that can't be parsed raises ValueError."""
+        url = "https://drive.google.com/some/unknown/path"
+        with pytest.raises(ValueError, match="Cannot extract file ID"):
+            parse_google_drive_url(url)
+
+
+class TestMediaValidation:
+    """Subtask 18.2: Format, size, and type validation."""
+
+    def test_supported_image_types_defined(self) -> None:
+        assert "image/jpeg" in SUPPORTED_IMAGE_TYPES
+        assert "image/png" in SUPPORTED_IMAGE_TYPES
+        assert "image/webp" in SUPPORTED_IMAGE_TYPES
+
+    def test_supported_video_types_defined(self) -> None:
+        assert "video/mp4" in SUPPORTED_VIDEO_TYPES
+
+    def test_size_limits_defined(self) -> None:
+        assert MAX_IMAGE_SIZE == 10 * 1024 * 1024  # 10 MB
+        assert MAX_VIDEO_SIZE == 100 * 1024 * 1024  # 100 MB
+
+    def test_validate_media_rejects_unsupported_type(self, client) -> None:
+        with pytest.raises(MediaValidationError, match="Unsupported media type"):
+            client.validate_media(content_type="application/pdf", file_size=1000)
+
+    def test_validate_media_rejects_oversized_image(self, client) -> None:
+        with pytest.raises(MediaValidationError, match="exceeds .* limit"):
+            client.validate_media(
+                content_type="image/jpeg",
+                file_size=MAX_IMAGE_SIZE + 1,
+            )
+
+    def test_validate_media_rejects_oversized_video(self, client) -> None:
+        with pytest.raises(MediaValidationError, match="exceeds .* limit"):
+            client.validate_media(
+                content_type="video/mp4",
+                file_size=MAX_VIDEO_SIZE + 1,
+            )
+
+    def test_validate_media_accepts_valid_image(self, client) -> None:
+        # Should not raise
+        client.validate_media(content_type="image/jpeg", file_size=5000)
+
+    def test_validate_media_accepts_valid_video(self, client) -> None:
+        client.validate_media(content_type="video/mp4", file_size=50_000_000)
+
+
+class TestUploadMedia:
+    """Subtask 18.3: Full download-validate-upload pipeline."""
+
+    @patch("content_engine.postiz.requests.get")
+    @patch("content_engine.postiz.requests.Session.request")
+    def test_downloads_and_uploads_image(self, mock_session_req, mock_get, client) -> None:
+        # Mock download
+        download_resp = MagicMock()
+        download_resp.headers = {"Content-Type": "image/jpeg", "Content-Length": "5000"}
+        download_resp.iter_content.return_value = [b"fake-image-data"]
+        download_resp.raise_for_status = MagicMock()
+        mock_get.return_value = download_resp
+
+        # Mock upload
+        upload_resp = MagicMock()
+        upload_resp.status_code = 200
+        upload_resp.json.return_value = {"id": "media_abc123"}
+        mock_session_req.return_value = upload_resp
+
+        media_id = client.upload_media("https://example.com/photo.jpg")
+
+        assert media_id == "media_abc123"
+        mock_get.assert_called_once()
+
+    @patch("content_engine.postiz.requests.get")
+    def test_rejects_unsupported_format(self, mock_get, client) -> None:
+        download_resp = MagicMock()
+        download_resp.headers = {"Content-Type": "application/pdf", "Content-Length": "5000"}
+        download_resp.iter_content.return_value = [b"fake-pdf-data"]
+        download_resp.raise_for_status = MagicMock()
+        mock_get.return_value = download_resp
+
+        with pytest.raises(MediaValidationError, match="Unsupported media type"):
+            client.upload_media("https://example.com/doc.pdf")
+
+    @patch("content_engine.postiz.requests.get")
+    def test_parses_google_drive_url_before_download(self, mock_get, client) -> None:
+        download_resp = MagicMock()
+        download_resp.headers = {"Content-Type": "image/png", "Content-Length": "3000"}
+        download_resp.iter_content.return_value = [b"fake-png"]
+        download_resp.raise_for_status = MagicMock()
+        mock_get.return_value = download_resp
+
+        # Also mock the upload
+        with patch("content_engine.postiz.requests.Session.request") as mock_session_req:
+            upload_resp = MagicMock()
+            upload_resp.status_code = 200
+            upload_resp.json.return_value = {"id": "media_xyz"}
+            mock_session_req.return_value = upload_resp
+
+            client.upload_media("https://drive.google.com/file/d/abc123/view?usp=sharing")
+
+        # Should have converted the URL before downloading
+        actual_url = mock_get.call_args[0][0]
+        assert "uc?export=download" in actual_url
+
+    @patch("content_engine.postiz.requests.get")
+    @patch("content_engine.postiz.requests.Session.request")
+    def test_cleans_up_temp_file(self, mock_session_req, mock_get, client) -> None:
+        download_resp = MagicMock()
+        download_resp.headers = {"Content-Type": "image/jpeg", "Content-Length": "5000"}
+        download_resp.iter_content.return_value = [b"fake-image"]
+        download_resp.raise_for_status = MagicMock()
+        mock_get.return_value = download_resp
+
+        upload_resp = MagicMock()
+        upload_resp.status_code = 200
+        upload_resp.json.return_value = {"id": "media_tmp"}
+        mock_session_req.return_value = upload_resp
+
+        client.upload_media("https://example.com/photo.jpg")
+
+        # Temp files should be cleaned up (no lingering files)
+        import tempfile
+
+        temp_dir = Path(tempfile.gettempdir())
+        leftover = list(temp_dir.glob("postiz_media_*"))
+        assert len(leftover) == 0
