@@ -8,6 +8,7 @@ Uses Claude CLI (OAuth-authenticated, $0 per call) for:
 
 import json
 import logging
+import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -138,7 +139,13 @@ class CaptionGenerator:
             f"Reply with ONLY the category name, nothing else."
         )
         raw = _call_claude(prompt)
-        return ContentPillar(raw.strip())
+        try:
+            return ContentPillar(raw.strip())
+        except ValueError:
+            logger.warning(
+                "Unrecognised pillar %r from Claude, defaulting to COW_LIFE", raw.strip()
+            )
+            return ContentPillar.COW_LIFE
 
     def _build_prompt(self, row: ContentRow, platforms: list[Platform]) -> str:
         """Build the full caption generation prompt."""
@@ -200,17 +207,15 @@ class CaptionGenerator:
 
     def _parse_response(self, raw: str, platforms: list[Platform]) -> dict[Platform, str]:
         """Parse Claude's JSON response into platform-caption mapping."""
+        text = raw.strip()
+        # Strip markdown code fence if present
+        fence_match = re.search(r"```(?:json)?\s*([\s\S]+?)```", text)
+        if fence_match:
+            text = fence_match.group(1).strip()
         try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            # Try to extract JSON from markdown code blocks
-            if "```" in raw:
-                json_block = raw.split("```")[1]
-                if json_block.startswith("json"):
-                    json_block = json_block[4:]
-                data = json.loads(json_block.strip())
-            else:
-                raise RuntimeError(f"Could not parse Claude response as JSON: {raw[:200]}")
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Could not parse Claude response as JSON: {raw[:200]}") from exc
 
         captions = {}
         for platform in platforms:

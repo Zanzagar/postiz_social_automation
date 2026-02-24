@@ -91,17 +91,33 @@ class PostizClient:
         self.session = requests.Session()
         self.session.headers.update({"Authorization": api_key})
 
+    def close(self) -> None:
+        """Close the underlying HTTP session."""
+        self.session.close()
+
+    def __enter__(self) -> "PostizClient":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
     def _request(self, method: str, path: str, **kwargs) -> dict | list:
-        """Make API request with retry on rate limit (429)."""
+        """Make API request with retry on rate limit (429) and transient 5xx errors."""
         for attempt in range(MAX_RETRIES):
             resp = self.session.request(method, f"{self.base_url}{path}", **kwargs)
 
-            if resp.status_code == 429:
+            if resp.status_code == 429 or resp.status_code >= 500:
                 if attempt == MAX_RETRIES - 1:
-                    raise PostizAPIError(f"Rate limit exceeded after {MAX_RETRIES} attempts")
+                    reason = (
+                        "Rate limit"
+                        if resp.status_code == 429
+                        else f"Server error {resp.status_code}"
+                    )
+                    raise PostizAPIError(f"{reason} after {MAX_RETRIES} attempts")
                 wait = BACKOFF_BASE * (2**attempt)
                 logger.warning(
-                    "Rate limited (attempt %d/%d). Retrying in %.1fs",
+                    "Retryable error %d (attempt %d/%d). Retrying in %.1fs",
+                    resp.status_code,
                     attempt + 1,
                     MAX_RETRIES,
                     wait,

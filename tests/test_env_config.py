@@ -36,6 +36,10 @@ class TestEnvExample:
                 # JWT_SECRET is a known default, allow it
                 if "JWT_SECRET" in line:
                     continue
-                assert len(value) < 80 or "your-" in value or "path" in value.lower(), (
-                    f"Possible real secret in .env.example: {line[:50]}..."
-                )
+                assert (
+                    len(value) < 80
+                    or "your-" in value
+                    or "path" in value.lower()
+                    or "${" in value  # env var substitution is safe
+                    or "CHANGE_ME" in value
+                ), f"Possible real secret in .env.example: {line[:80]}..."

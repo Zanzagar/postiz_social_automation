@@ -26,7 +26,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postiz-user
-      POSTGRES_PASSWORD: postiz-password
+      POSTGRES_PASSWORD: ${POSTIZ_DB_PASSWORD:-postiz-password}
       POSTGRES_DB: postiz-db-local
     volumes:
       - postiz-pg-data:/var/lib/postgresql/data
@@ -65,14 +65,14 @@ services:
       - DB=postgres12
       - DB_PORT=5432
       - POSTGRES_USER=temporal
-      - POSTGRES_PWD=temporal
+      - POSTGRES_PWD=${TEMPORAL_DB_PASSWORD:-temporal}
       - POSTGRES_SEEDS=temporal-postgresql
       - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/docker.yaml
       - ENABLE_ES=true
       - ES_SEEDS=temporal-elasticsearch
       - ES_VERSION=v7
     ports:
-      - "7233:7233"
+      - "127.0.0.1:7233:7233"
     volumes:
       - ./dynamicconfig:/etc/temporal/config/dynamicconfig
     networks:
@@ -84,7 +84,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: temporal
-      POSTGRES_PASSWORD: temporal
+      POSTGRES_PASSWORD: ${TEMPORAL_DB_PASSWORD:-temporal}
     volumes:
       - temporal-pg-data:/var/lib/postgresql/data
     healthcheck:
@@ -127,7 +127,7 @@ services:
       - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_CORS_ORIGINS=http://localhost:8080
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     networks:
       - postiz-network
 

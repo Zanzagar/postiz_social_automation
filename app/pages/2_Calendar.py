@@ -43,7 +43,7 @@ if st.session_state.get("sheets_client"):
     try:
         from content_engine.models import ContentStatus
 
-        for status in [ContentStatus.APPROVED, ContentStatus.SCHEDULED, ContentStatus.PUBLISHED]:
+        for status in [ContentStatus.APPROVED, ContentStatus.SCHEDULED, ContentStatus.POSTED]:
             rows.extend(st.session_state.sheets_client.get_rows_by_status(status))
     except Exception as e:
         st.error(f"Failed to load content: {e}")
@@ -66,7 +66,7 @@ if rows:
             status_emoji = {
                 "approved": "\u2705",
                 "scheduled": "\U0001f4c5",
-                "published": "\U0001f680",
+                "posted": "\U0001f680",
             }.get(row.status.value if hasattr(row.status, "value") else str(row.status), "\u2753")
 
             col1, col2, col3 = st.columns([3, 1, 1])

@@ -10,6 +10,7 @@ Column layout (Suggestions tab):
   A=date, B=idea, C=pillar, D=rationale, E=media_suggestion, F=status
 """
 
+import functools
 import logging
 import time
 from datetime import datetime
@@ -49,6 +50,7 @@ BACKOFF_BASE = 1.0  # seconds
 def _retry(func):
     """Decorator for exponential backoff retry on HttpError."""
 
+    @functools.wraps(func)
     def wrapper(*args, **kwargs):
         for attempt in range(MAX_RETRIES):
             try:

@@ -154,16 +154,19 @@ class TestGetPostAnalytics:
 
 
 class TestErrorHandling:
+    @patch("content_engine.postiz.time.sleep")
     @patch("content_engine.postiz.requests.Session.request")
-    def test_raises_on_server_error(self, mock_request, client) -> None:
+    def test_retries_and_raises_on_server_error(self, mock_request, mock_sleep, client) -> None:
         mock_resp = MagicMock()
         mock_resp.status_code = 500
-        mock_resp.raise_for_status.side_effect = requests.HTTPError(response=mock_resp)
 
         mock_request.return_value = mock_resp
 
-        with pytest.raises(requests.HTTPError):
+        with pytest.raises(PostizAPIError, match="Server error 500"):
             client.list_integrations()
+
+        # Verify it retried 3 times before giving up
+        assert mock_request.call_count == 3
 
 
 class TestParseGoogleDriveUrl:

@@ -11,6 +11,7 @@ class ContentStatus(StrEnum):
     READY = "ready"
     PENDING_APPROVAL = "pending_approval"
     APPROVED = "approved"
+    SCHEDULED = "scheduled"
     POSTED = "posted"
     ERROR = "error"
 
