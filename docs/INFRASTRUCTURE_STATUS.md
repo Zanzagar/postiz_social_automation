@@ -37,11 +37,22 @@ Postiz exposes 148 API endpoints. Key endpoint groups for automation:
 
 The `/public/v1/*` endpoints are the external API for n8n integration.
 
-## Connectivity Issues
+## API Authentication
+
+- **Auth header**: `Authorization: <api-key>` (no Bearer prefix)
+- **Base URL**: `https://postiz.sethpc.xyz/api/public/v1`
+- **Rate limit**: 30 requests/hour
+- **API key location**: Settings > Public API in Postiz dashboard
+- **Postiz version**: v2.18.0 (confirmed via dashboard)
+- **n8n custom node**: `n8n-nodes-postiz` (available on npm)
+- **Postiz MCP server**: Available (HTTP streaming, URL in Settings > Public API)
+
+## Connectivity Notes
 
 - No `/api/health` endpoint exists (404). Use `/api/` ("App is running!") for health checks.
-- Timezone verification requires authenticated login — not verified from CLI.
-- API key not available in this session — authenticated endpoint testing deferred to Task 2.
+- Dashboard login works (email/password auth verified).
+- API key tested and working against `/public/v1/integrations`.
+- No channels connected yet (empty integrations array).
 
 ## Health Check Script
 
