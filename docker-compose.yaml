@@ -131,6 +131,30 @@ services:
     networks:
       - postiz-network
 
+  content-hub:
+    build: .
+    container_name: gita-valley-content-hub
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./.streamlit/secrets.toml:/app/.streamlit/secrets.toml:ro
+    env_file: .env
+    networks:
+      - postiz-network
+
+  content-engine:
+    build: .
+    container_name: gita-valley-content-engine
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    env_file: .env
+    command: ["python", "-m", "content_engine.scheduler"]
+    networks:
+      - postiz-network
+
 volumes:
   postiz-config:
   postiz-uploads:
