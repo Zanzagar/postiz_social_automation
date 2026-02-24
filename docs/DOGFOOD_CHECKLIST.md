@@ -879,6 +879,52 @@ The brainstorming skill focuses on user intent, architecture, and design decisio
 
 **Comparison with α1**: α1's brainstorming also missed this — its PRD assumed the Postiz API works without checking rate limits or node bugs. The difference: α1 didn't reach implementation to discover the issue. The template pipeline has this gap regardless of process overhead.
 
+### Finding #12 (Medium): Claude Attempted `expand --all` Despite Explicit Rule
+
+**Severity**: Medium (user caught it before execution; would have over-decomposed simple tasks)
+
+**Summary**: Claude attempted to run `task-master expand --all` despite `superpowers-integration.md` explicitly stating: "Do NOT blindly run `task-master expand --all`." The correct process is to expand individually based on the complexity report, only for tasks scoring >= 5.
+
+**What happened**:
+1. Complexity analysis completed (10 medium, 15 low complexity tasks)
+2. Claude ran `task-master expand --all --force` as a shortcut
+3. User rejected the tool call and flagged the violation
+
+**Root cause**: Laziness/shortcutting. The rule is explicit and in auto-loaded rules (`.claude/rules/superpowers-integration.md`). Claude read the complexity report, saw the suggested `expand --all` in Task Master's own output, and followed Task Master's suggestion instead of the project's workflow rules.
+
+**Template insight**: Task Master's own CLI output (`Suggested Actions: expand --all`) directly contradicts the project rule forbidding it. This creates a conflict — the tool suggests one thing, the rules say another. Claude followed the tool's suggestion. Consider either (a) suppressing this suggestion in Task Master config, or (b) adding a more prominent warning in the rules.
+
+### Finding #13 (Medium): Perplexity `--research` Flag Produces Incomplete Results
+
+**Severity**: Medium (15/25 tasks got default/missing analysis, required re-run)
+
+**Summary**: Running `task-master analyze-complexity --research` (which uses Perplexity AI for research-backed analysis) returned only 10 of 25 task analyses. 15 tasks fell back to default analysis. Re-running without `--research` (using local AI provider) returned all 25 correctly.
+
+**What happened**:
+1. Claude ran `task-master analyze-complexity --research` on the `content-engine-v2` tag
+2. Perplexity returned only 10 analyses; 15 tasks got "Adding default analysis" warnings
+3. Re-running without `--research` produced complete results (25/25)
+
+**Root cause**: Perplexity API appears to have context or response size limits that truncate output for larger task sets. This was also observed in the earlier `master` tag analysis (which had 28 tasks).
+
+**Template recommendation**: Document that `--research` is unreliable for task sets > ~10 tasks. Default to non-research analysis unless specifically investigating unfamiliar technology. The local AI provider (Claude) has access to the full task context and produces more complete results.
+
+### Finding #14 (Low): Parsed v2 Tasks Into Wrong Tag (`master`)
+
+**Severity**: Low (caught and corrected before expansion)
+
+**Summary**: When parsing the v2 PRD, Claude parsed into the `master` tag (IDs 31-58) instead of creating a new tag first. Per CLAUDE.md: "New tag per phase: Each workflow phase gets its own tag. Never pollute the master tag with phase-specific work."
+
+**What happened**:
+1. v2 PRD written and committed
+2. Claude ran `task-master parse-prd` without switching to a new tag
+3. Tasks got IDs 31-58 in `master` (appended to v1 tasks 1-30)
+4. User caught the error; Claude created `content-engine-v2` tag and re-parsed correctly (IDs 1-25)
+
+**Root cause**: Claude forgot the tag workflow despite it being in CLAUDE.md AND MEMORY.md. The `master` tag was still active from prior work. Should have run `task-master tags add` + `task-master tags use` before parsing.
+
+**Residual issue**: The `master` tag still contains stale v1 tasks (1-30) plus incorrectly-parsed v2 tasks (31-58, including one partially expanded). These should be cleaned up.
+
 ---
 
 ## Summary
