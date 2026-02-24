@@ -13,9 +13,20 @@ Farm staff are busy with operations. They need a system that **minimizes their c
 
 ## Solution
 
-Three-tool pipeline: Google Sheets (content input) → Python Content Engine with Claude Code CLI (AI generation, learning, suggestions) → Postiz (review, edit, schedule, publish).
+Four-tool pipeline: Streamlit Content Hub (staff UI) + Google Sheets (bulk input) → Python Content Engine with Claude Code CLI (AI generation, learning, suggestions) → Postiz (schedule, publish).
 
-**Architecture principle:** Claude = brain, Postiz = hands, Sheets = input.
+**Architecture principle:** Streamlit = staff UI, Claude = brain, Postiz = hands, Sheets = data store.
+
+### Streamlit Content Hub
+
+A lightweight web app (free, open source, Apache 2.0) that gives farm staff a visual interface for:
+- Creating posts (photo + caption → AI generates platform-specific drafts)
+- Browsing AI-generated content suggestions
+- Re-prompting the AI ("make it funnier", "add a donation CTA")
+- Reviewing generated drafts before sending to Postiz
+- Viewing basic engagement performance stats
+
+Hosted as a Docker service on Seth's server (e.g. `content.sethpc.xyz`). Staff access it in their browser — no install needed, mobile-friendly.
 
 ## Key Architecture Decision: Why Not n8n
 
@@ -284,9 +295,10 @@ Manual approval by default. Configurable per-platform or per-pillar auto-publish
 4. Postiz publishes on schedule
 5. Content Engine updates Sheet status
 
-**Two review surfaces:**
-- **Postiz dashboard** — primary review UI (rich editor, multi-platform preview, drag-and-drop calendar)
-- **Google Sheet** — secondary (for quick status checks, batch operations)
+**Three interaction surfaces:**
+- **Streamlit Content Hub** — primary staff UI (create posts, browse suggestions, re-prompt AI, review drafts)
+- **Postiz dashboard** — scheduling UI (calendar view, final edit, multi-platform preview, drag-and-drop scheduling)
+- **Google Sheet** — bulk input + data (batch entry, status tracking, reporting)
 
 ## Media Handling
 
@@ -311,9 +323,10 @@ Manual approval by default. Configurable per-platform or per-pillar auto-publish
 
 | Service | Location | Purpose |
 |---------|----------|---------|
-| Postiz | https://postiz.sethpc.xyz | Review, edit, schedule, publish |
+| Streamlit Content Hub | content.sethpc.xyz (future) / localhost:8501 (dev) | Staff UI: create, suggest, review, prompt |
+| Postiz | https://postiz.sethpc.xyz | Schedule, publish, calendar view |
 | Content Engine | Docker service on Seth's server (future) / local (dev) | AI generation, learning, suggestions |
-| Google Sheets | Google Workspace | Content input + calendar |
+| Google Sheets | Google Workspace | Bulk content input + data store |
 | Google Drive | Google Workspace | Media library |
 
 ### Deployment Path

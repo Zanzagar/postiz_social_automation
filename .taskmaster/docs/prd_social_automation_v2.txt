@@ -2,9 +2,9 @@
 
 ## Overview
 
-Build an automated social media content pipeline for Gita Valley (430-acre ISKCON eco-farm and cow sanctuary, Port Royal, PA) using a Python content engine, Claude Code CLI (AI generation via OAuth subscription — $0 extra cost), and Postiz (self-hosted scheduler). The system operates in two modes: (1) staff-initiated content enhancement and (2) AI-proactive content suggestions. It reads from a Google Sheets content calendar, generates platform-specific AI captions, creates draft posts in Postiz for staff review/editing, and publishes to Instagram, Facebook, TikTok, Threads, and LinkedIn.
+Build an automated social media content pipeline for Gita Valley (430-acre ISKCON eco-farm and cow sanctuary, Port Royal, PA) using a Python content engine, Claude Code CLI (AI generation via OAuth subscription — $0 extra cost), Postiz (self-hosted scheduler), and a Streamlit web app (staff-facing Content Hub UI). The system operates in two modes: (1) staff-initiated content enhancement and (2) AI-proactive content suggestions. Staff interact with the AI through a lightweight Streamlit web app to create posts, browse suggestions, re-prompt for alternatives, and review generated drafts before they're pushed to Postiz for scheduling and publishing across Instagram, Facebook, TikTok, Threads, and LinkedIn.
 
-Architecture: Python Content Engine = brain (orchestration + AI + learning), Postiz = hands (review + scheduling + publishing), Google Sheets = input (content + suggestions).
+Architecture: Streamlit Content Hub = staff UI (create, browse, prompt, review), Python Content Engine = brain (orchestration + AI + learning), Postiz = hands (scheduling + publishing), Google Sheets = bulk input + data store.
 
 **Supersedes:** prd_social_automation.txt (v1, n8n-based architecture)
 
@@ -26,8 +26,9 @@ Additionally, farm staff are busy with operations. They need a system that:
 5. Achieve consistent posting cadence (target 3+ posts/week/platform, configurable)
 6. Minimize staff effort: photo + 1 sentence → AI generates everything else
 7. Maintain brand consistency across all platforms (always "Gita Valley", never "Gita Nagari")
-8. Support manual approval workflow with Postiz as the primary review/editing UI
-9. Deploy locally for development, then as a Docker service on Seth's server for production
+8. Support manual approval workflow with Postiz as the primary scheduling/publishing UI
+9. Provide a staff-facing Streamlit web app ("Content Hub") for AI interaction: creating posts, browsing suggestions, re-prompting, and reviewing drafts
+10. Deploy locally for development, then as Docker services on Seth's server for production
 
 ## Non-Goals
 
@@ -36,7 +37,7 @@ Additionally, farm staff are busy with operations. They need a system that:
 - YouTube channel creation and integration (separate initiative)
 - A/B testing of captions or post times (Phase 4+ consideration)
 - Direct message management or community engagement responses
-- Custom analytics dashboard (Postiz built-in + Sheet reporting + learning context)
+- Full-featured analytics dashboard (Streamlit Content Hub shows basic stats; deep analytics via Postiz built-in + Sheets)
 - WhatsApp Business API integration (stretch goal only)
 - Automated brand consistency validation beyond AI prompt enforcement (pending temple meeting)
 - Per-token Claude API costs (must use OAuth/subscription)
@@ -47,10 +48,11 @@ Additionally, farm staff are busy with operations. They need a system that:
 
 | Tool | Role | Cost |
 |------|------|------|
-| Google Sheets | Content input, suggestions display, status tracking | Free |
-| Python Content Engine | Orchestration, Sheet reading, Postiz API, learning | Free (open source) |
+| Streamlit Content Hub | Staff-facing web UI: create posts, browse suggestions, prompt AI, review drafts | Free (Apache 2.0 open source) |
+| Google Sheets | Bulk content input, data store, status tracking | Free |
+| Python Content Engine | Backend: orchestration, Sheet reading, Postiz API, learning | Free (open source) |
 | Claude Code CLI | AI generation (captions, suggestions, pillar inference) | $0 (OAuth subscription) |
-| Postiz | Draft review, editing, scheduling, multi-platform publishing | $0 (self-hosted) |
+| Postiz | Scheduling, multi-platform publishing, calendar view | $0 (self-hosted) |
 | Google Drive | Media library (photos, videos) | Free (workspace) |
 
 ### Infrastructure (Already Deployed)
@@ -63,32 +65,42 @@ Additionally, farm staff are busy with operations. They need a system that:
 
 ### Deployment Path
 
-- Phase 1 (Development): Python scripts run locally, call remote Postiz API at sethpc.xyz
-- Phase 2 (Production): Add `content-engine` Docker service to existing docker-compose.yaml on Seth's server
+- Phase 1 (Development): Python scripts + Streamlit app run locally, call remote Postiz API at sethpc.xyz
+- Phase 2 (Production): Add `content-engine` and `content-hub` Docker services to docker-compose.yaml on Seth's server (e.g. content.sethpc.xyz)
 - Phase 3 (If needed): Swap Claude CLI for Claude API if headless OAuth proves unreliable
 
 ### Two-Mode Pipeline
 
 **Mode 1: Staff-Initiated (Enhance)**
 ```
-Staff adds photo + caption to Sheet (status: "ready")
-  → Content Engine reads new rows
-  → Claude CLI generates platform-specific captions
-  → Creates draft posts in Postiz
-  → Staff reviews/edits in Postiz dashboard
-  → Staff approves → Postiz publishes on schedule
-  → Engine updates Sheet status
+Staff opens Streamlit Content Hub (or adds row to Sheet for bulk input)
+  → Uploads photo + writes 1-sentence caption
+  → Clicks "Generate for All Platforms"
+  → Content Engine calls Claude CLI → generates platform-specific captions
+  → Staff sees generated drafts in Content Hub, can re-prompt ("make it funnier")
+  → Staff clicks "Send to Postiz" → drafts created in Postiz
+  → Staff reviews/schedules in Postiz dashboard
+  → Postiz publishes on schedule
 ```
 
 **Mode 2: AI-Suggested (Suggest)**
 ```
 Content Intelligence analyzes gaps, events, past performance
   → Claude CLI generates 5-7 content ideas with rationale
-  → Suggestions appear in Sheet "Suggestions" tab
-  → Staff picks favorites, edits, accepts
-  → Content Engine generates full captions + Postiz drafts
-  → Staff reviews/approves in Postiz
+  → Suggestions appear in Streamlit Content Hub "Suggestions" section
+  → Staff browses suggestions, accepts favorites
+  → Content Engine generates full captions
+  → Staff reviews in Content Hub, edits, sends to Postiz
+  → Staff schedules in Postiz → publishes
 ```
+
+### Staff Interaction Surfaces
+
+| Surface | Purpose | When to Use |
+|---------|---------|-------------|
+| Streamlit Content Hub | Interactive AI: create posts, browse suggestions, re-prompt, review | Primary daily workflow |
+| Google Sheets | Bulk content input, batch operations, data export | Batch entry, reporting |
+| Postiz Dashboard | Schedule, calendar view, final edit, multi-platform preview | Final review + scheduling |
 
 ### Key Constraints
 
@@ -105,7 +117,7 @@ Content Intelligence analyzes gaps, events, past performance
 
 #### 1.1 Python Project Setup
 - Initialize Python 3.11+ project with pyproject.toml
-- Dependencies: google-api-python-client, google-auth, requests, python-dotenv, schedule
+- Dependencies: google-api-python-client, google-auth, requests, python-dotenv, schedule, streamlit
 - Dev dependencies: pytest, ruff, mypy
 - Project structure:
   ```
@@ -126,9 +138,16 @@ Content Intelligence analyzes gaps, events, past performance
     brand-guide.md      # Full branding rules
     learning-context.json  # Performance data (grows over time)
     post-performance.json  # Raw post engagement data
+  app/
+    content_hub.py      # Streamlit main app (Content Hub UI)
+    pages/
+      01_create_post.py   # Create new post with AI generation
+      02_suggestions.py   # Browse and accept AI suggestions
+      03_drafts.py        # Review generated drafts, re-prompt
+      04_performance.py   # Basic engagement stats
   scripts/
-    run-enhance.py      # Mode 1: process "ready" rows
-    run-suggest.py      # Mode 2: generate suggestions
+    run-enhance.py      # Mode 1: process "ready" rows (CLI/cron entry point)
+    run-suggest.py      # Mode 2: generate suggestions (CLI/cron entry point)
     run-learn.py        # Pull engagement data, update learning context
     setup-sheet.py      # Initialize Google Sheet with correct schema
   ```
@@ -221,21 +240,73 @@ Content Intelligence analyzes gaps, events, past performance
 - Re-generates with feedback as additional prompt context
 - Updates captions in Sheet and Postiz draft
 
-### Phase 3: Content Intelligence + Suggestions (Mode 2 — Suggest)
+### Phase 3: Streamlit Content Hub (Staff-Facing UI)
+Depends on: Phase 2 (AI generation working end-to-end)
 
-#### 3.1 Content Repository Setup
+#### 3.1 Streamlit App Skeleton
+- Create Streamlit multi-page app in app/content_hub.py
+- Configure page layout: sidebar navigation, Gita Valley branding (logo, colors)
+- Set up Streamlit session state for user context
+- Connect to Google Sheets API and Postiz API via content engine modules (shared code)
+- Run locally with `streamlit run app/content_hub.py`
+
+#### 3.2 Create Post Page (app/pages/01_create_post.py)
+- Photo upload widget (or Google Drive URL input)
+- Text input for 1-sentence caption
+- Platform selection checkboxes (IG, FB, TikTok, Threads, LinkedIn)
+- "Generate for All Platforms" button → calls content engine generator
+- Display generated captions in expandable cards per platform
+- Inline editing: staff can modify any generated caption directly
+- "Re-generate" button with optional prompt: "make it funnier", "add a CTA"
+- "Send to Postiz" button → creates draft posts via Postiz API
+- Status indicator: "Draft created in Postiz — open Postiz to schedule"
+
+#### 3.3 Suggestions Page (app/pages/02_suggestions.py)
+- Display AI-generated content suggestions as cards
+- Each card shows: content idea, suggested pillar, rationale, media suggestion
+- "Accept" button → moves suggestion to content creation flow (pre-fills Create Post page)
+- "Dismiss" button → marks suggestion as dismissed
+- "Refresh Suggestions" button → triggers suggestion generator on-demand
+- Filter by pillar, date range, or status
+- Shows content calendar gaps visually ("No farm content planned for next 3 days")
+
+#### 3.4 Drafts Review Page (app/pages/03_drafts.py)
+- List all pending drafts (from Sheet status "pending_approval")
+- Show generated captions side-by-side per platform
+- Inline editing for each platform's caption
+- "Re-prompt" input: type feedback, regenerate specific platform's caption
+- "Approve & Send to Postiz" button for batch operations
+- Direct link to Postiz dashboard for scheduling
+
+#### 3.5 Performance Dashboard (app/pages/04_performance.py)
+- Recent post engagement summary (data from learning context)
+- Pillar distribution chart (actual vs target: 40/25/15/10/5/5)
+- Best performing content this week/month
+- Posting cadence tracker (are we hitting 3+ posts/week?)
+- Simple charts using Streamlit's built-in charting (st.bar_chart, st.line_chart)
+
+#### 3.6 Streamlit Configuration and Theming
+- Custom theme matching Gita Valley branding (warm earth tones)
+- Mobile-responsive layout (farm staff may use phones)
+- .streamlit/config.toml for server settings (port, headless mode for Docker)
+- Authentication: simple password protection via Streamlit secrets (sufficient for internal tool)
+
+### Phase 4: Content Intelligence + Suggestions (Mode 2 — Suggest)
+Depends on: Phase 2 (AI generation), Phase 3 (Streamlit app for display)
+
+#### 4.1 Content Repository Setup
 - Create data files: festivals.json (ISKCON calendar), quotes.json (Bhagavad Gita, Prabhupada)
 - Create cow-profiles.json (names, personalities of notable cows)
 - Create farm-facts.json (key statistics, history, programs, partnerships)
 - Create brand-guide.md (comprehensive branding rules and voice examples)
 - These files are included as context in AI generation prompts
 
-#### 3.2 Post Performance Tracking (run-learn.py)
+#### 4.2 Post Performance Tracking (run-learn.py)
 - Pull engagement data from Postiz API for published posts
 - Store in data/post-performance.json: post ID, platform, pillar, engagement metrics, timing
 - Run weekly (or after each posting cycle)
 
-#### 3.3 Learning Context Builder
+#### 4.3 Learning Context Builder
 - Analyze post-performance.json to extract patterns:
   - Best-performing content types by platform
   - Optimal posting times by day of week
@@ -245,7 +316,7 @@ Content Intelligence analyzes gaps, events, past performance
 - Write data/learning-context.json with summarized insights
 - This context is included in every generation prompt
 
-#### 3.4 Content Suggestion Generator (run-suggest.py)
+#### 4.4 Content Suggestion Generator (run-suggest.py)
 - Analyze content calendar gaps: "no farm content in 5 days"
 - Check pillar balance: "spiritual at 15%, target is 5%"
 - Check festival calendar: "Ekadashi in 3 days, no content planned"
@@ -253,18 +324,18 @@ Content Intelligence analyzes gaps, events, past performance
 - Include learning context: "cow photos at 9am get 3x engagement"
 - Generate 5-7 content suggestions via Claude CLI
 - Each suggestion includes: content idea, suggested pillar, rationale, media suggestion
-- Write suggestions to Sheet "Suggestions" tab
+- Write suggestions to Streamlit Content Hub and Sheet "Suggestions" tab
 
-#### 3.5 Suggestion-to-Post Pipeline
-- Staff reviews Suggestions tab, marks favorites as "accepted"
-- Content Engine reads accepted suggestions
-- Generates full platform captions (same as Mode 1)
-- Creates Postiz drafts
-- Staff reviews/approves in Postiz
+#### 4.5 Suggestion-to-Post Pipeline
+- Staff browses suggestions in Content Hub (or Sheet), accepts favorites
+- Content Engine generates full platform captions (same as Mode 1)
+- Staff reviews in Content Hub, edits, sends to Postiz
+- Staff schedules in Postiz
 
-### Phase 4: Media Handling
+### Phase 5: Media Handling
+Depends on: Phase 2 (core pipeline working)
 
-#### 4.1 Image Support
+#### 5.1 Image Support
 - Accept Google Drive shared links in photo_url column
 - Download image from Drive URL in Content Engine
 - Upload to Postiz via API with post creation
@@ -272,57 +343,59 @@ Content Intelligence analyzes gaps, events, past performance
 - Validate file size and dimensions before posting
 - Handle missing/broken URLs: generate text-only post or mark "error"
 
-#### 4.2 Video Support
+#### 5.2 Video Support
 - Accept Google Drive video links
 - Video format validation: MP4, max duration per platform
 - TikTok: ensure video meets dimension/length requirements
 - Instagram Reels: support video content alongside static posts
 
-#### 4.3 Google Drive Integration
+#### 5.3 Google Drive Integration
 - Service account access to shared Drive folder
 - List available media files for content suggestions
 - Auto-detect new media uploads (optional: trigger content suggestions)
 
-### Phase 5: Production Deployment
+### Phase 6: Production Deployment
+Depends on: Phase 1-3 working locally (core engine + AI + Streamlit)
 
-#### 5.1 Docker Containerization
-- Create Dockerfile for Python content engine
-- Add `content-engine` service to docker-compose.yaml
+#### 6.1 Docker Containerization
+- Create Dockerfile for Python content engine + Streamlit app (single image or two services)
+- Add `content-engine` and `content-hub` services to docker-compose.yaml
 - Mount ~/.claude/ volume for OAuth token persistence
 - Mount data/ volume for learning context and content repository
 - Environment variables via .env (Postiz API key, Google credentials path, etc.)
 
-#### 5.2 Scheduling
+#### 6.2 Scheduling
 - Cron job inside container (or Temporal worker) for:
   - run-enhance.py: every 30 minutes (check for new "ready" rows)
   - run-suggest.py: weekly (generate content suggestions)
   - run-learn.py: daily (pull engagement data, update learning context)
 
-#### 5.3 OAuth Token Management
+#### 6.3 OAuth Token Management
 - One-time `claude login` on Seth's server after deployment
 - Monitor token health in content engine (detect auth failures)
 - Alert when re-authentication needed
 - Fallback plan: if headless OAuth unreliable, swap to Claude API with budget cap
 
-#### 5.4 Monitoring
+#### 6.4 Monitoring
 - Health check endpoint or script
 - Log rotation for content engine output
 - Error alerting (email or Sheet-based: write errors to an "Errors" tab)
 
-### Phase 6: Optimization (After 3+ Weeks of Data)
+### Phase 7: Optimization (After 3+ Weeks of Data)
+Depends on: Phase 6 (deployed), 3+ weeks of posting data
 
-#### 6.1 Scheduling Intelligence
+#### 7.1 Scheduling Intelligence
 - Analyze learning context for optimal posting times per platform
 - Auto-suggest scheduling times when creating Postiz drafts
 - Default optimal times baked in, overridable by staff
 
-#### 6.2 Analytics Reporting
+#### 7.2 Analytics Reporting
 - Weekly summary in Sheet "Analytics" tab: engagement by platform, pillar, post type
 - Identify top-performing content and patterns
 - Track pillar distribution vs targets
 - Alert when pillar weights deviate significantly
 
-#### 6.3 Advanced Meta-Learning
+#### 7.3 Advanced Meta-Learning
 - Pattern extraction from competitor/peer ISKCON accounts (optional, requires Apify ~$49/mo)
 - Seasonal content pattern recognition
 - Engagement prediction: estimate expected performance before posting
