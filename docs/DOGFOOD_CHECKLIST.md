@@ -925,6 +925,20 @@ The brainstorming skill focuses on user intent, architecture, and design decisio
 
 **Residual issue**: The `master` tag still contains stale v1 tasks (1-30) plus incorrectly-parsed v2 tasks (31-58, including one partially expanded). These should be cleaned up.
 
+### Finding #15 (Low): `--num=0` Misinterpreted as "No Expansion Needed"
+
+**Severity**: Low (caught by user before any consequence)
+
+**Summary**: In the complexity report, 4 medium-complexity tasks (score 5) showed `--num=0` in their expansion commands. Claude interpreted this as "zero subtasks = skip expansion." In reality, `--num=0` means "let the AI float the number of subtasks" — the same semantics as `--num-tasks=0` in `parse-prd`.
+
+**What happened**:
+1. Complexity report showed tasks 11, 13, 16, 25 with `--num=0`
+2. Claude skipped these, stating "4 of those have `--num=0` (no expansion needed)"
+3. User questioned the interpretation
+4. Claude expanded them correctly — AI chose 6, 9, 7, and 9 subtasks respectively
+
+**Template recommendation**: The `--num=0` semantics should be documented more explicitly. In the complexity report output, the "Subta…" column showing "0" is ambiguous — it could mean "recommended 0 subtasks" or "let AI decide." Clearer labeling (e.g., "auto" instead of "0") would prevent misinterpretation.
+
 ---
 
 ## Summary
