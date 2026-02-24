@@ -1,10 +1,11 @@
-"""Content pipelines — Enhance (Mode 1) and Re-prompt workflows."""
+"""Content pipelines — Enhance (Mode 1), Re-prompt, and Suggest (Mode 2) workflows."""
 
 import logging
 from dataclasses import dataclass
 
 from content_engine.generator import CaptionGenerator
-from content_engine.models import ContentStatus
+from content_engine.intelligence import ContentIntelligence
+from content_engine.models import ContentPillar, ContentStatus
 from content_engine.postiz import PostizClient
 from content_engine.sheets import SheetsClient
 from content_engine.validator import ContentValidator
@@ -162,6 +163,77 @@ def reprompt_pipeline(
 
     logger.info(
         "Re-prompt complete: %d processed, %d errors",
+        result.processed,
+        result.errors,
+    )
+    return result
+
+
+def suggest_pipeline(
+    *,
+    sheets: SheetsClient,
+    postiz: PostizClient,
+    generator: CaptionGenerator,
+    intelligence: ContentIntelligence,
+    days_ahead: int = 14,
+) -> PipelineResult:
+    """Run the Mode 2 Suggestion Pipeline.
+
+    Analyzes calendar gaps and pillar balance via ContentIntelligence,
+    generates AI suggestions, and writes them to the Suggestions tab.
+    """
+    result = PipelineResult()
+
+    try:
+        # Analyze current content state
+        gaps = intelligence.analyze_calendar_gaps(days_ahead=days_ahead)
+        pillar_balance_raw = intelligence.analyze_pillar_balance()
+        events = intelligence.get_upcoming_events(days_ahead=7)
+
+        # Convert gaps to date strings for the generator
+        gap_dates = [g["date"] for g in gaps]
+
+        # Simplify pillar balance: pillar_name -> actual_pct
+        pillar_balance: dict[str, float] = {}
+        for pillar, stats in pillar_balance_raw.items():
+            pillar_name = pillar.value if isinstance(pillar, ContentPillar) else str(pillar)
+            pillar_balance[pillar_name] = stats["actual"]
+
+        logger.info(
+            "Analysis: %d calendar gaps, %d pillars tracked, %d upcoming events",
+            len(gap_dates),
+            len(pillar_balance),
+            len(events),
+        )
+
+        # Generate AI suggestions
+        suggestions = generator.generate_suggestions(
+            calendar_gaps=gap_dates,
+            pillar_balance=pillar_balance,
+        )
+        logger.info("Generated %d suggestions", len(suggestions))
+
+    except Exception as e:
+        logger.error("Suggestion generation failed: %s", e)
+        try:
+            sheets.log_error("suggest", str(e))
+        except Exception:
+            logger.exception("Failed to log error to Sheet")
+        result.errors += 1
+        return result
+
+    # Write suggestions to Sheet
+    for suggestion in suggestions:
+        try:
+            sheets.add_suggestion(suggestion)
+            result.processed += 1
+            logger.info("Added suggestion: %s", suggestion.content_idea[:50])
+        except Exception as e:
+            logger.error("Failed to write suggestion: %s", e)
+            result.errors += 1
+
+    logger.info(
+        "Suggest pipeline complete: %d written, %d errors",
         result.processed,
         result.errors,
     )
