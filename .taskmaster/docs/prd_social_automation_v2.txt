@@ -1,0 +1,394 @@
+# PRD: Gita Valley Social Media Automation Pipeline v2
+
+## Overview
+
+Build an automated social media content pipeline for Gita Valley (430-acre ISKCON eco-farm and cow sanctuary, Port Royal, PA) using a Python content engine, Claude Code CLI (AI generation via OAuth subscription — $0 extra cost), and Postiz (self-hosted scheduler). The system operates in two modes: (1) staff-initiated content enhancement and (2) AI-proactive content suggestions. It reads from a Google Sheets content calendar, generates platform-specific AI captions, creates draft posts in Postiz for staff review/editing, and publishes to Instagram, Facebook, TikTok, Threads, and LinkedIn.
+
+Architecture: Python Content Engine = brain (orchestration + AI + learning), Postiz = hands (review + scheduling + publishing), Google Sheets = input (content + suggestions).
+
+**Supersedes:** prd_social_automation.txt (v1, n8n-based architecture)
+
+## Problem Statement
+
+Gita Valley has compelling daily content — 85 cows, regenerative farming, community events, cooking, retreats — but no system for consistent social media posting. Posts happen sporadically with multi-month gaps, resulting in 0.2-0.4% engagement rates vs. 3-6% benchmarks for similar farm accounts. One intern's viral TikTok generated 1,200 internship applications, proving the content resonates when posted.
+
+Additionally, farm staff are busy with operations. They need a system that:
+1. Minimizes creative burden (photo + 1 sentence = done)
+2. Proactively suggests content ideas so they don't have to think about what to post
+3. Learns from past performance to improve over time
+
+## Goals
+
+1. Automate content publishing to 5 social media platforms from a single Google Sheets content calendar
+2. Generate platform-optimized AI captions that follow Gita Valley branding guidelines using Claude (via OAuth — $0 API cost)
+3. Proactively suggest content ideas based on past performance, content gaps, and upcoming events
+4. Learn from post engagement data to improve content quality over time (meta-learning)
+5. Achieve consistent posting cadence (target 3+ posts/week/platform, configurable)
+6. Minimize staff effort: photo + 1 sentence → AI generates everything else
+7. Maintain brand consistency across all platforms (always "Gita Valley", never "Gita Nagari")
+8. Support manual approval workflow with Postiz as the primary review/editing UI
+9. Deploy locally for development, then as a Docker service on Seth's server for production
+
+## Non-Goals
+
+- n8n integration (removed from architecture — Claude OAuth incompatible with n8n AI nodes)
+- User-generated content (UGC) capture and reposting
+- YouTube channel creation and integration (separate initiative)
+- A/B testing of captions or post times (Phase 4+ consideration)
+- Direct message management or community engagement responses
+- Custom analytics dashboard (Postiz built-in + Sheet reporting + learning context)
+- WhatsApp Business API integration (stretch goal only)
+- Automated brand consistency validation beyond AI prompt enforcement (pending temple meeting)
+- Per-token Claude API costs (must use OAuth/subscription)
+
+## Technical Architecture
+
+### Stack
+
+| Tool | Role | Cost |
+|------|------|------|
+| Google Sheets | Content input, suggestions display, status tracking | Free |
+| Python Content Engine | Orchestration, Sheet reading, Postiz API, learning | Free (open source) |
+| Claude Code CLI | AI generation (captions, suggestions, pillar inference) | $0 (OAuth subscription) |
+| Postiz | Draft review, editing, scheduling, multi-platform publishing | $0 (self-hosted) |
+| Google Drive | Media library (photos, videos) | Free (workspace) |
+
+### Infrastructure (Already Deployed)
+
+- Postiz at https://postiz.sethpc.xyz (Docker, behind reverse proxy on Seth's server)
+- PostgreSQL 17 (Postiz database)
+- Redis 7.2 (Postiz cache)
+- Temporal 1.28 + Elasticsearch (workflow engine)
+- This repo tracks desired state (docker-compose, scripts, documentation)
+
+### Deployment Path
+
+- Phase 1 (Development): Python scripts run locally, call remote Postiz API at sethpc.xyz
+- Phase 2 (Production): Add `content-engine` Docker service to existing docker-compose.yaml on Seth's server
+- Phase 3 (If needed): Swap Claude CLI for Claude API if headless OAuth proves unreliable
+
+### Two-Mode Pipeline
+
+**Mode 1: Staff-Initiated (Enhance)**
+```
+Staff adds photo + caption to Sheet (status: "ready")
+  → Content Engine reads new rows
+  → Claude CLI generates platform-specific captions
+  → Creates draft posts in Postiz
+  → Staff reviews/edits in Postiz dashboard
+  → Staff approves → Postiz publishes on schedule
+  → Engine updates Sheet status
+```
+
+**Mode 2: AI-Suggested (Suggest)**
+```
+Content Intelligence analyzes gaps, events, past performance
+  → Claude CLI generates 5-7 content ideas with rationale
+  → Suggestions appear in Sheet "Suggestions" tab
+  → Staff picks favorites, edits, accepts
+  → Content Engine generates full captions + Postiz drafts
+  → Staff reviews/approves in Postiz
+```
+
+### Key Constraints
+
+- Postiz API is in beta: 30 requests/hour rate limit (sufficient at current volume: 1-3 posts/day)
+- Facebook/Instagram require Facebook Business App review (~1 month approval)
+- TikTok has separate app approval process
+- AI cost: $0/call via Claude Code CLI with OAuth/Max subscription
+- Claude Code CLI requires OAuth authentication — one-time browser login, token persists
+- Seth manages the live server; we develop locally and deploy Docker service when ready
+
+## Feature Requirements
+
+### Phase 1: Foundation + Content Engine Core
+
+#### 1.1 Python Project Setup
+- Initialize Python 3.11+ project with pyproject.toml
+- Dependencies: google-api-python-client, google-auth, requests, python-dotenv, schedule
+- Dev dependencies: pytest, ruff, mypy
+- Project structure:
+  ```
+  src/
+    content_engine/
+      __init__.py
+      sheets.py         # Google Sheets read/write
+      postiz.py         # Postiz API client
+      generator.py      # Claude CLI AI generation
+      intelligence.py   # Content intelligence / meta-learning
+      scheduler.py      # Cron/scheduling logic
+      models.py         # Data models (ContentRow, Suggestion, etc.)
+  data/
+    festivals.json      # ISKCON festival calendar
+    quotes.json         # Curated scripture quotes
+    cow-profiles.json   # Names, personalities of 85 cows
+    farm-facts.json     # Key stats, history, programs
+    brand-guide.md      # Full branding rules
+    learning-context.json  # Performance data (grows over time)
+    post-performance.json  # Raw post engagement data
+  scripts/
+    run-enhance.py      # Mode 1: process "ready" rows
+    run-suggest.py      # Mode 2: generate suggestions
+    run-learn.py        # Pull engagement data, update learning context
+    setup-sheet.py      # Initialize Google Sheet with correct schema
+  ```
+
+#### 1.2 Google Sheets Integration
+- Authenticate via Google Sheets API (service account)
+- Read "Content" tab: fetch rows by status ("ready", "pending_approval", etc.)
+- Write captions back to platform-specific columns
+- Update status column programmatically
+- Create "Suggestions" tab with separate schema
+- Handle Sheet not found, permission errors gracefully
+
+#### 1.3 Postiz API Client
+- Authenticate with API key (Authorization header, no Bearer prefix)
+- Create draft posts via POST /api/public/v1/posts
+- Batch all platforms in single API call (reduces rate limit usage)
+- Upload media (download from Google Drive URL first, then upload to Postiz)
+- Query post status and engagement metrics
+- List connected integrations/channels
+- Handle rate limits with retry + backoff
+- Handle auth failures with clear error messages
+
+#### 1.4 Postiz Configuration (Manual Steps)
+- Verify admin user account in Postiz dashboard
+- Generate and securely store Postiz API key in .env
+- Configure Postiz organization settings (name: "Gita Valley", timezone: America/New_York)
+
+#### 1.5 Social Channel Connections (Manual, Blocked on Credentials)
+- Connect Instagram (@gita.valley) via Facebook Business integration in Postiz
+- Connect Facebook page (fb.com/gitavalley) in Postiz
+- Connect TikTok (@gitavalley) in Postiz
+- Connect Threads (gita.valley) in Postiz
+- Connect LinkedIn (Gita Valley) in Postiz
+- Document channel IDs for each connected platform
+- Note: Platform approvals may take weeks. Design code to work with whatever subset is connected.
+
+#### 1.6 Google Sheets Content Calendar Setup
+- Create Google Sheet with schema from design doc (Content tab + Suggestions tab)
+- Configure column formatting (dropdowns for status, checkboxes for platforms)
+- Create 5-10 sample rows with real Gita Valley content for testing
+- Apps Script for auto-formatting (already built: scripts/setup-content-calendar.gs)
+
+### Phase 2: AI Caption Generation (Mode 1 — Enhance)
+
+#### 2.1 Claude Code CLI Integration
+- Call `claude` CLI in print mode: `claude -p "prompt"` for non-interactive generation
+- Pass content + brand rules + platform instructions + learning context as prompt
+- Parse output: extract generated caption text
+- Handle CLI errors: not authenticated, rate limited, timeout
+- Test with real Sheet rows and verify output quality
+
+#### 2.2 Platform-Specific Caption Generation
+- Instagram: visual focus, 5-10 hashtags, emoji-rich, 150-200 words, CTA in last line
+- Facebook: storytelling, 200-300 words, question to spark comments, link to gitavalley.org
+- TikTok: short hook (first 3 words grab attention), trending language, 2-3 hashtags, under 100 words
+- Threads: conversational, no hashtags, 1-2 sentences, thought-provoking
+- LinkedIn: professional, impact-focused, university partnership angles, 100-150 words
+- Generate all platform captions in a single Claude call (structured output)
+- Write captions back to Sheet (caption_ig, caption_fb, etc.)
+
+#### 2.3 Content Pillar Inference
+- AI infers content pillar from photo context + caption text
+- Pillar written to Sheet (staff can override)
+- Pillar-specific tone adjustments baked into generation prompt
+- Pillars: Cow Life (40%), Farm Ops (25%), Community (15%), Kitchen (10%), Spiritual (5%), CTA (5%)
+
+#### 2.4 Content Validation
+- Verify caption exists and is non-empty
+- Verify media URL is accessible (HEAD request to Google Drive)
+- Verify at least one platform is checked
+- Invalid rows: mark "error" with descriptive error_msg
+- Valid rows: proceed to AI generation
+
+#### 2.5 Postiz Draft Creation
+- After AI generates captions, create draft posts in Postiz via API
+- One API call per content row (batch all platforms)
+- Include media (download from Drive, upload to Postiz)
+- Set post status to "draft" in Postiz (not auto-published)
+- Staff reviews in Postiz dashboard, edits, approves, schedules
+
+#### 2.6 Full Enhance Pipeline (run-enhance.py)
+- Read Sheet → Validate → Generate Captions → Update Sheet → Create Postiz Drafts
+- Update Sheet status: ready → pending_approval → (staff approves in Postiz)
+- Handle partial failures: if one row fails, continue processing others
+- Log all actions to stdout for debugging
+
+#### 2.7 Staff Re-Prompting
+- Staff can add feedback in Sheet "feedback" column: "make it more casual", "add donation CTA"
+- Next run picks up rows with feedback + status "pending_approval"
+- Re-generates with feedback as additional prompt context
+- Updates captions in Sheet and Postiz draft
+
+### Phase 3: Content Intelligence + Suggestions (Mode 2 — Suggest)
+
+#### 3.1 Content Repository Setup
+- Create data files: festivals.json (ISKCON calendar), quotes.json (Bhagavad Gita, Prabhupada)
+- Create cow-profiles.json (names, personalities of notable cows)
+- Create farm-facts.json (key statistics, history, programs, partnerships)
+- Create brand-guide.md (comprehensive branding rules and voice examples)
+- These files are included as context in AI generation prompts
+
+#### 3.2 Post Performance Tracking (run-learn.py)
+- Pull engagement data from Postiz API for published posts
+- Store in data/post-performance.json: post ID, platform, pillar, engagement metrics, timing
+- Run weekly (or after each posting cycle)
+
+#### 3.3 Learning Context Builder
+- Analyze post-performance.json to extract patterns:
+  - Best-performing content types by platform
+  - Optimal posting times by day of week
+  - Hashtag performance data
+  - Pillar distribution vs targets
+  - Engagement trends over time
+- Write data/learning-context.json with summarized insights
+- This context is included in every generation prompt
+
+#### 3.4 Content Suggestion Generator (run-suggest.py)
+- Analyze content calendar gaps: "no farm content in 5 days"
+- Check pillar balance: "spiritual at 15%, target is 5%"
+- Check festival calendar: "Ekadashi in 3 days, no content planned"
+- Pull from content repository: relevant verse, teaching, cow profile
+- Include learning context: "cow photos at 9am get 3x engagement"
+- Generate 5-7 content suggestions via Claude CLI
+- Each suggestion includes: content idea, suggested pillar, rationale, media suggestion
+- Write suggestions to Sheet "Suggestions" tab
+
+#### 3.5 Suggestion-to-Post Pipeline
+- Staff reviews Suggestions tab, marks favorites as "accepted"
+- Content Engine reads accepted suggestions
+- Generates full platform captions (same as Mode 1)
+- Creates Postiz drafts
+- Staff reviews/approves in Postiz
+
+### Phase 4: Media Handling
+
+#### 4.1 Image Support
+- Accept Google Drive shared links in photo_url column
+- Download image from Drive URL in Content Engine
+- Upload to Postiz via API with post creation
+- Supported formats: JPEG, PNG, WebP
+- Validate file size and dimensions before posting
+- Handle missing/broken URLs: generate text-only post or mark "error"
+
+#### 4.2 Video Support
+- Accept Google Drive video links
+- Video format validation: MP4, max duration per platform
+- TikTok: ensure video meets dimension/length requirements
+- Instagram Reels: support video content alongside static posts
+
+#### 4.3 Google Drive Integration
+- Service account access to shared Drive folder
+- List available media files for content suggestions
+- Auto-detect new media uploads (optional: trigger content suggestions)
+
+### Phase 5: Production Deployment
+
+#### 5.1 Docker Containerization
+- Create Dockerfile for Python content engine
+- Add `content-engine` service to docker-compose.yaml
+- Mount ~/.claude/ volume for OAuth token persistence
+- Mount data/ volume for learning context and content repository
+- Environment variables via .env (Postiz API key, Google credentials path, etc.)
+
+#### 5.2 Scheduling
+- Cron job inside container (or Temporal worker) for:
+  - run-enhance.py: every 30 minutes (check for new "ready" rows)
+  - run-suggest.py: weekly (generate content suggestions)
+  - run-learn.py: daily (pull engagement data, update learning context)
+
+#### 5.3 OAuth Token Management
+- One-time `claude login` on Seth's server after deployment
+- Monitor token health in content engine (detect auth failures)
+- Alert when re-authentication needed
+- Fallback plan: if headless OAuth unreliable, swap to Claude API with budget cap
+
+#### 5.4 Monitoring
+- Health check endpoint or script
+- Log rotation for content engine output
+- Error alerting (email or Sheet-based: write errors to an "Errors" tab)
+
+### Phase 6: Optimization (After 3+ Weeks of Data)
+
+#### 6.1 Scheduling Intelligence
+- Analyze learning context for optimal posting times per platform
+- Auto-suggest scheduling times when creating Postiz drafts
+- Default optimal times baked in, overridable by staff
+
+#### 6.2 Analytics Reporting
+- Weekly summary in Sheet "Analytics" tab: engagement by platform, pillar, post type
+- Identify top-performing content and patterns
+- Track pillar distribution vs targets
+- Alert when pillar weights deviate significantly
+
+#### 6.3 Advanced Meta-Learning
+- Pattern extraction from competitor/peer ISKCON accounts (optional, requires Apify ~$49/mo)
+- Seasonal content pattern recognition
+- Engagement prediction: estimate expected performance before posting
+- A/B suggestion: generate 2-3 caption variants, recommend the likely best performer
+
+## Branding Rules (Enforced in All AI-Generated Content)
+
+- Name: "Gita Valley" — NEVER "Gita Nagari" in new content
+- Website: gitavalley.org
+- Tagline: "Cultivating Soil and Soul"
+- Key differentiator: "Only USDA Certified Slaughter-Free Dairy Farm in North America"
+- Voice: warm, welcoming, grounded — NOT preachy or overly spiritual
+- Lead with cows and farm, religion secondary
+- Key facts: 85 cows, 16 producing milk, 400 gallons/week, $18/gallon ahimsa milk, 430 acres, Port Royal PA, 501(c)(3) nonprofit
+
+## Social Accounts
+
+| Platform | Handle | Followers | Notes |
+|----------|--------|-----------|-------|
+| Instagram | @gita.valley | 4,414 | Fully rebranded |
+| Facebook | fb.com/gitavalley | 5,700 | Name still "Gita Nagari Farm" — needs admin rebrand |
+| TikTok | @gitavalley | 198 | Partial rebrand, old logo |
+| Threads | gita.valley | Unknown | Linked from Instagram |
+| LinkedIn | Gita Valley | Unknown | Professional/institutional audience |
+
+## Error Handling
+
+| Failure | Response |
+|---------|----------|
+| Google Sheets API unreachable | Retry 3x with exponential backoff, log error |
+| Claude Code CLI fails | Mark row "error", log reason, continue other rows |
+| Claude OAuth token expired | Alert user to re-authenticate, pause processing |
+| Postiz API rate limit (30/hr) | Queue with delay, max 3 attempts |
+| Postiz API auth failure | Log error, mark "error", stop processing |
+| Media URL invalid/broken | Post text-only or mark "error" (configurable) |
+| Platform not connected in Postiz | Skip platform, post to connected ones, log warning |
+
+## Success Metrics
+
+- Posting consistency: 0 gaps > 3 days on any connected platform
+- Engagement improvement: from 0.2-0.4% to 1%+ within 3 months of consistent posting
+- Staff time: content entry < 2 minutes per post (photo + 1 sentence)
+- Suggestion adoption: >30% of AI suggestions accepted by staff within first month
+- System reliability: < 5% error rate on scheduled posts
+- Brand consistency: 100% of AI-generated posts follow branding rules
+- Learning impact: measurable improvement in engagement metrics month-over-month
+- Approval turnaround: < 24 hours from draft to approved (operational target)
+
+## Posting Cadence (Configurable Defaults)
+
+| Platform | Default Frequency |
+|----------|------------------|
+| Instagram | 4-5 posts/week + daily Stories |
+| Facebook | 3-4 posts/week |
+| TikTok | 3-5 short videos/week |
+| Threads | Mirror Instagram |
+| LinkedIn | 1-2 posts/week |
+
+Finalized at temple president meeting (pushed to after system is built).
+
+## Open Decisions (Pending Temple President Meeting)
+
+- Posting frequency per platform (defaults provided above)
+- Platform priority order for initial rollout
+- Whether to add automated brand consistency validation beyond AI prompts
+- Who is the designated content reviewer for approval workflow
+- Facebook page rebrand authorization (still "Gita Nagari Farm" with 5.7K followers)
+- Access to Google Drive photo archive for content repository
+- Budget for optional Apify competitor scraping ($49/mo)
