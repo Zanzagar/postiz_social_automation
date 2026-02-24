@@ -809,7 +809,72 @@
           10
         ],
         "status": "pending",
-        "subtasks": []
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create basic page structure with imports and session state initialization",
+            "description": "Set up the foundational structure for 01_create_post.py including all necessary imports, page configuration, and session state initialization for generator and PostizClient.",
+            "dependencies": [],
+            "details": "Create app/pages/01_create_post.py with imports from content_engine.generator, content_engine.postiz, content_engine.models, datetime, and os. Initialize st.session_state.generator with CaptionGenerator() and st.session_state.postiz_client with PostizClient if not already present. Set page title with st.title('📝 Create Post'). Handle missing API keys gracefully with st.error messages.",
+            "status": "pending",
+            "testStrategy": "Verify page loads without errors, session state objects are initialized correctly, missing API key shows appropriate error message."
+          },
+          {
+            "id": 2,
+            "title": "Build input form with caption, media URL, and platform selection",
+            "description": "Implement the main input form using st.form with two-column layout containing caption text area, Google Drive media URL input, platform checkboxes, and scheduled date picker.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create st.form('create_post_form') with col1 containing st.text_area for caption (with placeholder) and st.text_input for media_url. col2 contains st.subheader('Platforms'), checkboxes for Instagram, Facebook, TikTok, Threads (default True), LinkedIn (default False), and st.date_input for scheduled_date. Add st.form_submit_button('🤖 Generate for All Platforms'). Store selected platforms in a dict mapping Platform enum to boolean values.",
+            "status": "pending",
+            "testStrategy": "Test form renders correctly, all checkboxes work, date picker allows selection, form submission triggers callback with valid data."
+          },
+          {
+            "id": 3,
+            "title": "Implement AI caption generation on form submit",
+            "description": "Handle form submission by building a ContentRow from inputs and calling the CaptionGenerator to produce platform-specific captions, storing results in session state.",
+            "dependencies": [
+              2
+            ],
+            "details": "On generate_btn click with valid caption: show st.spinner('Generating AI captions...'), build ContentRow with row_number=0, date from scheduled_date, raw_text=caption, media_url (or None), platforms dict from checkboxes, status=ContentStatus.DRAFT, empty captions dict. Call st.session_state.generator.generate_captions(row) and store result in st.session_state.generated_captions. Handle exceptions with st.error and appropriate messaging.",
+            "status": "pending",
+            "testStrategy": "Mock CaptionGenerator.generate_captions, verify ContentRow is built correctly, verify generated captions stored in session state, verify spinner displays during generation."
+          },
+          {
+            "id": 4,
+            "title": "Display editable caption cards with expandable sections",
+            "description": "Render generated captions in expandable st.expander components, each containing an editable text area that updates session state on change.",
+            "dependencies": [
+              3
+            ],
+            "details": "Check if 'generated_captions' in st.session_state, then display st.subheader('Generated Captions'). Iterate over generated_captions.items(), create st.expander for each platform (expanded=True), inside each expander create st.text_area with unique key f'edit_{platform}' and value from session state. Update st.session_state.generated_captions[platform] with edited value on each render. Use platform.value.title() for display names.",
+            "status": "pending",
+            "testStrategy": "Verify expanders render for each platform, text areas are editable, session state updates when user modifies captions, changes persist across reruns."
+          },
+          {
+            "id": 5,
+            "title": "Add re-prompt functionality for caption refinement",
+            "description": "Implement a text input for feedback/re-prompt and a button to regenerate captions incorporating user feedback while preserving the original context.",
+            "dependencies": [
+              4
+            ],
+            "details": "Below caption cards, add st.text_input('Re-prompt (optional)') with placeholder 'Make it funnier...'. Add st.button('🔄 Re-generate with feedback'). On click with reprompt text: call generator with original ContentRow plus feedback parameter, update st.session_state.generated_captions with new results, show st.spinner during regeneration. Preserve platform selections and other form state during re-prompt.",
+            "status": "pending",
+            "testStrategy": "Test re-prompt input accepts text, regenerate button calls generator with feedback, new captions replace old ones in session state, form state preserved."
+          },
+          {
+            "id": 6,
+            "title": "Implement Send to Postiz draft creation",
+            "description": "Add the final 'Send to Postiz' button that creates draft posts in Postiz for each selected platform using the edited captions from session state.",
+            "dependencies": [
+              4
+            ],
+            "details": "Add st.button('📤 Send to Postiz') below caption cards. On click: iterate over st.session_state.generated_captions, for each platform with enabled checkbox, call postiz_client.create_draft_post with edited caption and media_url if provided. Show st.spinner during API calls. On success, display st.success('Drafts created in Postiz! Open Postiz to schedule.'). Handle API errors with st.error. Optionally clear generated_captions from session state after successful submission.",
+            "status": "pending",
+            "testStrategy": "Mock PostizClient.create_draft_post, verify correct API calls for each enabled platform, verify success/error messages display correctly, verify captions sent match edited versions."
+          }
+        ]
       },
       {
         "id": 12,
@@ -836,7 +901,107 @@
           11
         ],
         "status": "pending",
-        "subtasks": []
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Set up basic page structure with imports and session state",
+            "description": "Create the foundational structure for 03_drafts.py including all necessary imports, page configuration, and session state initialization for SheetsClient, PostizClient, and edit tracking.",
+            "dependencies": [],
+            "details": "Create app/pages/03_drafts.py with imports from content_engine.sheets (SheetsClient), content_engine.postiz (PostizClient), content_engine.models (ContentStatus, Platform, ContentRow), and content_engine.generator (CaptionGenerator). Initialize session state for: 'sheets_client' with SheetsClient(), 'postiz_client' with PostizClient(), 'generator' with CaptionGenerator(), and 'draft_edits' as empty dict to track user modifications. Set page title with st.title('Review Drafts'). Handle missing API keys or credentials gracefully with st.error messages. Add helper function get_sheets_client() and get_postiz_client() that check session state before instantiating.",
+            "status": "pending",
+            "testStrategy": "Verify page loads without errors, all session state objects initialize correctly, missing credentials show appropriate error messages, helper functions return cached clients."
+          },
+          {
+            "id": 2,
+            "title": "Implement draft fetching and empty state handling",
+            "description": "Fetch pending drafts from Google Sheets using SheetsClient.get_rows_by_status() and display appropriate messages for empty or populated draft lists.",
+            "dependencies": [
+              1
+            ],
+            "details": "Call sheets.get_rows_by_status(ContentStatus.PENDING_APPROVAL) to fetch drafts awaiting review. If no drafts found, display st.success('No pending drafts. All caught up!') with celebratory message. If drafts exist, display st.info(f'{len(drafts)} drafts pending review') as status banner. Store fetched drafts in session state for reference during batch operations. Add st.button('Refresh') to manually re-fetch drafts. Handle SheetsClient exceptions with st.error and retry guidance.",
+            "status": "pending",
+            "testStrategy": "Test with mocked SheetsClient returning empty list (shows success message), non-empty list (shows info banner with count), and exception (shows error message). Verify refresh button triggers re-fetch."
+          },
+          {
+            "id": 3,
+            "title": "Build batch selection UI with select-all checkbox",
+            "description": "Implement batch selection mechanism with a master 'Select all' checkbox that controls individual draft checkboxes, tracking selected drafts in session state.",
+            "dependencies": [
+              2
+            ],
+            "details": "Add st.checkbox('Select all') above the draft list that sets/unsets all individual draft checkboxes. Initialize st.session_state.selected_drafts as empty set. For each draft, create checkbox with key f'select_{draft.row_number}' and value tied to select_all state. When checkbox changes, add/remove draft.row_number from selected_drafts set. Display selection count: f'{len(selected_drafts)} selected'. Ensure checkboxes remain stable during re-renders by using session state as source of truth rather than select_all value directly.",
+            "status": "pending",
+            "testStrategy": "Test select-all toggles all checkboxes, individual checkboxes update selection count, selection persists across re-renders, unselecting one item does not affect others when select-all was used."
+          },
+          {
+            "id": 4,
+            "title": "Create draft card layout with platform caption tabs",
+            "description": "Render each draft in a container with a two-column layout: left column for platform tabs with captions, right column for actions. Use st.tabs to show platform-specific captions side-by-side.",
+            "dependencies": [
+              3
+            ],
+            "details": "For each draft, create st.container() with st.columns([3, 1]). In col1: display row identifier and preview text, then create st.tabs() for each platform where draft.platforms.get(platform) is True. Tab labels use platform.value.title() (e.g., 'Instagram', 'Facebook'). Inside each tab, display the current caption from draft.captions.get(platform). Add st.markdown('---') between drafts for visual separation. Handle drafts with no platforms selected gracefully with warning message.",
+            "status": "pending",
+            "testStrategy": "Test renders correct number of tabs based on selected platforms, tab content matches caption data, drafts with multiple platforms show all tabs, draft with no platforms shows warning."
+          },
+          {
+            "id": 5,
+            "title": "Implement inline caption editing within tabs",
+            "description": "Add st.text_area inside each platform tab for inline editing, tracking changes in session state to persist edits and detect modifications.",
+            "dependencies": [
+              4
+            ],
+            "details": "Replace static caption display with st.text_area(platform.value, value=current_caption, key=f'edit_{draft.row_number}_{platform}'). Initialize st.session_state.draft_edits as nested dict: {row_number: {platform: edited_text}}. On each render, compare current text_area value to original caption. If different, update draft_edits[row_number][platform] with new value. Add visual indicator (st.caption('Modified') or colored border) when edit differs from original. Provide 'Revert' button per platform to restore original caption.",
+            "status": "pending",
+            "testStrategy": "Test editing caption updates session state, modification indicator appears on change, revert button restores original, edits persist across tab switches, edits clear after successful save."
+          },
+          {
+            "id": 6,
+            "title": "Build re-prompt input and regeneration functionality",
+            "description": "Add re-prompt text input and regenerate button in the right column of each draft card to allow staff to request caption modifications with specific feedback.",
+            "dependencies": [
+              5
+            ],
+            "details": "In col2, add st.text_input('Re-prompt', key=f'reprompt_{draft.row_number}', placeholder='Make it shorter, add more hashtags...') and st.button('Regenerate', key=f'regen_{draft.row_number}'). On regenerate click: validate reprompt text is not empty, show st.spinner('Regenerating captions...'), call generator.generate_captions(draft, feedback=reprompt_text), update session_state.draft_edits with new captions, clear reprompt input. Display success toast or error message based on result. Consider rate limiting or confirmation for rapid regeneration requests.",
+            "status": "pending",
+            "testStrategy": "Test regenerate button calls generator with feedback parameter, empty reprompt shows validation error, generated captions update display, regeneration failure shows error message, reprompt input clears after successful regeneration."
+          },
+          {
+            "id": 7,
+            "title": "Add Postiz draft links and external navigation",
+            "description": "Display direct links to view/edit drafts in Postiz dashboard for each draft that has an associated Postiz ID.",
+            "dependencies": [
+              4
+            ],
+            "details": "In col2 below the re-prompt section, check if draft.postiz_ids exists and is non-empty. If present, display st.markdown linking to Postiz dashboard: f'[Open in Postiz](https://postiz.sethpc.xyz/posts/{draft.postiz_ids})'. Handle multiple Postiz IDs (if draft spans multiple platforms with separate Postiz posts) by showing multiple links or a dropdown. If no Postiz ID exists yet, display st.caption('Not yet sent to Postiz'). Use link_button for better UX if Streamlit version supports it.",
+            "status": "pending",
+            "testStrategy": "Test link renders correctly with valid Postiz ID, no link shown when postiz_ids is empty/None, multiple IDs generate multiple links, link opens in new tab."
+          },
+          {
+            "id": 8,
+            "title": "Implement batch approve action with Sheet and Postiz updates",
+            "description": "Build the 'Approve & Send to Postiz' batch action button that updates Sheet status and creates/updates Postiz drafts for all selected drafts.",
+            "dependencies": [
+              5,
+              6,
+              7
+            ],
+            "details": "Add st.button(f'Approve & Send {len(selected)} to Postiz', disabled=len(selected)==0) at bottom of page. On click: show st.spinner('Creating Postiz drafts...'), iterate over selected drafts, for each draft: merge any edits from draft_edits into draft.captions, call sheets.update_captions(draft.row_number, edited_captions), call sheets.update_status(draft.row_number, ContentStatus.APPROVED), call postiz.create_or_update_draft(draft) to create Postiz posts, collect results (success/failure per draft). Display st.success summary with count. Handle partial failures gracefully: show which drafts succeeded and which failed. Clear selection and edits after success. Call st.rerun() to refresh draft list.",
+            "status": "pending",
+            "testStrategy": "Test button disabled when nothing selected, clicking triggers Sheet updates for all selected, Postiz drafts created with correct data, partial failure shows appropriate error while continuing others, success clears selection and triggers rerun."
+          },
+          {
+            "id": 9,
+            "title": "Add error handling, loading states, and edge case handling",
+            "description": "Implement comprehensive error handling for API failures, loading spinners during async operations, and graceful handling of edge cases like concurrent edits or stale data.",
+            "dependencies": [
+              8
+            ],
+            "details": "Wrap all API calls (SheetsClient, PostizClient, CaptionGenerator) in try/except blocks with specific exception handling. Display st.error with actionable messages for: rate limits (retry guidance), auth failures (re-authenticate prompt), network errors (check connection). Add loading spinners for: initial draft fetch, regeneration, batch approval. Handle concurrent edit detection: compare draft timestamps if available, warn user if data may be stale. Add confirmation dialog for batch operations affecting many drafts. Implement retry logic for transient failures with exponential backoff.",
+            "status": "pending",
+            "testStrategy": "Test each API failure type shows appropriate error message, loading spinners appear during operations, concurrent edit warning triggers when expected, confirmation dialog appears for large batch operations, retry logic attempts correct number of retries."
+          }
+        ]
       },
       {
         "id": 14,
@@ -918,7 +1083,83 @@
           15
         ],
         "status": "pending",
-        "subtasks": []
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create run_suggest.py script skeleton with CLI argument parsing",
+            "description": "Set up the basic script structure with shebang, imports, logging configuration, argument parsing for --days-ahead and --dry-run flags, and environment variable validation.",
+            "dependencies": [],
+            "details": "Create scripts/run_suggest.py with: (1) #!/usr/bin/env python3 shebang, (2) docstring describing Mode 2 purpose, (3) imports from content_engine.sheets, content_engine.postiz, content_engine.generator, content_engine.intelligence, (4) argparse for --days-ahead (default 14), --events-days (default 7), --dry-run (skip Sheet writes), --verbose flags, (5) logging.basicConfig with configurable level, (6) validate_environment() function checking GOOGLE_CREDENTIALS_PATH, SPREADSHEET_ID, POSTIZ_API_KEY existence with clear error messages, (7) main() function placeholder, (8) if __name__ == '__main__' entry point with sys.exit().",
+            "status": "pending",
+            "testStrategy": "Run script with --help to verify argument parsing works. Run with missing env vars to verify validation fails with clear messages. Run with --verbose to verify logging level changes."
+          },
+          {
+            "id": 2,
+            "title": "Implement client initialization and dependency injection",
+            "description": "Add the initialization logic for SheetsClient, PostizClient, CaptionGenerator, and ContentIntelligence with proper error handling for connection failures.",
+            "dependencies": [
+              1
+            ],
+            "details": "In main(), after load_dotenv(): (1) Create SheetsClient with credentials_path and spreadsheet_id from env, (2) Create PostizClient with api_key from env, (3) Create CaptionGenerator with default configuration, (4) Create ContentIntelligence passing sheets and postiz clients, (5) Wrap each initialization in try/except to catch connection errors (invalid credentials, network issues), (6) Log successful initialization of each client, (7) Consider adding --skip-postiz flag if Postiz isn't needed for pure suggestion generation. Use type hints for all client variables.",
+            "status": "pending",
+            "testStrategy": "Test with valid credentials to verify all clients initialize. Test with invalid Google credentials path to verify graceful error. Test with missing Postiz API key to verify appropriate handling."
+          },
+          {
+            "id": 3,
+            "title": "Implement content intelligence analysis orchestration",
+            "description": "Add the analysis phase that calls ContentIntelligence methods to gather calendar gaps, pillar balance, and upcoming events data.",
+            "dependencies": [
+              2
+            ],
+            "details": "After client initialization: (1) Call intelligence.analyze_calendar_gaps(days_ahead=args.days_ahead) and store result, (2) Call intelligence.analyze_pillar_balance() and store result showing actual vs target (40/25/15/10/5/5) distribution, (3) Call intelligence.get_upcoming_events(days_ahead=args.events_days) and store result, (4) Log summary of each analysis: 'Found N calendar gaps in next X days', 'Pillar balance: {pillar: percentage}', 'Upcoming events: [event names]', (5) Handle empty results gracefully - if no gaps found, consider still generating suggestions based on events/balance, (6) Create an AnalysisContext dataclass or dict to bundle these results for passing to generator.",
+            "status": "pending",
+            "testStrategy": "Mock ContentIntelligence methods to return known data. Verify logging output matches expected format. Test with empty gaps list to verify script continues. Test with no upcoming events to verify graceful handling."
+          },
+          {
+            "id": 4,
+            "title": "Implement suggestion generation with CaptionGenerator",
+            "description": "Add the AI suggestion generation phase that passes analysis context to CaptionGenerator.generate_suggestions() and handles the response.",
+            "dependencies": [
+              3
+            ],
+            "details": "After analysis phase: (1) Call generator.generate_suggestions(calendar_gaps=gaps, pillar_balance=pillar_balance, upcoming_events=events) passing the bundled context, (2) Handle generator timeout (Claude CLI can be slow) with configurable timeout via --timeout flag (default 120s), (3) Validate returned suggestions list - each should be a Suggestion model instance with required fields (suggested_date, content_idea, suggested_pillar, rationale, media_suggestion, status='suggested'), (4) Log number of suggestions generated, (5) If dry-run mode, print suggestions to stdout in human-readable format without writing to Sheet, (6) Handle case where generator returns empty list (log warning, exit gracefully).",
+            "status": "pending",
+            "testStrategy": "Mock CaptionGenerator.generate_suggestions to return sample Suggestion list. Verify suggestions are validated. Test --dry-run flag prints suggestions without Sheet writes. Test timeout handling with slow mock."
+          },
+          {
+            "id": 5,
+            "title": "Implement Sheet suggestion writes with error handling",
+            "description": "Add the final phase that writes generated suggestions to the Google Sheet 'Suggestions' tab with individual error handling per suggestion.",
+            "dependencies": [
+              4
+            ],
+            "details": "For each suggestion in suggestions list (unless dry-run): (1) Call sheets.add_suggestion(suggestion) to write to Suggestions tab, (2) Wrap in try/except to catch individual write failures (API quota, network issues), (3) On failure, log error but continue with remaining suggestions (don't fail entire run), (4) Track success/failure counts, (5) Log each successful write: 'Added suggestion: {content_idea[:50]}...', (6) At end, log summary: 'Generated N suggestions, wrote M to Sheet, K failed', (7) Exit with code 0 if any succeeded, code 1 if all failed, (8) Consider --batch-write flag for future optimization to reduce API calls.",
+            "status": "pending",
+            "testStrategy": "Mock sheets.add_suggestion to succeed. Verify all suggestions are written. Mock one add_suggestion to fail - verify others still written and failure logged. Verify exit codes for success/partial/full failure scenarios."
+          },
+          {
+            "id": 6,
+            "title": "Add comprehensive error handling and graceful degradation",
+            "description": "Wrap the entire pipeline in robust error handling with meaningful error messages, proper exit codes, and graceful degradation when partial failures occur.",
+            "dependencies": [
+              5
+            ],
+            "details": "Enhance main() with: (1) Top-level try/except catching KeyboardInterrupt (exit cleanly), Exception (log full traceback), (2) Specific exception handlers for: GoogleAPIError (credentials/quota issues), PostizAPIError (API unavailable), GeneratorTimeout (Claude CLI slow), (3) Return appropriate exit codes: 0=success, 1=partial failure (some suggestions failed), 2=complete failure (no suggestions generated), 3=configuration error (missing env vars), (4) Add --fail-fast flag to exit on first error instead of continuing, (5) Ensure all resources are cleaned up on exit (no hanging connections), (6) Add signal handlers for SIGTERM/SIGINT for clean shutdown when run as cron job.",
+            "status": "pending",
+            "testStrategy": "Test KeyboardInterrupt handling exits cleanly. Test with simulated API errors to verify appropriate exit codes. Test --fail-fast stops on first error. Verify signal handling works for clean shutdown."
+          },
+          {
+            "id": 7,
+            "title": "Add execution summary and logging output formatting",
+            "description": "Implement a clean summary output at the end of execution showing what was analyzed, generated, and written, suitable for both interactive use and cron job logs.",
+            "dependencies": [
+              6
+            ],
+            "details": "At pipeline completion: (1) Print formatted summary block with clear separators, (2) Show analysis results: gaps found, pillar imbalances detected, events upcoming, (3) Show generation results: suggestions created by pillar, (4) Show write results: success/failure counts, (5) Show timing: total execution time, (6) In --verbose mode, include per-suggestion details, (7) Format output as structured data (JSON) when --json flag is passed for machine parsing, (8) Ensure summary is always printed even if pipeline partially failed, (9) Consider adding --quiet flag to suppress all but error output for cron jobs.",
+            "status": "pending",
+            "testStrategy": "Verify summary prints after successful run with correct counts. Verify --json produces valid JSON output. Verify --quiet suppresses info logs. Verify summary still prints after partial failures."
+          }
+        ]
       },
       {
         "id": 17,
@@ -1080,7 +1321,110 @@
           17
         ],
         "status": "pending",
-        "subtasks": []
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Set Up Integration Test File Structure and Common Fixtures",
+            "description": "Create tests/test_integration.py with pytest imports, mock utilities, and shared fixtures for all integration tests.",
+            "dependencies": [],
+            "details": "Create the test file skeleton with standard imports (pytest, unittest.mock, datetime). Define reusable fixtures: mock_env_vars (patches os.environ with test credentials), sample_content_row (returns a ContentRow with READY status and platform flags), mock_sheets_data (returns list of sample rows). Use pytest.fixture decorator with appropriate scopes. Import all content_engine modules that will be tested.",
+            "status": "pending",
+            "testStrategy": "Run pytest tests/test_integration.py --collect-only to verify fixtures are discoverable and no import errors occur."
+          },
+          {
+            "id": 2,
+            "title": "Implement Mock Sheets Client Fixture",
+            "description": "Create a comprehensive mock for SheetsClient that simulates Google Sheets API responses for reading and writing row data.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create mock_sheets fixture that patches 'content_engine.sheets.build' and returns a configured MagicMock. The mock should support: get_rows_by_status() returning list of ContentRow objects, update_row_status() that tracks called arguments, batch_update_captions() for verifying caption writes. Store call history in fixture for assertions. Include realistic API response structures matching Google Sheets API format.",
+            "status": "pending",
+            "testStrategy": "Write a simple test that uses mock_sheets fixture and verifies get_rows_by_status returns expected data structure, update_row_status records calls correctly."
+          },
+          {
+            "id": 3,
+            "title": "Implement Mock Postiz Client Fixture",
+            "description": "Create a mock for PostizClient that simulates Postiz API responses for listing integrations, creating drafts, and fetching engagement data.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create mock_postiz fixture that patches 'requests.Session' within PostizClient context. Configure mock to return: list_integrations() with sample instagram/facebook integration IDs, create_draft_post() returning mock post ID, get_post_engagement() returning sample PostPerformance data with likes/comments/shares. Support configurable failure modes via fixture parameters for testing error handling.",
+            "status": "pending",
+            "testStrategy": "Write test that verifies mock_postiz returns expected integration list structure, create_draft_post returns valid ID format, engagement data contains required PostPerformance fields."
+          },
+          {
+            "id": 4,
+            "title": "Implement Mock Caption Generator Fixture",
+            "description": "Create a mock for CaptionGenerator that simulates Claude CLI responses without requiring actual AI calls.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create mock_generator fixture that patches 'subprocess.run' to return controlled JSON responses. Configure mock stdout to return JSON with platform-specific captions: {'instagram': 'Test caption with #hashtags', 'facebook': 'Test caption for Facebook'}. Support fixture parameters for: success responses, partial platform responses, malformed JSON (for error testing), subprocess timeout/failure simulation. Ensure returncode matches success/failure scenarios.",
+            "status": "pending",
+            "testStrategy": "Write test that calls generate_captions and verifies mock returns expected platform captions, test error case with returncode=1 raises appropriate exception."
+          },
+          {
+            "id": 5,
+            "title": "Write TestEnhancePipeline Success Path Tests",
+            "description": "Implement integration tests for the happy path of the enhance pipeline: reading rows, generating captions, updating Sheet, creating Postiz drafts.",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Create TestEnhancePipeline class with test_full_pipeline_success test. Set up mock_sheets to return 3 sample READY rows with different platform combinations. Configure mock_generator to return valid captions. Verify: all rows processed, mock_sheets.update_row_status called with ENHANCED status for each, captions written via batch_update_captions, mock_postiz.create_draft_post called once per platform per row. Assert correct platform_map usage for integration IDs.",
+            "status": "pending",
+            "testStrategy": "Run test_full_pipeline_success and verify all assertions pass, call counts match expected, status transitions are correct."
+          },
+          {
+            "id": 6,
+            "title": "Write TestEnhancePipeline Error Handling Tests",
+            "description": "Implement integration tests for error scenarios: invalid rows, generator failures, Postiz API errors, and partial failures.",
+            "dependencies": [
+              5
+            ],
+            "details": "Add tests to TestEnhancePipeline: test_invalid_row_marked_error (row missing required field gets ERROR status), test_generator_failure_marks_error (Claude CLI returns non-zero), test_postiz_failure_still_updates_sheet (Postiz fails but Sheet gets caption), test_partial_failure_continues (one row fails, others still process). For each, configure appropriate mock failure, then verify error handling: logging occurs, status correctly set, other rows unaffected.",
+            "status": "pending",
+            "testStrategy": "Run each error test in isolation, verify ERROR status set with correct message, confirm pipeline continues processing remaining rows after failures."
+          },
+          {
+            "id": 7,
+            "title": "Write TestSuggestPipeline Integration Tests",
+            "description": "Implement integration tests for the suggest pipeline that generates AI content suggestions based on calendar analysis.",
+            "dependencies": [
+              2,
+              4
+            ],
+            "details": "Create TestSuggestPipeline class with: test_generates_suggestions_for_gaps (mock intelligence returns 3 gap dates, verify generator called with gap context, suggestions written to Sheet), test_handles_upcoming_events (mock festivals.json events, verify event context passed to generator), test_balances_content_pillars (mock pillar distribution showing imbalance, verify pillar guidance in generator prompt), test_dry_run_no_sheet_update (--dry-run flag prevents Sheet writes). Mock ContentIntelligence.analyze_calendar() and .get_pillar_distribution().",
+            "status": "pending",
+            "testStrategy": "Run tests with mocked intelligence returning controlled gap/event data, verify generator receives expected context, Sheet updates (or not for dry-run) occur correctly."
+          },
+          {
+            "id": 8,
+            "title": "Write TestLearnPipeline Integration Tests",
+            "description": "Implement integration tests for the learn pipeline that fetches engagement data and updates learning context.",
+            "dependencies": [
+              3
+            ],
+            "details": "Create TestLearnPipeline class with: test_updates_learning_context (mock Postiz returns engagement for 5 posts, verify learning-context.json updated with new PostPerformance entries), test_skips_existing_post_ids (mock context already has post_123, verify not duplicated), test_handles_api_rate_limit (mock Postiz returns 429, verify retry or graceful skip), test_calculates_engagement_averages (verify engagement stats recalculated after new data). Mock both Postiz API and file I/O for learning-context.json.",
+            "status": "pending",
+            "testStrategy": "Run tests with controlled Postiz responses, verify learning context file would be written with correct merged data, no duplicate post IDs, stats correctly calculated."
+          },
+          {
+            "id": 9,
+            "title": "Add Cross-Pipeline Integration Tests",
+            "description": "Implement tests that verify interactions between pipelines and end-to-end flows across the full system.",
+            "dependencies": [
+              6,
+              7,
+              8
+            ],
+            "details": "Create TestCrossPipelineIntegration class with: test_enhance_then_learn_flow (run enhance, then learn, verify engagement data reflects new posts), test_suggest_influences_next_enhance (run suggest to fill gaps, verify those rows picked up by enhance), test_learning_context_affects_generation (verify high-engagement patterns from learn influence generator prompts in enhance). These tests verify the pipelines work together as a cohesive system, using shared mock state across fixture scopes.",
+            "status": "pending",
+            "testStrategy": "Run cross-pipeline tests to verify data flows correctly between pipelines, mock state persists appropriately, learning influences generation behavior."
+          }
+        ]
       }
     ],
     "metadata": {
