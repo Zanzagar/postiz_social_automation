@@ -721,6 +721,116 @@ Track any failures here with details for post-dogfood debugging:
 
 ---
 
+## Detailed Findings
+
+### Finding #3 (Critical): Process Overhead Degrades Brainstorming Quality
+
+**Severity**: Medium (functional) but High (strategic — affects all template users)
+
+**Summary**: The template's workflow enforcement machinery (checklist tracking, task management, rule compliance) consumed cognitive bandwidth during brainstorming, producing measurably worse creative output than the same skill without that overhead.
+
+**Evidence — α1 vs α2 vs Run 2 comparison**:
+
+| Dimension | α1 (planning-first, ~v2.2) | α2 (build-first, ~v2.3) | Run 2 (full workflow, v2.3.1) |
+|-----------|---------------------------|------------------------|-------------------------------|
+| Brainstorming skill used | `superpowers:brainstorming` | None — skipped entirely | `superpowers:brainstorming` |
+| Research intake | Used α2's docs as input | Created 3 domain audits (35KB) | Read all existing docs (same as α1) |
+| Design doc length | 186 lines | N/A (no design phase) | 202 lines |
+| Design doc quality | Rich domain engagement, specific architecture decisions | N/A | Adequate but more generic, less domain depth |
+| Restarts needed | 0 | N/A | 2 — first attempt asked meta-scope questions ("do we need Python?"), second still too abstract |
+| Checklist overhead | None (no dogfood checklist) | None | 735-line checklist maintained in real-time during brainstorming |
+| Process enforcement active | 0 hooks, 0 auto-loaded rules | 3 hooks, partial rules | 18 hooks, 14 rule files, Superpowers skills |
+| Time in brainstorming | Focused on domain | Skipped — jumped to coding | Split between domain work and process compliance |
+| Planning → execution link | Weak (PRD → tasks existed but generic) | None (0 PRDs, 0 tasks) | Strong (PRD → complexity-guided tasks) |
+
+**The paradox**: α1 had the best brainstorming output despite having the least template infrastructure. Run 2 had the most process enforcement and produced the worst brainstorming experience (2 restarts, meta-level questions, process-distracted output).
+
+However, Run 2 produced the best **downstream artifacts** (PRD with dependency markers, complexity-guided task expansion, 41 targeted subtasks vs α1's flat 110 subtasks). The brainstorming degradation didn't cascade — it was contained to the brainstorming phase itself.
+
+**α2's different creative contribution**: α2 was deliberately a build-focused test — it didn't skip brainstorming due to overhead, it was designed to test execution phases. But α2 did its own form of deep creative work: **3 comprehensive domain research docs (35KB total)** — online presence audit (16KB), Postiz technology assessment (11KB), and client context with branding rules (7KB). This research became the foundation that both α1 and Run 2 consumed during their brainstorming phases. α2 proves that the template supports high-quality creative research output (audits, assessments) — the degradation is specific to the brainstorming skill's interaction with process enforcement, not to creative work in general. The difference: α2's research was exploratory reading and synthesis (compatible with process overhead), while brainstorming is divergent ideation (degraded by process overhead).
+
+**Root cause**: During brainstorming, Claude was simultaneously:
+1. Exploring the user's intent and domain (the actual creative work)
+2. Maintaining a TaskCreate checklist for brainstorming steps (Superpowers skill requirement)
+3. Monitoring compliance with 14 auto-loaded rules in `.claude/rules/`
+4. Tracking which dogfood checklist items to mark (dogfood-specific)
+5. Managing context budget across all of the above
+6. Processing 18 hooks firing on every tool call and prompt submission
+
+The brainstorming skill itself worked fine in α1 (same skill, better output). The degradation came from the surrounding process infrastructure competing for the same context window and attention budget. α2 avoided this entirely by skipping the creative phase — but lost planning traceability.
+
+**What went wrong specifically**:
+- **Wrong-level questions**: First attempt asked "should this project include Python?" instead of domain-relevant questions like "how should the approval workflow work?" The process overhead pushed Claude toward meta-planning instead of domain engagement. α1 never exhibited this behavior.
+- **2 restarts required**: User had to manually redirect Claude away from process-focused behavior and back to domain-focused brainstorming. α1 needed zero restarts with the same skill.
+- **Checklist as cognitive drain**: The brainstorming skill creates a 6-item TaskCreate checklist. Combined with the dogfood checklist tracking, Claude was maintaining two parallel tracking systems while trying to think creatively. α1 had no checklist overhead.
+- **Startup token overhead**: Run 2 loads ~40-50k tokens before any work begins (MCP tools, 14 rules, Superpowers skills, CLAUDE.md, hooks). α1 loaded ~10-15k. That's 25-35k fewer tokens available for creative reasoning.
+
+**Implications for the template**:
+1. The template's strength (structured workflow enforcement) becomes a weakness during creative/divergent phases — proven by direct α1 comparison
+2. Rules are auto-loaded into every session — they consume context even when the current phase doesn't need them
+3. The brainstorming skill's own checklist + template rules + dogfood tracking = triple overhead (α2 avoided all three)
+4. Users who aren't dogfooding won't have the dogfood checklist, but they'll still have rules + skill checklist competing with creative work
+5. α2's research phase (exploratory, convergent) handled process overhead fine; brainstorming (divergent ideation) did not. This suggests the degradation is specific to **divergent creative work**, not all creative work
+6. The downstream benefits (PRD → complexity-guided tasks) are significant, but the brainstorming phase itself needs protection from the template's own machinery
+
+**Proposed fixes** (for template team to evaluate):
+1. **Phase-aware rule loading**: Only load rules relevant to the current phase. During IDEATION, skip implementation-focused rules (TDD, commit frequency, branch workflow). Currently all 14 rules load every session. α1's lighter context produced better brainstorming.
+2. **Post-phase verification instead of real-time**: Verify checklist/compliance items AFTER each phase completes, not DURING creative work. The brainstorming skill should run unencumbered, then a verification pass checks that all steps were followed.
+3. **Lighter brainstorming skill**: The 6-item TaskCreate checklist in the brainstorming skill may be counterproductive. Consider making it advisory (mental model) rather than tracked (TaskCreate items). α1 used the same skill without TaskCreate overhead.
+4. **Context budget reservation**: During brainstorming, reserve more context for domain reasoning by deferring non-essential tool calls (project-index updates, observation logging, pre-compact state saves).
+5. **"Creative mode" toggle**: A phase-specific setting that temporarily reduces process enforcement during brainstorming. Automatically re-enables full enforcement when transitioning to PLANNING or BUILDING.
+
+**Key question for template design**: α1 proves brainstorming quality degrades under process load. α2 proves exploratory research handles the same load fine — so the issue is specific to divergent ideation, not all creative work. Run 2 proves brainstorming degradation doesn't cascade to downstream phases. So: **should the template protect divergent brainstorming from its own enforcement machinery, or accept the quality tradeoff knowing downstream phases compensate?**
+
+**Key question for template design**: Is the quality loss during brainstorming acceptable as the cost of consistent process enforcement? Or should the template treat creative phases differently from execution phases?
+
+### Finding #4-7 (Pattern): Claude Defaults to MCP Despite Documented CLI Guidance
+
+**Severity**: Medium (all operations succeeded, but violated documented workflow)
+
+**Summary**: Across 4 separate operations (get_tasks, parse_prd, analyze_project_complexity, expand_task), Claude used MCP tools instead of CLI commands despite explicit guidance in CLAUDE.md, DOGFOOD_CHECKLIST.md, and MEMORY.md saying to use CLI.
+
+**Evidence**:
+- CLAUDE.md line 73: `task-master list -c  # Compact one-line output (fewer tokens)` — Claude used MCP `get_tasks` instead (51KB vs ~200 tokens)
+- DOGFOOD_CHECKLIST.md line 263-264: "Must use CLI, not MCP" for AI ops — Claude used MCP for parse-prd, analyze-complexity, and first 6 expand calls
+- MEMORY.md: "CLI only for AI operations" — written in prior session, loaded into this session, still ignored
+
+**Root cause analysis**:
+1. **MCP tools are in the tool palette**: Claude sees MCP tools as first-class options alongside CLI. The MCP tool definitions are loaded at session start (~6.5k tokens for Task Master tools alone). CLI commands require remembering syntax and using the Bash tool.
+2. **Path of least resistance**: MCP tools have structured parameters (fill in fields). CLI requires composing a command string with correct flags. MCP is cognitively easier even when CLI is documented as preferred.
+3. **Documentation location matters**: The CLI-only guidance lives in:
+   - CLAUDE.md (line 73, one line among many)
+   - DOGFOOD_CHECKLIST.md (a test document, not an auto-loaded rule)
+   - Cursor rules (`.cursor/rules/taskmaster/`) — NOT in `.claude/rules/` (auto-loaded)
+   - MEMORY.md (auto-loaded, but as "memory" not "rule")
+
+   None of these have the authority weight of `.claude/rules/*.md`. The guidance exists but isn't in the highest-authority location.
+
+4. **User had to catch it**: Claude didn't self-correct on any of the 4 violations. The user noticed and flagged it. Even after being corrected on `get_tasks` (failure #7), Claude proceeded to use MCP for expand (failure #6) until caught again.
+
+**Implications for the template**:
+1. Documentation alone is insufficient — Claude will default to available tools over documented preferences
+2. The MCP vs CLI guidance needs to be in `.claude/rules/` (auto-loaded, highest authority) not just in docs and Cursor rules
+3. Consider whether the MCP tools for AI ops should even be exposed if CLI is always preferred
+4. MEMORY.md guidance is treated as "advisory" even when explicitly stating "NEVER use MCP"
+
+**Proposed fixes**:
+1. **Add `.claude/rules/taskmaster-usage.md`**: Move the CLI vs MCP guidance into an auto-loaded rule file with examples
+2. **Reduce MCP tool exposure**: Use `TASK_MASTER_TOOLS` env var to only expose non-AI MCP tools (get_task, set_task_status, next_task). Remove parse_prd, expand_task, analyze_project_complexity from MCP entirely.
+3. **Add to CLAUDE.md commands section**: Make the CLI commands more prominent — currently one line, should be a subsection with "ALWAYS use these, NEVER use MCP equivalents"
+
+### Finding #8: Tag Creation Ordering Constraint
+
+**Severity**: Low (workaround exists)
+
+**Summary**: `task-master tags add` requires `tasks.json` to exist. `parse-prd` creates `tasks.json`. You can't create a tag before parsing, so tasks always land in `master` first.
+
+**Current workaround**: Parse into `master`, then create tag afterward. Or create an empty `tasks.json` during init.
+
+**Proposed fix**: `init-project.sh` should create a minimal `tasks.json` skeleton (`{"tags": {"master": {"tasks": [], "metadata": {...}}}}`) so tags can be created at any time. Alternatively, `tags add` should create the file if it doesn't exist.
+
+---
+
 ## Summary
 
 | Phase | Total Checks | Pass | Fail | Skip |
