@@ -144,16 +144,13 @@ services:
     networks:
       - postiz-network
 
-  content-engine:
-    build: .
-    container_name: gita-valley-content-engine
-    restart: unless-stopped
-    volumes:
-      - ./data:/app/data
-    env_file: .env
-    command: ["python", "-m", "content_engine.scheduler"]
-    networks:
-      - postiz-network
+  # NOTE: content-engine runs on the HOST (not in Docker) because it requires
+  # Claude CLI with OAuth authentication ($0/call via Max subscription).
+  # Start it with: python -m content_engine.scheduler
+  # Or run pipelines individually:
+  #   python -m content_engine.scripts.run_enhance
+  #   python -m content_engine.scripts.run_suggest
+  #   python -m content_engine.scripts.run_learn
 
 volumes:
   postiz-config:

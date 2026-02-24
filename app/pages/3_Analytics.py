@@ -4,7 +4,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from app.pages.dashboard_helpers import (
+from app.helpers.dashboard_helpers import (
     build_pillar_comparison,
     compute_metrics,
     load_dashboard_data,
@@ -12,6 +12,11 @@ from app.pages.dashboard_helpers import (
 )
 
 st.set_page_config(page_title="Analytics", page_icon="\U0001f4ca", layout="wide")
+
+from app.auth import check_password  # noqa: E402
+
+if not check_password():
+    st.stop()
 
 st.title("Performance Dashboard")
 st.markdown("Track post performance, engagement trends, and content intelligence.")

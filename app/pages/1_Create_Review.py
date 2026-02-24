@@ -9,6 +9,11 @@ from content_engine.models import Platform
 
 st.set_page_config(page_title="Create & Review", page_icon="\u270d\ufe0f", layout="wide")
 
+from app.auth import check_password  # noqa: E402
+
+if not check_password():
+    st.stop()
+
 st.title("Create & Review")
 st.markdown("Generate AI captions from raw content and review before scheduling.")
 
@@ -77,7 +82,7 @@ if generate_btn:
     elif not st.session_state.generator:
         st.error("AI generator not available. Check Claude CLI configuration.")
     else:
-        from app.pages.create_post_helpers import build_content_row, generate_captions
+        from app.helpers.create_post_helpers import build_content_row, generate_captions
 
         platforms = {}
         if ig:
@@ -151,7 +156,7 @@ if "generated_captions" in st.session_state and st.session_state.generated_capti
         reprompt_btn = st.button("Re-generate with feedback")
 
     if reprompt_btn and feedback and st.session_state.generator:
-        from app.pages.create_post_helpers import regenerate_with_feedback
+        from app.helpers.create_post_helpers import regenerate_with_feedback
 
         with st.spinner("Re-generating with feedback..."):
             try:
@@ -172,7 +177,7 @@ if "generated_captions" in st.session_state and st.session_state.generated_capti
     st.divider()
     if st.session_state.postiz_client:
         if st.button("Send to Postiz", type="primary"):
-            from app.pages.create_post_helpers import send_to_postiz
+            from app.helpers.create_post_helpers import send_to_postiz
 
             with st.spinner("Creating drafts in Postiz..."):
                 try:

@@ -17,6 +17,9 @@ COPY .streamlit/ .streamlit/
 # Install Python dependencies
 RUN pip install --no-cache-dir -e .
 
+# Ensure 'from app.xxx' imports resolve correctly
+ENV PYTHONPATH=/app
+
 # Expose Streamlit port
 EXPOSE 8501
 

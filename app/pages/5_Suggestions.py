@@ -8,6 +8,11 @@ from content_engine.models import ContentPillar
 
 st.set_page_config(page_title="Suggestions", page_icon="\U0001f4a1", layout="wide")
 
+from app.auth import check_password  # noqa: E402
+
+if not check_password():
+    st.stop()
+
 st.title("Content Suggestions")
 st.markdown("Browse AI-generated content ideas based on calendar gaps and pillar balance.")
 
@@ -49,7 +54,7 @@ with col2:
 
 if st.session_state.sheets_client:
     try:
-        from app.pages.suggestions_helpers import filter_suggestions, prepare_accept_data
+        from app.helpers.suggestions_helpers import filter_suggestions, prepare_accept_data
 
         all_suggestions = st.session_state.sheets_client.get_suggestions()
         suggestions = filter_suggestions(

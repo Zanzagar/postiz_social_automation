@@ -13,6 +13,11 @@ from content_engine.health import (
 
 st.set_page_config(page_title="System Health", page_icon="\U0001f3e5", layout="wide")
 
+from app.auth import check_password  # noqa: E402
+
+if not check_password():
+    st.stop()
+
 st.title("System Health")
 st.markdown("Check connectivity to Google Sheets, Postiz API, and Claude CLI.")
 

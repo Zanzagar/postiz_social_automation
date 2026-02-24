@@ -4,7 +4,7 @@ import os
 
 import streamlit as st
 
-from app.pages.drafts_helpers import (
+from app.helpers.drafts_helpers import (
     apply_caption_edits,
     build_postiz_link,
     get_caption_for_platform,
@@ -13,6 +13,11 @@ from app.pages.drafts_helpers import (
 from content_engine.models import ContentStatus
 
 st.set_page_config(page_title="Review Drafts", page_icon="\U0001f4cb", layout="wide")
+
+from app.auth import check_password  # noqa: E402
+
+if not check_password():
+    st.stop()
 
 st.title("Review Drafts")
 st.markdown("Review pending drafts, edit captions inline, and batch-approve to Postiz.")
@@ -120,7 +125,7 @@ for draft in drafts:
             )
             if st.button("Regenerate", key=f"regen_{draft.row_number}"):
                 if feedback and st.session_state.get("generator"):
-                    from app.pages.create_post_helpers import regenerate_with_feedback
+                    from app.helpers.create_post_helpers import regenerate_with_feedback
 
                     with st.spinner("Regenerating..."):
                         try:
@@ -157,7 +162,7 @@ if selected_drafts:
         if not st.session_state.postiz_client:
             st.error("Set POSTIZ_API_KEY to enable sending to Postiz.")
         else:
-            from app.pages.create_post_helpers import send_to_postiz
+            from app.helpers.create_post_helpers import send_to_postiz
 
             with st.spinner("Approving and creating Postiz drafts..."):
                 success_count = 0

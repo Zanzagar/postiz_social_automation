@@ -35,7 +35,7 @@ class TestBuildContentRow:
     """Test the helper that converts form inputs into a ContentRow."""
 
     def test_builds_row_with_all_platforms(self) -> None:
-        from app.pages.create_post_helpers import build_content_row
+        from app.helpers.create_post_helpers import build_content_row
 
         row = build_content_row(
             caption="Lakshmi loves the morning sun",
@@ -50,7 +50,7 @@ class TestBuildContentRow:
         assert row.status == ContentStatus.DRAFT
 
     def test_builds_row_with_no_media(self) -> None:
-        from app.pages.create_post_helpers import build_content_row
+        from app.helpers.create_post_helpers import build_content_row
 
         row = build_content_row(
             caption="Test",
@@ -61,7 +61,7 @@ class TestBuildContentRow:
         assert row.media_url is None
 
     def test_builds_row_with_media_url(self) -> None:
-        from app.pages.create_post_helpers import build_content_row
+        from app.helpers.create_post_helpers import build_content_row
 
         row = build_content_row(
             caption="Test",
@@ -73,7 +73,7 @@ class TestBuildContentRow:
         assert "abc123" in str(row.media_url)
 
     def test_defaults_all_platforms_false_when_none_selected(self) -> None:
-        from app.pages.create_post_helpers import build_content_row
+        from app.helpers.create_post_helpers import build_content_row
 
         row = build_content_row(
             caption="Test",
@@ -84,7 +84,7 @@ class TestBuildContentRow:
         assert row.platforms == {}
 
     def test_sets_date_correctly(self) -> None:
-        from app.pages.create_post_helpers import build_content_row
+        from app.helpers.create_post_helpers import build_content_row
 
         target = datetime(2026, 4, 15)
         row = build_content_row(
@@ -106,7 +106,7 @@ class TestBuildContentRow:
 class TestGenerateCaptions:
     def test_generator_called_with_content_row(self) -> None:
         """CaptionGenerator.generate_captions receives the built ContentRow."""
-        from app.pages.create_post_helpers import generate_captions
+        from app.helpers.create_post_helpers import generate_captions
 
         mock_gen = MagicMock()
         mock_gen.generate_captions.return_value = {
@@ -127,7 +127,7 @@ class TestGenerateCaptions:
         assert result[Platform.INSTAGRAM] == "IG caption"
 
     def test_generator_returns_empty_when_no_platforms(self) -> None:
-        from app.pages.create_post_helpers import generate_captions
+        from app.helpers.create_post_helpers import generate_captions
 
         mock_gen = MagicMock()
         mock_gen.generate_captions.return_value = {}
@@ -150,7 +150,7 @@ class TestGenerateCaptions:
 
 class TestReprompt:
     def test_reprompt_passes_feedback_to_generator(self) -> None:
-        from app.pages.create_post_helpers import regenerate_with_feedback
+        from app.helpers.create_post_helpers import regenerate_with_feedback
 
         mock_gen = MagicMock()
         mock_gen.generate_captions.return_value = {Platform.INSTAGRAM: "Updated IG"}
@@ -174,7 +174,7 @@ class TestReprompt:
 
 class TestSendToPostiz:
     def test_creates_draft_for_each_platform(self) -> None:
-        from app.pages.create_post_helpers import send_to_postiz
+        from app.helpers.create_post_helpers import send_to_postiz
 
         mock_postiz = MagicMock()
         mock_postiz.list_integrations.return_value = [
@@ -197,7 +197,7 @@ class TestSendToPostiz:
         assert mock_postiz.create_draft_post.call_count == 2
 
     def test_skips_platform_not_connected(self) -> None:
-        from app.pages.create_post_helpers import send_to_postiz
+        from app.helpers.create_post_helpers import send_to_postiz
 
         mock_postiz = MagicMock()
         mock_postiz.list_integrations.return_value = [
@@ -218,7 +218,7 @@ class TestSendToPostiz:
         assert len(draft_ids) == 1
 
     def test_passes_media_url_when_provided(self) -> None:
-        from app.pages.create_post_helpers import send_to_postiz
+        from app.helpers.create_post_helpers import send_to_postiz
 
         mock_postiz = MagicMock()
         mock_postiz.list_integrations.return_value = [
@@ -237,7 +237,7 @@ class TestSendToPostiz:
         assert call_kwargs.kwargs.get("media_url") == "https://drive.google.com/file/d/abc/view"
 
     def test_passes_scheduled_at_when_provided(self) -> None:
-        from app.pages.create_post_helpers import send_to_postiz
+        from app.helpers.create_post_helpers import send_to_postiz
 
         mock_postiz = MagicMock()
         mock_postiz.list_integrations.return_value = [
@@ -256,7 +256,7 @@ class TestSendToPostiz:
         assert call_kwargs.kwargs.get("scheduled_at") == "2026-03-01T10:00:00"
 
     def test_returns_empty_when_no_integrations(self) -> None:
-        from app.pages.create_post_helpers import send_to_postiz
+        from app.helpers.create_post_helpers import send_to_postiz
 
         mock_postiz = MagicMock()
         mock_postiz.list_integrations.return_value = []

@@ -2,7 +2,7 @@
 
 Tests verify:
 - Dockerfile exists and has correct base image
-- docker-compose.yaml includes content-hub and content-engine services
+- docker-compose.yaml includes content-hub service (content-engine runs on host)
 - .dockerignore exists with proper exclusions
 """
 
@@ -25,9 +25,17 @@ class TestDockerfileExists:
         content = Path("Dockerfile").read_text()
         assert "pip install" in content
 
+    def test_dockerfile_sets_pythonpath(self) -> None:
+        content = Path("Dockerfile").read_text()
+        assert "PYTHONPATH" in content
+
 
 class TestDockerComposeServices:
-    """Verify docker-compose.yaml has content-hub and content-engine services."""
+    """Verify docker-compose.yaml has content-hub service.
+
+    content-engine runs on the host (not Docker) because it requires
+    Claude CLI with OAuth authentication ($0/call via Max subscription).
+    """
 
     def _read_compose(self) -> str:
         return Path("docker-compose.yaml").read_text()
@@ -35,20 +43,22 @@ class TestDockerComposeServices:
     def test_content_hub_service_exists(self) -> None:
         assert "content-hub:" in self._read_compose()
 
-    def test_content_engine_service_exists(self) -> None:
-        assert "content-engine:" in self._read_compose()
-
     def test_content_hub_exposes_8501(self) -> None:
         assert "8501:8501" in self._read_compose()
 
-    def test_content_engine_runs_scheduler(self) -> None:
+    def test_content_engine_not_containerized(self) -> None:
+        """content-engine requires Claude CLI and must run on the host."""
         content = self._read_compose()
-        assert "scheduler" in content
+        assert "content-engine:" not in content
 
-    def test_services_use_env_file(self) -> None:
+    def test_content_engine_host_instructions_documented(self) -> None:
+        """docker-compose.yaml should document how to run engine on host."""
         content = self._read_compose()
-        # Both services should reference .env
-        assert content.count("env_file:") >= 3  # postiz + hub + engine
+        assert "content-engine runs on the HOST" in content
+
+    def test_content_hub_uses_env_file(self) -> None:
+        content = self._read_compose()
+        assert "env_file:" in content
 
 
 class TestDockerIgnore:

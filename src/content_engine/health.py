@@ -58,6 +58,8 @@ def check_oauth_health() -> tuple[bool, str]:
         return False, f"Claude CLI error: {result.stderr.strip()}"
     except subprocess.TimeoutExpired:
         return False, "Claude CLI timeout — token check took too long"
+    except FileNotFoundError:
+        return False, "Claude CLI not installed (expected in Docker)"
     except Exception as e:
         return False, str(e)
 
@@ -77,5 +79,7 @@ def check_claude_health() -> tuple[bool, str]:
             version = result.stdout.decode().strip()
             return True, version
         return False, f"Exit code {result.returncode}"
+    except FileNotFoundError:
+        return False, "Claude CLI not installed (expected in Docker)"
     except Exception as e:
         return False, str(e)

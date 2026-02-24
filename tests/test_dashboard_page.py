@@ -21,7 +21,7 @@ class TestDashboardPageExists:
 
 class TestLoadDashboardData:
     def test_loads_learning_context(self, tmp_path: Path) -> None:
-        from app.pages.dashboard_helpers import load_dashboard_data
+        from app.helpers.dashboard_helpers import load_dashboard_data
 
         context_file = tmp_path / "learning-context.json"
         context_file.write_text(
@@ -41,13 +41,13 @@ class TestLoadDashboardData:
         assert "Cow Life" in data["top_performing_pillars"]
 
     def test_returns_empty_when_no_file(self, tmp_path: Path) -> None:
-        from app.pages.dashboard_helpers import load_dashboard_data
+        from app.helpers.dashboard_helpers import load_dashboard_data
 
         data = load_dashboard_data(data_dir=tmp_path)
         assert data == {}
 
     def test_loads_performance_posts(self, tmp_path: Path) -> None:
-        from app.pages.dashboard_helpers import load_performance_posts
+        from app.helpers.dashboard_helpers import load_performance_posts
 
         perf_file = tmp_path / "post-performance.json"
         perf_file.write_text(
@@ -69,7 +69,7 @@ class TestLoadDashboardData:
         assert posts[0]["post_id"] == "p1"
 
     def test_returns_empty_list_when_no_performance_file(self, tmp_path: Path) -> None:
-        from app.pages.dashboard_helpers import load_performance_posts
+        from app.helpers.dashboard_helpers import load_performance_posts
 
         posts = load_performance_posts(data_dir=tmp_path)
         assert posts == []
@@ -77,7 +77,7 @@ class TestLoadDashboardData:
 
 class TestComputeMetrics:
     def test_computes_avg_engagement(self) -> None:
-        from app.pages.dashboard_helpers import compute_metrics
+        from app.helpers.dashboard_helpers import compute_metrics
 
         posts = [
             {"engagement_rate": 0.05},
@@ -88,21 +88,21 @@ class TestComputeMetrics:
         assert abs(metrics["avg_engagement"] - 0.05) < 0.001
 
     def test_handles_empty_posts(self) -> None:
-        from app.pages.dashboard_helpers import compute_metrics
+        from app.helpers.dashboard_helpers import compute_metrics
 
         metrics = compute_metrics([])
         assert metrics["avg_engagement"] == 0.0
         assert metrics["total_posts"] == 0
 
     def test_counts_total_posts(self) -> None:
-        from app.pages.dashboard_helpers import compute_metrics
+        from app.helpers.dashboard_helpers import compute_metrics
 
         posts = [{"engagement_rate": 0.01} for _ in range(5)]
         metrics = compute_metrics(posts)
         assert metrics["total_posts"] == 5
 
     def test_computes_total_reach(self) -> None:
-        from app.pages.dashboard_helpers import compute_metrics
+        from app.helpers.dashboard_helpers import compute_metrics
 
         posts = [
             {"engagement_rate": 0.01, "reach": 100},
@@ -114,7 +114,7 @@ class TestComputeMetrics:
 
 class TestBuildPillarChart:
     def test_builds_target_vs_actual(self) -> None:
-        from app.pages.dashboard_helpers import build_pillar_comparison
+        from app.helpers.dashboard_helpers import build_pillar_comparison
 
         actual = {"Cow Life": 0.35, "Farm Ops": 0.20}
         result = build_pillar_comparison(actual)
@@ -124,7 +124,7 @@ class TestBuildPillarChart:
         assert cow_row["target"] == 40.0
 
     def test_handles_missing_pillars(self) -> None:
-        from app.pages.dashboard_helpers import build_pillar_comparison
+        from app.helpers.dashboard_helpers import build_pillar_comparison
 
         result = build_pillar_comparison({})
         assert len(result) == len(TARGET_PILLAR_WEIGHTS)

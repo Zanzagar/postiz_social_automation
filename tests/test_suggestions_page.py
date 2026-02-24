@@ -51,14 +51,14 @@ class TestFilterSuggestions:
         ]
 
     def test_filter_by_all_pillars_returns_all(self) -> None:
-        from app.pages.suggestions_helpers import filter_suggestions
+        from app.helpers.suggestions_helpers import filter_suggestions
 
         suggestions = self._make_suggestions()
         result = filter_suggestions(suggestions, pillar_filter="All", status_filter=None)
         assert len(result) == 3
 
     def test_filter_by_specific_pillar(self) -> None:
-        from app.pages.suggestions_helpers import filter_suggestions
+        from app.helpers.suggestions_helpers import filter_suggestions
 
         suggestions = self._make_suggestions()
         result = filter_suggestions(suggestions, pillar_filter="Cow Life", status_filter=None)
@@ -66,7 +66,7 @@ class TestFilterSuggestions:
         assert result[0].suggested_pillar == ContentPillar.COW_LIFE
 
     def test_filter_by_status(self) -> None:
-        from app.pages.suggestions_helpers import filter_suggestions
+        from app.helpers.suggestions_helpers import filter_suggestions
 
         suggestions = self._make_suggestions()
         result = filter_suggestions(suggestions, pillar_filter="All", status_filter="accepted")
@@ -74,7 +74,7 @@ class TestFilterSuggestions:
         assert result[0].status == "accepted"
 
     def test_filter_by_pillar_and_status(self) -> None:
-        from app.pages.suggestions_helpers import filter_suggestions
+        from app.helpers.suggestions_helpers import filter_suggestions
 
         suggestions = self._make_suggestions()
         result = filter_suggestions(
@@ -84,7 +84,7 @@ class TestFilterSuggestions:
         assert result[0].suggested_pillar == ContentPillar.COMMUNITY
 
     def test_filter_returns_empty_when_no_match(self) -> None:
-        from app.pages.suggestions_helpers import filter_suggestions
+        from app.helpers.suggestions_helpers import filter_suggestions
 
         suggestions = self._make_suggestions()
         result = filter_suggestions(suggestions, pillar_filter="Kitchen", status_filter="suggested")
@@ -95,7 +95,7 @@ class TestPrepareAcceptData:
     """Test helper that prepares session state data when accepting a suggestion."""
 
     def test_returns_prefill_dict(self) -> None:
-        from app.pages.suggestions_helpers import prepare_accept_data
+        from app.helpers.suggestions_helpers import prepare_accept_data
 
         suggestion = Suggestion(
             suggested_date=datetime(2026, 3, 1),

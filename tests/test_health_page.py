@@ -69,7 +69,7 @@ class TestCheckClaudeHealth:
 
         ok, msg = check_claude_health()
         assert ok is False
-        assert "not found" in msg
+        assert "not installed" in msg
 
 
 class TestHealthPageExists:
