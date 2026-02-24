@@ -1,4 +1,4 @@
-"""Mode 1: Enhance Pipeline — orchestrate Sheet → Validate → Generate → Postiz."""
+"""Content pipelines — Enhance (Mode 1) and Re-prompt workflows."""
 
 import logging
 from dataclasses import dataclass
@@ -102,5 +102,67 @@ def enhance_pipeline(
         result.processed,
         result.errors,
         result.skipped,
+    )
+    return result
+
+
+def reprompt_pipeline(
+    *,
+    sheets: SheetsClient,
+    postiz: PostizClient,
+    generator: CaptionGenerator,
+) -> PipelineResult:
+    """Run the re-prompt pipeline for rows with staff feedback.
+
+    Fetches 'pending_approval' rows that have feedback, regenerates
+    captions with the feedback context, creates fresh Postiz drafts,
+    and clears the feedback column.
+    """
+    result = PipelineResult()
+
+    integrations = postiz.list_integrations()
+    platform_map: dict[str, str] = {i["platform"]: i["id"] for i in integrations}
+
+    feedback_rows = sheets.get_rows_with_feedback()
+    logger.info("Found %d rows with feedback to re-process", len(feedback_rows))
+
+    for row in feedback_rows:
+        try:
+            # Regenerate captions with feedback
+            captions = generator.generate_captions(row, feedback=row.feedback)
+            sheets.update_captions(row.row_number, captions)
+
+            # Create fresh Postiz drafts
+            draft_ids: list[str] = []
+            for platform, caption in captions.items():
+                platform_key = platform.value
+                if platform_key not in platform_map:
+                    continue
+
+                draft = postiz.create_draft_post(
+                    content=caption,
+                    platform_ids=[platform_map[platform_key]],
+                    media_url=str(row.media_url) if row.media_url else None,
+                )
+                draft_ids.append(draft["id"])
+
+            if draft_ids:
+                sheets.update_postiz_ids(row.row_number, ",".join(draft_ids))
+
+            # Clear feedback and keep status as pending_approval
+            sheets.clear_feedback(row.row_number)
+            sheets.update_status(row.row_number, ContentStatus.PENDING_APPROVAL)
+            result.processed += 1
+            logger.info("Row %d re-prompted successfully", row.row_number)
+
+        except Exception as e:
+            sheets.update_status(row.row_number, ContentStatus.ERROR, str(e))
+            logger.error("Row %d re-prompt failed: %s", row.row_number, e)
+            result.errors += 1
+
+    logger.info(
+        "Re-prompt complete: %d processed, %d errors",
+        result.processed,
+        result.errors,
     )
     return result

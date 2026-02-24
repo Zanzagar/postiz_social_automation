@@ -74,13 +74,25 @@ class CaptionGenerator:
         self.data_dir = data_dir
         self.learning_context = self._load_learning_context()
 
-    def generate_captions(self, row: ContentRow) -> dict[Platform, str]:
-        """Generate platform-specific captions for a content row."""
+    def generate_captions(
+        self, row: ContentRow, feedback: str | None = None
+    ) -> dict[Platform, str]:
+        """Generate platform-specific captions for a content row.
+
+        Args:
+            row: The content row to generate captions for.
+            feedback: Optional staff feedback to incorporate into regeneration.
+        """
         platforms = [p for p, enabled in row.platforms.items() if enabled]
         if not platforms:
             return {}
 
         prompt = self._build_prompt(row, platforms)
+        if feedback:
+            prompt += (
+                f"\n\nSTAFF FEEDBACK: {feedback}\n"
+                "Please regenerate the captions incorporating this feedback."
+            )
         raw = _call_claude(prompt)
 
         return self._parse_response(raw, platforms)

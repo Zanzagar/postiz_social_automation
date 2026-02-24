@@ -3,7 +3,8 @@
 Column layout (Content Calendar tab):
   A=date, B=pillar, C=raw_text, D=media_url,
   E-I=platform checkboxes (IG,FB,TT,TH,LI), J=status,
-  K-O=captions (IG,FB,TT,TH,LI), P=postiz_ids, Q=posted_at, R=error_msg
+  K-O=captions (IG,FB,TT,TH,LI), P=postiz_ids, Q=posted_at, R=error_msg,
+  S=feedback
 
 Column layout (Suggestions tab):
   A=date, B=idea, C=pillar, D=rationale, E=media_suggestion, F=status
@@ -119,6 +120,7 @@ def _parse_content_row(row: list, row_number: int) -> ContentRow | None:
         posted_at_str = _safe_get(row, 16)
         posted_at = datetime.fromisoformat(posted_at_str) if posted_at_str else None
         error_msg = _safe_get(row, 17) or None
+        feedback = _safe_get(row, 18) or None
 
         return ContentRow(
             row_number=row_number,
@@ -132,6 +134,7 @@ def _parse_content_row(row: list, row_number: int) -> ContentRow | None:
             postiz_ids=postiz_ids,
             posted_at=posted_at,
             error_msg=error_msg,
+            feedback=feedback,
         )
     except Exception:
         logger.exception("Failed to parse row %d", row_number)
@@ -154,7 +157,7 @@ class SheetsClient:
         """Fetch all rows with the given status."""
         result = (
             self.sheet.values()
-            .get(spreadsheetId=self.spreadsheet_id, range=f"'{tab}'!A:R")
+            .get(spreadsheetId=self.spreadsheet_id, range=f"'{tab}'!A:S")
             .execute()
         )
         all_rows = result.get("values", [])
@@ -235,6 +238,42 @@ class SheetsClient:
                 range=f"'Content Calendar'!P{row_number}:Q{row_number}",
                 valueInputOption="RAW",
                 body={"values": [values]},
+            )
+            .execute()
+        )
+
+    @_retry
+    def get_rows_with_feedback(self, tab: str = "Content Calendar") -> list[ContentRow]:
+        """Fetch rows with status='pending_approval' and non-empty feedback (col S)."""
+        result = (
+            self.sheet.values()
+            .get(spreadsheetId=self.spreadsheet_id, range=f"'{tab}'!A:S")
+            .execute()
+        )
+        all_rows = result.get("values", [])
+        if len(all_rows) <= 1:
+            return []
+
+        rows = []
+        for i, row in enumerate(all_rows[1:], start=2):
+            status_val = _safe_get(row, 9)
+            feedback_val = _safe_get(row, 18)
+            if status_val == ContentStatus.PENDING_APPROVAL.value and feedback_val:
+                parsed = _parse_content_row(row, row_number=i)
+                if parsed:
+                    rows.append(parsed)
+        return rows
+
+    @_retry
+    def clear_feedback(self, row_number: int) -> None:
+        """Clear the feedback column (S) for the given row."""
+        (
+            self.sheet.values()
+            .update(
+                spreadsheetId=self.spreadsheet_id,
+                range=f"'Content Calendar'!S{row_number}",
+                valueInputOption="RAW",
+                body={"values": [[""]]},
             )
             .execute()
         )
