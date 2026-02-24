@@ -9,6 +9,15 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ---------------------------------------------------------------------------
+# Authentication gate
+# ---------------------------------------------------------------------------
+
+from app.auth import check_password  # noqa: E402
+
+if not check_password():
+    st.stop()
+
 # Sidebar branding
 with st.sidebar:
     st.title("Content Hub")
