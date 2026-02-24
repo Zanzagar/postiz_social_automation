@@ -534,12 +534,12 @@
         "dependencies": [
           "1"
         ],
-        "status": "in-progress",
+        "status": "done",
         "subtasks": [],
         "complexity": 3,
         "recommendedSubtasks": 0,
         "expansionPrompt": "Single-file implementation with clear schema from design doc. Models are straightforward enum + BaseModel definitions. No expansion needed.",
-        "updatedAt": "2026-02-24T08:16:10.655Z"
+        "updatedAt": "2026-02-24T08:18:23.613Z"
       },
       {
         "id": "3",
@@ -551,7 +551,7 @@
         "dependencies": [
           "2"
         ],
-        "status": "pending",
+        "status": "in-progress",
         "subtasks": [
           {
             "id": 1,
@@ -604,7 +604,8 @@
         ],
         "complexity": 6,
         "recommendedSubtasks": 4,
-        "expansionPrompt": "Break into: (1) Authentication and service initialization with credential handling, (2) CRUD operations for Content Calendar rows (get_rows_by_status, update_captions, update_status), (3) CRUD operations for Suggestions tab, (4) Error handling with exponential backoff retry logic. Each requires mocking Google API responses in tests."
+        "expansionPrompt": "Break into: (1) Authentication and service initialization with credential handling, (2) CRUD operations for Content Calendar rows (get_rows_by_status, update_captions, update_status), (3) CRUD operations for Suggestions tab, (4) Error handling with exponential backoff retry logic. Each requires mocking Google API responses in tests.",
+        "updatedAt": "2026-02-24T08:25:51.012Z"
       },
       {
         "id": "4",
@@ -1569,9 +1570,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-02-24T08:16:10.656Z",
+      "lastModified": "2026-02-24T08:25:51.013Z",
       "taskCount": 25,
-      "completedCount": 1,
+      "completedCount": 2,
       "tags": [
         "content-engine-v2"
       ]
