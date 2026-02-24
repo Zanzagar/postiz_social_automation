@@ -1,7 +1,9 @@
-"""Content pipelines — Enhance (Mode 1), Re-prompt, and Suggest (Mode 2) workflows."""
+"""Content pipelines — Enhance (Mode 1), Re-prompt, Suggest (Mode 2), and Learn workflows."""
 
+import json
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 from content_engine.generator import CaptionGenerator
 from content_engine.intelligence import ContentIntelligence
@@ -235,6 +237,78 @@ def suggest_pipeline(
     logger.info(
         "Suggest pipeline complete: %d written, %d errors",
         result.processed,
+        result.errors,
+    )
+    return result
+
+
+def learn_pipeline(
+    *,
+    sheets: SheetsClient,
+    postiz: PostizClient,
+    intelligence: ContentIntelligence,
+    data_dir: Path = Path("data"),
+) -> PipelineResult:
+    """Run the Learning Pipeline.
+
+    Pulls engagement data from Postiz for posted content,
+    merges into post-performance.json, and updates the
+    learning context used by AI caption generation.
+    """
+    result = PipelineResult()
+    perf_path = data_dir / "post-performance.json"
+
+    # Load existing performance data
+    existing: list[dict] = []
+    if perf_path.exists():
+        existing = json.loads(perf_path.read_text())
+    existing_ids = {p["post_id"] for p in existing}
+
+    # Get posted rows from Sheet
+    posted_rows = sheets.get_rows_by_status(ContentStatus.POSTED)
+    logger.info("Found %d posted rows to pull analytics for", len(posted_rows))
+
+    new_posts: list[dict] = []
+    for row in posted_rows:
+        if not row.postiz_ids:
+            result.skipped += 1
+            continue
+
+        pillar = row.content_pillar or ContentPillar.COW_LIFE
+
+        for post_id in row.postiz_ids.split(","):
+            post_id = post_id.strip()
+            if not post_id:
+                continue
+
+            if post_id in existing_ids:
+                result.skipped += 1
+                continue
+
+            try:
+                perf = postiz.get_post_analytics(post_id, pillar)
+                new_posts.append(perf.model_dump(mode="json"))
+                existing_ids.add(post_id)
+                result.processed += 1
+                logger.info("Pulled analytics for %s", post_id)
+            except Exception as e:
+                logger.warning("Failed to get analytics for %s: %s", post_id, e)
+                result.errors += 1
+
+    # Save merged performance data
+    if new_posts:
+        existing.extend(new_posts)
+        data_dir.mkdir(parents=True, exist_ok=True)
+        perf_path.write_text(json.dumps(existing, indent=2))
+        logger.info("Saved %d new post records (%d total)", len(new_posts), len(existing))
+
+    # Update learning context
+    intelligence.save_learning_context()
+
+    logger.info(
+        "Learn pipeline complete: %d new, %d skipped, %d errors",
+        result.processed,
+        result.skipped,
         result.errors,
     )
     return result
