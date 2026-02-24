@@ -551,7 +551,7 @@
         "dependencies": [
           "2"
         ],
-        "status": "in-progress",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -559,9 +559,10 @@
             "description": "Build the SheetsClient constructor with Google service account authentication, credential loading from file path, and service object initialization.",
             "dependencies": [],
             "details": "Implement the __init__ method in SheetsClient class:\n\n1. Load service account credentials from the provided credentials_path using google.oauth2.service_account.Credentials.from_service_account_file()\n2. Apply the SCOPES constant for spreadsheets access\n3. Build the sheets API service using googleapiclient.discovery.build('sheets', 'v4', credentials=creds)\n4. Store spreadsheet_id and sheet reference for later operations\n5. Add validation for credentials file existence before loading\n6. Handle credential loading errors (FileNotFoundError, invalid JSON format)\n\nTest with mocked google.oauth2.service_account.Credentials and googleapiclient.discovery.build to verify:\n- Credentials are loaded with correct scopes\n- Service is built with correct API version\n- FileNotFoundError raised for missing credentials file\n- Clear error message for invalid credentials format",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Create tests/test_sheets.py with @patch decorators mocking Credentials.from_service_account_file() and build(). Test successful initialization stores spreadsheet_id correctly, mock credential file not found raises FileNotFoundError, mock invalid credentials raises appropriate exception with descriptive message.",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-02-24T08:30:54.405Z"
           },
           {
             "id": 2,
@@ -571,9 +572,10 @@
               1
             ],
             "details": "Implement four methods for Content Calendar tab operations:\n\n1. get_rows_by_status(status: ContentStatus, tab: str = 'Content Calendar') -> list[ContentRow]:\n   - Use sheet.values().get() to read all rows from the specified tab\n   - Parse header row to identify column indices (A=0 through R=17 based on 18-column structure)\n   - Filter rows where column J (status, index 9) matches the given status\n   - Map row data to ContentRow Pydantic model with careful column offset math\n   - Return list of ContentRow objects with row_number stored for later updates\n\n2. update_captions(row_number: int, captions: dict[str, str]) -> None:\n   - Write captions to columns K-O (indices 10-14) for platforms: Instagram, Facebook, LinkedIn, X, Threads\n   - Use sheet.values().update() with range like 'Content Calendar!K{row}:O{row}'\n   - Format captions dict into ordered list matching column order\n\n3. update_status(row_number: int, status: ContentStatus, error_msg: str = None) -> None:\n   - Update column J (status) and optionally column P (error_msg)\n   - Use batchUpdate for efficiency when updating both columns\n\n4. update_postiz_ids(row_number: int, postiz_ids: str, posted_at: datetime = None) -> None:\n   - Write to columns Q (postiz_ids) and R (posted_at)\n   - Format datetime to ISO string if provided\n\nUse A1 notation for range references. Handle empty cells gracefully.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Mock sheet.values().get().execute() to return sample data matching the 18-column CSV structure. Test get_rows_by_status correctly filters by status and maps to ContentRow. Test update_captions sends correct range and values. Test update_status handles both status-only and status+error cases. Verify column indices match expected structure.",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-02-24T08:30:58.692Z"
           },
           {
             "id": 3,
@@ -583,9 +585,10 @@
               1
             ],
             "details": "Implement two methods for Suggestions tab operations:\n\n1. add_suggestion(suggestion: Suggestion) -> None:\n   - Append a new row to the 'Suggestions' tab\n   - Use sheet.values().append() with valueInputOption='USER_ENTERED'\n   - Map Suggestion model fields to columns in correct order\n   - Set insertDataOption='INSERT_ROWS' to add new row\n   - Include timestamp, content_type, topic, raw_text, source, status fields\n   - Default status to 'pending' for new suggestions\n\n2. get_suggestions(status: str = None) -> list[Suggestion]:\n   - Read all rows from 'Suggestions' tab\n   - Parse header row to identify column indices\n   - If status provided, filter rows matching that status\n   - Map row data to Suggestion Pydantic model\n   - Handle empty suggestion list gracefully\n   - Return list ordered by timestamp (most recent first)\n\nEnsure Suggestion model fields match the expected tab columns. Handle case where Suggestions tab doesn't exist yet.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Mock sheet.values().append() and verify correct tab name, range, and values are sent for add_suggestion. Mock sheet.values().get() to return sample suggestions data for get_suggestions. Test status filtering works correctly. Test empty suggestions list returns empty array. Test Suggestion model mapping is accurate.",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-02-24T08:31:03.019Z"
           },
           {
             "id": 4,
@@ -597,15 +600,16 @@
               3
             ],
             "details": "Create a retry decorator and error handling infrastructure:\n\n1. Create @retry_with_backoff decorator:\n   - Accept max_attempts=3 parameter\n   - Implement exponential backoff: delay = base_delay * (2 ** attempt) with base_delay=1 second\n   - Add jitter (random 0-1 second) to prevent thundering herd\n   - Retry on: HttpError with status 429 (rate limit), 500, 502, 503, 504\n   - Do NOT retry on: 401 (auth), 403 (permission), 404 (not found)\n   - Log retry attempts with remaining count\n\n2. Create custom exceptions:\n   - SheetNotFoundError: raised when tab/spreadsheet doesn't exist (404)\n   - PermissionDeniedError: raised when service account lacks access (403)\n   - RateLimitError: raised after all retries exhausted for 429\n   - SheetsAPIError: base exception for other API errors\n\n3. Apply @retry_with_backoff to all API-calling methods:\n   - get_rows_by_status, update_captions, update_status, update_postiz_ids\n   - add_suggestion, get_suggestions\n\n4. Wrap API calls in try/except blocks:\n   - Catch googleapiclient.errors.HttpError\n   - Parse error response for status code and message\n   - Raise appropriate custom exception with descriptive message\n\nImport time for sleep and random for jitter.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test retry decorator with mocked API that fails 2 times then succeeds - verify 3 calls made with increasing delays. Test rate limit (429) triggers retry. Test permission denied (403) raises PermissionDeniedError immediately without retry. Test sheet not found (404) raises SheetNotFoundError. Test max retries exhausted raises RateLimitError. Mock time.sleep to verify exponential backoff timing.",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-02-24T08:31:07.388Z"
           }
         ],
         "complexity": 6,
         "recommendedSubtasks": 4,
         "expansionPrompt": "Break into: (1) Authentication and service initialization with credential handling, (2) CRUD operations for Content Calendar rows (get_rows_by_status, update_captions, update_status), (3) CRUD operations for Suggestions tab, (4) Error handling with exponential backoff retry logic. Each requires mocking Google API responses in tests.",
-        "updatedAt": "2026-02-24T08:25:51.012Z"
+        "updatedAt": "2026-02-24T08:31:07.388Z"
       },
       {
         "id": "4",
@@ -617,7 +621,7 @@
         "dependencies": [
           "2"
         ],
-        "status": "pending",
+        "status": "in-progress",
         "subtasks": [
           {
             "id": 1,
@@ -656,7 +660,8 @@
         ],
         "complexity": 5,
         "recommendedSubtasks": 3,
-        "expansionPrompt": "Break into: (1) Core HTTP client with authentication and rate limit handling (30 req/hr), (2) Post CRUD operations (list_integrations, create_draft_post), (3) Analytics retrieval (get_post_analytics). Note: media upload is separate Task 18."
+        "expansionPrompt": "Break into: (1) Core HTTP client with authentication and rate limit handling (30 req/hr), (2) Post CRUD operations (list_integrations, create_draft_post), (3) Analytics retrieval (get_post_analytics). Note: media upload is separate Task 18.",
+        "updatedAt": "2026-02-24T08:31:29.926Z"
       },
       {
         "id": "5",
@@ -1570,9 +1575,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-02-24T08:25:51.013Z",
+      "lastModified": "2026-02-24T08:31:29.926Z",
       "taskCount": 25,
-      "completedCount": 2,
+      "completedCount": 3,
       "tags": [
         "content-engine-v2"
       ]

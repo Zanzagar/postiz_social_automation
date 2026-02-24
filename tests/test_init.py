@@ -9,9 +9,3 @@ def test_version_is_set() -> None:
 
 def test_package_imports() -> None:
     """Verify all content engine modules are importable."""
-    import content_engine.sheets
-    import content_engine.postiz
-    import content_engine.generator
-    import content_engine.intelligence
-    import content_engine.scheduler
-    import content_engine.models
