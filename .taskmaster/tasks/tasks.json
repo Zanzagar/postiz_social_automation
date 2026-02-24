@@ -534,11 +534,12 @@
         "dependencies": [
           "1"
         ],
-        "status": "pending",
+        "status": "in-progress",
         "subtasks": [],
         "complexity": 3,
         "recommendedSubtasks": 0,
-        "expansionPrompt": "Single-file implementation with clear schema from design doc. Models are straightforward enum + BaseModel definitions. No expansion needed."
+        "expansionPrompt": "Single-file implementation with clear schema from design doc. Models are straightforward enum + BaseModel definitions. No expansion needed.",
+        "updatedAt": "2026-02-24T08:16:10.655Z"
       },
       {
         "id": "3",
@@ -1568,7 +1569,7 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-02-24T08:11:37.704Z",
+      "lastModified": "2026-02-24T08:16:10.656Z",
       "taskCount": 25,
       "completedCount": 1,
       "tags": [
