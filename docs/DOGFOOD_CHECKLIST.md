@@ -30,8 +30,8 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
   git init
   git commit --allow-empty -m "chore: Initial commit"
   ```
-- [ ] Directory exists at `~/projects/postiz-social-automation`
-- [ ] Git repo initialized with at least one commit (required for hooks)
+- [x] Directory exists at `~/projects/postiz-social-automation` — actual path `~/projects/ISKCON-GN/postiz_social_automation`. Pre-existing from Run 1 + α2 work, reset to clean state via `71b84ee chore: Reset to clean state for dogfood Run 2`.
+- [x] Git repo initialized with at least one commit (required for hooks) — 5 commits from Run 1 dogfood prep, most recent `71b84ee`
 - **Enforcement**: PREREQUISITE — hooks and Task Master require a git repo
 - **Gotcha**: Some hooks call `git log` or `git diff` and fail on repos with zero commits
 
@@ -39,13 +39,13 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 
 - **Trigger**: Manual — run from inside the postiz project directory
 - **Command**: `~/projects/project-template/scripts/init-project.sh`
-- [ ] Auto-detects template at `~/projects/project-template` (parent walk or script-path detection)
-- [ ] Mode reported: `symlink` (projects are siblings, so should be copy mode — verify which!)
-- [ ] `.claude/` directory created
-- [ ] Symlinks OR copies created for: `rules/`, `commands/`, `skills/`, `agents/`, `contexts/`, `hooks/`
-- [ ] Each directory has files (not empty)
-- [ ] Summary shows `Created: 6` (or appropriate count)
-- [ ] No errors or warnings about missing directories
+- [x] Auto-detects template at `~/projects/project-template` (parent walk or script-path detection) — detected via script-path, reported `Template: /home/cjh5690/projects/project-template`
+- [x] Mode reported: `symlink` (projects are siblings, so should be copy mode — verify which!) — reported `copy` mode, correct since projects are in different parent dirs (`ISKCON-GN/` vs root `projects/`)
+- [x] `.claude/` directory created — confirmed with 8 items (6 subdirs + settings.json + settings.local.json)
+- [x] Symlinks OR copies created for: `rules/`, `commands/`, `skills/`, `agents/`, `contexts/`, `hooks/` — all 6 copied: rules/ (14 files), commands/ (48), skills/ (40), agents/ (14), contexts/ (3), hooks/ (20)
+- [x] Each directory has files (not empty) — confirmed, 139 files total
+- [x] Summary shows `Created: 6` (or appropriate count) — `Created: 9` (6 dirs + settings.json + .taskmaster/config.json + .template/). **Run 1 showed Created: 6 — improvement: init-project.sh now also creates settings.json, taskmaster config, and .template/ tracking.**
+- [x] No errors or warnings about missing directories — clean run, 0 skipped, 0 warnings
 - **Enforcement**: PREREQUISITE — without this, no commands/skills/hooks work
 - **Gotchas**:
   - Script uses `python3` for `calc_relative_path` — must be installed
@@ -55,18 +55,18 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 ### 0.3 Verify settings.json Copied/Created
 
 - **Trigger**: Part of init-project.sh (hooks/ directory includes settings.json reference)
-- [ ] `.claude/settings.json` exists in the project
-- [ ] Contains all hook definitions (SessionStart, PreToolUse, PostToolUse, UserPromptSubmit, Stop)
-- [ ] Hook paths use `$CLAUDE_PROJECT_DIR` prefix (portable across machines)
+- [x] `.claude/settings.json` exists in the project — **Run 1 FAILURE NOW FIXED**: init-project.sh now creates `.claude/settings.json` directly (output line: `[CREATE] .claude/settings.json (hook definitions)`). No manual copy needed. This was the #1 Run 1 failure.
+- [x] Contains all hook definitions (SessionStart, PreToolUse, PostToolUse, UserPromptSubmit, Stop) — confirmed all 5 event types with 18 hooks total including observe.sh wildcard matchers
+- [x] Hook paths use `$CLAUDE_PROJECT_DIR` prefix (portable across machines) — confirmed, every hook path starts with `$CLAUDE_PROJECT_DIR/.claude/hooks/`
 - **Enforcement**: PREREQUISITE — without settings.json, zero hooks fire
 - **Gotcha**: settings.json is in `.claude/hooks/` in the template but Claude Code reads from `.claude/settings.json`. Verify init-project.sh handles this correctly OR document that settings.json must be manually copied/symlinked to `.claude/settings.json`.
 
 ### 0.4 Create CLAUDE.md
 
 - **Trigger**: Manual — copy template CLAUDE.md and customize for postiz project
-- [ ] `CLAUDE.md` exists at project root
-- [ ] Project name, tech stack, and structure sections filled in
-- [ ] Taskmaster workflow section preserved (PRD first, new tag per phase, etc.)
+- [x] `CLAUDE.md` exists at project root — created from template, customized for Postiz project
+- [x] Project name, tech stack, and structure sections filled in — "Postiz Social Media Automation", Docker/PostgreSQL/Redis/Temporal/Python/n8n stack, project structure reflecting Docker infra + automation layer to be built
+- [x] Taskmaster workflow section preserved (PRD first, new tag per phase, etc.) — all 5 mandatory workflow rules preserved verbatim from template
 - **Enforcement**: NORMATIVE — Claude reads CLAUDE.md every session
 - **Gotcha**: CLAUDE.md is project-specific and should NOT be symlinked from template
 
@@ -74,10 +74,10 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 
 - **Trigger**: Manual — `task-master init` in the project
 - **Command**: `task-master init`
-- [ ] `.taskmaster/` directory created with `tasks/`, `reports/`, `docs/` subdirectories
-- [ ] `.taskmaster/config.json` created
-- [ ] Config has correct `projectName` (not template default)
-- [ ] Config has `maxTokens: 200000` (not the `task-master init` default of 32000)
+- [x] `.taskmaster/` directory created with `tasks/`, `reports/`, `docs/` subdirectories — all 3 created by init-project.sh directly (no separate `task-master init` needed)
+- [x] `.taskmaster/config.json` created — **Run 1 FAILURE NOW FIXED**: init-project.sh now creates config from template with correct values. Output line: `[CREATE] .taskmaster/config.json (configured, project: postiz_social_automation)`.
+- [x] Config has correct `projectName` (not template default) — `"postiz_social_automation"` (auto-derived from directory name). Run 1 had to manually fix from "Taskmaster" default.
+- [x] Config has `maxTokens: 200000` (not the `task-master init` default of 32000) — confirmed `200000` on all 3 model configs (main/research/fallback). Provider is `claude-code`, models are `opus`/`opus`/`sonnet`. Run 1 got 120000 from MCP init.
 - **Enforcement**: PREREQUISITE — Task Master CLI won't work without init
 - **Gotchas**:
   - `task-master init` creates config with its own defaults (32k tokens, wrong project name) — MUST manually edit
@@ -88,9 +88,9 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 
 - **Trigger**: Manual — after completing steps 0.1–0.5
 - **Action**: Exit Claude Code (`/exit` or Ctrl+C), then restart in the project directory
-- [ ] Claude Code exited cleanly
-- [ ] Claude Code restarted in the project directory
-- [ ] Hooks, rules, and CLAUDE.md are now loaded (verified by session-init output in Phase 1.1)
+- [x] Claude Code exited cleanly — user ran `/exit`, got "Goodbye!" confirmation
+- [x] Claude Code restarted in the project directory — confirmed by new session start
+- [x] Hooks, rules, and CLAUDE.md are now loaded (verified by session-init output in Phase 1.1) — confirmed: `SessionStart:resume hook success: Success` fired, Project Status box displayed, pre-compact.sh fired on first prompt, 14 rule files loaded, CLAUDE.md in context, 15 Superpowers skills loaded. **Run 1 note**: `.template/version` file now exists (created by init-project.sh), so version comparison works. Run 1 had to manually create this file.
 - **Enforcement**: PREREQUISITE — hooks, rules, and CLAUDE.md only load at session startup. Without restart, none of the behavioral enforcement installed in 0.2–0.4 is active.
 - **Gotcha**: Skipping this restart is invisible — everything appears to work, but hooks don't fire and rules aren't loaded. This is the most common onboarding mistake.
 
@@ -102,17 +102,17 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
   /plugin marketplace add obra/superpowers-marketplace
   /plugin install superpowers@superpowers-marketplace
   ```
-- [ ] Superpowers skills appear in skill list (brainstorming, test-driven-development, etc.)
-- [ ] `superpowers:brainstorming` is invocable
-- [ ] `superpowers:test-driven-development` is invocable
+- [x] Superpowers skills appear in skill list (brainstorming, test-driven-development, etc.) — confirmed: 15 `superpowers:*` skills in session system-reminder (brainstorming, test-driven-development, writing-plans, executing-plans, systematic-debugging, requesting-code-review, receiving-code-review, finishing-a-development-branch, verification-before-completion, dispatching-parallel-agents, subagent-driven-development, using-git-worktrees, writing-skills, using-superpowers, keybindings-help)
+- [x] `superpowers:brainstorming` is invocable — listed as available skill in Skill tool
+- [x] `superpowers:test-driven-development` is invocable — listed as available skill in Skill tool
 - **Enforcement**: PREREQUISITE — without Superpowers, TDD is advisory-only (not enforced)
 - **Gotcha**: Superpowers detection in session-init.sh checks `find` + skills directory — improved in v2.3.1
 
 ### 0.7 Verify MCP Servers Connected
 
 - **Trigger**: Start a Claude Code session in the project
-- [ ] Task Master MCP responds (test: `task-master list`)
-- [ ] Context7 MCP responds (test: resolve a library ID)
+- [x] Task Master MCP responds (test: `task-master list`) — confirmed: v0.43.0, `get_tasks` returned empty task list on `master` tag with 0/0 stats. No `.mcp.json` override issue this time (Run 1 failure #5 avoided — no local `.mcp.json` was created on restart).
+- [x] Context7 MCP responds (test: resolve a library ID) — confirmed: resolved FastAPI to `/websites/fastapi_tiangolo` with 21.4k snippets, High reputation, score 91.4
 - **Enforcement**: PREREQUISITE — Task Master MCP needed for data ops
 - **Gotcha**: MCP servers are user-level config (`~/.claude/settings.json`), not project-level
 
@@ -123,11 +123,11 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 ### 1.1 session-init.sh Fires
 
 - **Trigger**: `SessionStart` hook — fires when Claude Code session begins
-- [ ] Hook runs without errors (check for `SessionStart:startup hook success` in system message)
-- [ ] Project phase detected and displayed (IDEATION for new project)
-- [ ] Template version shown: `v2.3.1`
-- [ ] No stale session summaries loaded (fresh project)
-- [ ] Update banner NOT shown (installed version should match current)
+- [x] Hook runs without errors (check for `SessionStart:startup hook success` in system message) — confirmed: `SessionStart:resume hook success: Success`
+- [!] Project phase detected and displayed (IDEATION for new project) — **NOT SHOWN as "IDEATION"**. Session-init output was just "Success". The Project Status box from project-index.sh showed template update banner but no phase label. Same behavior as Run 1 — session-init.sh doesn't display a workflow phase indicator. **Recurring issue**: no phase detection output despite `.template/version` now existing.
+- [x] Template version shown: `v2.3.1` — **FIXED from Run 1**: Project Status box shows `Installed: v2.3.1 → Latest: v2.3.1`. The `.template/version` file (now auto-created by init-project.sh) enables this. Run 1 couldn't show version because the file was missing.
+- [x] No stale session summaries loaded (fresh project) — confirmed: only `pre-compact-state.md` exists in `.claude/sessions/`, no prior session summaries
+- [!] Update banner NOT shown (installed version should match current) — **PARTIAL FAIL**: Banner says "TEMPLATE UPDATE AVAILABLE" with `Installed: v2.3.1 → Latest: v2.3.1` (same version!) and lists "Missing components: mcp-registry.json sync-template.sh". The update detection is version-match but flags missing files as an update. Not a blocking issue but misleading UX.
 - **Enforcement**: HOOK — fires automatically
 - **Gotchas**:
   - If `.template/version` file doesn't exist, version comparison may error
@@ -136,27 +136,27 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 ### 1.2 project-index.sh Fires
 
 - **Trigger**: `SessionStart` hook — runs after session-init.sh
-- [ ] `Project index updated` message appears in system reminders
-- [ ] `.claude/project-index.json` created/updated
-- [ ] Index contains file tree of the project
+- [x] `Project index updated` message appears in system reminders — Project Status box appeared from project-index.sh hook (displayed template status info). **Run 1 FAILURE NOW FIXED**: project-index.sh no longer shows "PROTO-TEMPLATE DETECTED" — it correctly generates an index and shows project status.
+- [x] `.claude/project-index.json` created/updated — confirmed: 308 bytes, generated at `2026-02-23T21:52:37`. **Run 1 FAILURE NOW FIXED**: file was not created in Run 1 (hook focused on template detection instead). Now creates valid JSON index.
+- [x] Index contains file tree of the project — confirmed: contains `docker-compose.yaml` with signatures, `dynamicconfig/docker.yaml`, and structure listing `docs` and `dynamicconfig` dirs. Minimal but correct for a project with few source files.
 - **Enforcement**: HOOK — fires automatically
 - **Gotcha**: On empty projects, index will be minimal (just CLAUDE.md, .claude/, .taskmaster/)
 
 ### 1.3 pre-compact.sh Fires
 
 - **Trigger**: `UserPromptSubmit` hook — fires on EVERY user message
-- [ ] `Pre-compaction state saved` message appears
-- [ ] `.claude/sessions/pre-compact-state.md` created
+- [x] `Pre-compaction state saved` message appears — confirmed: `UserPromptSubmit hook success: Pre-compaction state saved to .../pre-compact-state.md`
+- [x] `.claude/sessions/pre-compact-state.md` created — confirmed: 455 bytes, saved at 21:53:25. Contains active task (none), tag (master), TDD phase (N/A), branch (main), and 5 uncommitted files listed.
 - **Enforcement**: HOOK — fires every prompt
 - **Gotcha**: This fires on every single user message, not just before compaction — it's preemptive
 
 ### 1.4 suggest-compact.sh Fires
 
 - **Trigger**: `UserPromptSubmit` hook — fires on every user message
-- [ ] Silent on early messages (no output until 50+ tool calls)
-- [ ] At 50 tool calls: advisory suggestion appears
-- [ ] At 75 tool calls: stronger suggestion
-- [ ] At 100 tool calls: urgent suggestion
+- [x] Silent on early messages (no output until 50+ tool calls) — confirmed: no suggest-compact output on first prompt (only pre-compact fired). Tool call count is low.
+- [-] At 50 tool calls: advisory suggestion appears — skipped: session too new to reach 50 tool calls. Will verify later in session if reached.
+- [-] At 75 tool calls: stronger suggestion — skipped: same reason
+- [-] At 100 tool calls: urgent suggestion — skipped: same reason
 - **Enforcement**: ADVISORY — suggestions only, no blocking
 - **Gotcha**: Counter resets on session restart. Token-based, not message-based.
 
@@ -167,22 +167,22 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 ### 2.1 Skill Detection
 
 - **Trigger**: User describes a feature to build (e.g., "I want to build a social media automation tool")
-- [ ] Claude detects that brainstorming skill applies
-- [ ] `superpowers:brainstorming` skill is invoked BEFORE any code or planning
+- [x] Claude detects that brainstorming skill applies — detected from startup prompt describing feature work ("build the automation layer")
+- [x] `superpowers:brainstorming` skill is invoked BEFORE any code or planning — invoked immediately at Phase 2 start, before any code or planning. Created 6-item brainstorming checklist via TaskCreate.
 - **Enforcement**: NORMATIVE (Superpowers) — skill should be invoked for any creative/feature work
 - **Gotcha**: If Superpowers not installed, brainstorming is advisory only
 
 ### 2.2 Research & Context Intake
 
 - **Trigger**: Brainstorming skill's first step: "Explore project context — check files, docs, recent commits"
-- [ ] Claude reads ALL existing research docs in `docs/` (non-dogfood files)
-  - `gita-valley-context.md` — Client profile, social accounts, content strategy
-  - `gita-valley-online-presence-audit-v2.md` — Platform audit, rebranding gaps
-  - `social-media-automation-assessment.md` — Postiz vs SaaS comparison
-  - `N8N_INTEGRATION.md` — n8n ↔ Postiz connection setup
-- [ ] Claude reads/analyzes existing infrastructure (Docker Compose, service config) if present
-- [ ] Research findings are explicitly referenced when proposing approaches (not generic suggestions)
-- [ ] Technology constraints from research are acknowledged (Postiz API beta limits, n8n capabilities, platform app approvals)
+- [x] Claude reads ALL existing research docs in `docs/` (non-dogfood files)
+  - `gita-valley-context.md` — Read: 179 lines. Client profile (430-acre farm, 85 cows, 4.4K IG / 5.7K FB followers), social accounts with handle/follower data, content pillars (40/25/15/10/5/5), posting cadence targets, rebrand status, key people (Seth, Dhruva, PJ, Madhupan).
+  - `gita-valley-online-presence-audit-v2.md` — Read: 275 lines. Platform-by-platform audit with engagement data (0.2-0.4% vs 3-6% benchmark), rebrand gap matrix (only website + IG rebranded), viral TikTok paradox (1,200 apps from intern's TikTok vs 198 official followers), P0-P4 priority actions.
+  - `social-media-automation-assessment.md` — Read: 201 lines. Postiz + n8n recommended ($10-25/mo). Architecture: n8n = brain, Postiz = hands. Postiz API beta (30 req/hr). n8n-nodes-postiz v0.2.17 installed. Platform app approvals can take 1+ months.
+  - `N8N_INTEGRATION.md` — Read: 45 lines. n8n connects via community node, operations: Create/Get/Delete Post, network config for cross-host communication.
+- [x] Claude reads/analyzes existing infrastructure (Docker Compose, service config) if present — Read docker-compose.yaml: 7 services (postiz on 4007:5000, postiz-postgres, postiz-redis, temporal on 7233, temporal-postgresql, temporal-elasticsearch, temporal-ui on 8080). All on postiz-network bridge. Full production-ready stack.
+- [x] Research findings are explicitly referenced when proposing approaches (not generic suggestions) — design doc references specific data: engagement rates, follower counts, cow names, pillar weights, API rate limits, platform rebrand status, posting cadence targets, infrastructure URLs
+- [x] Technology constraints from research are acknowledged (Postiz API beta limits, n8n capabilities, platform app approvals) — design doc includes: API 30 req/hr limit with backoff strategy, platform app approval timeline, n8n community node capabilities, deployment constraint (Seth manages server)
 - **Enforcement**: NORMATIVE (Superpowers brainstorming skill step 1 + startup prompt)
 - **Context**: In α2, comprehensive domain audits (online presence audit, tech assessment) were created as part of the workflow and informed all subsequent design. These docs already exist in the project — the brainstorming must incorporate them, not ignore them.
 - **Gotcha**: The brainstorming skill says "check files, docs, recent commits" but doesn't enforce it. If Claude skips this step, the design doc and PRD will be generic rather than domain-informed.
@@ -190,29 +190,29 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 ### 2.3 Brainstorming Process
 
 - **Trigger**: `superpowers:brainstorming` skill loaded, research intake complete
-- [ ] Claude explores user intent before jumping to solutions
-- [ ] Multiple approaches considered (at least 2-3)
-- [ ] Approaches reference specific findings from research docs (e.g., API rate limits, platform rebrand status, content pillar weights)
-- [ ] Trade-offs discussed with domain-specific context (not abstract pros/cons)
-- [ ] User confirms direction before proceeding
+- [x] Claude explores user intent before jumping to solutions — yes, but POORLY initially. First attempt asked meta-scope questions ("do we need Python?"). After user correction, restarted with domain synthesis showing understanding before asking questions. Required 2 restarts to get right.
+- [!] Multiple approaches considered (at least 2-3) — **PARTIAL FAIL**: Initial attempts offered approaches but at wrong abstraction level (Python scope options, not pipeline design options). After restart, converged on single approach (n8n + Postiz + Sheets) through Q&A rather than presenting 2-3 competing architectures. The architecture was effectively pre-decided by the research docs, so multiple approaches were less relevant.
+- [x] Approaches reference specific findings from research docs (e.g., API rate limits, platform rebrand status, content pillar weights) — yes, after restart. Design doc references: 0.2-0.4% engagement, 30 req/hr API limit, specific cow names, pillar weights, rebrand status per platform, follower counts.
+- [x] Trade-offs discussed with domain-specific context (not abstract pros/cons) — approval workflow discussion was domain-informed (spiritual community needs content review). Media handling, AI provider choices grounded in existing infra.
+- [x] User confirms direction before proceeding — user confirmed design looks correct before doc was written
 - **Enforcement**: NORMATIVE (Superpowers skill instructions)
 
 ### 2.4 Design Doc Quality Check
 
 - **Trigger**: Brainstorming produces design doc
-- [ ] Design doc references specific data from research docs (follower counts, API limits, platform statuses)
-- [ ] Architecture decisions are grounded in the technology assessment (not reinvented from scratch)
-- [ ] Content strategy alignment: design doc reflects the 40/25/15/10/5/5 pillar weights and 70/20/10 mix
-- [ ] Infrastructure constraints captured: Docker stack, Postiz API beta limits, separate hosts for n8n/Postiz
+- [x] Design doc references specific data from research docs (follower counts, API limits, platform statuses) — includes: 4,414 IG / 5,700 FB / 198 TikTok followers, 30 req/hr API limit, rebrand status per platform, 0.2-0.4% engagement vs 3-6% benchmark
+- [x] Architecture decisions are grounded in the technology assessment (not reinvented from scratch) — "n8n = brain, Postiz = hands" architecture directly from assessment doc. Claude via OAuth/Max (not API billing). Google Sheets + Drive from assessment options.
+- [x] Content strategy alignment: design doc reflects the 40/25/15/10/5/5 pillar weights and 70/20/10 mix — both captured with per-pillar tone adjustments (cow names, "gentle not doctrinal" for spiritual, etc.)
+- [x] Infrastructure constraints captured: Docker stack, Postiz API beta limits, separate hosts for n8n/Postiz — all captured: 7 Docker services, 30 req/hr limit with backoff, Seth manages server, n8n at sethpc.xyz
 - **Enforcement**: NORMATIVE (quality verification)
 - **Context**: α1's design doc was 185 lines with detailed architecture, data flow, and phased rollout — all informed by the research docs. This is the quality bar.
 
 ### 2.5 Brainstorming Exit — CRITICAL OVERRIDE
 
 - **Trigger**: Brainstorming skill completes
-- [ ] Design doc saved to `docs/plans/YYYY-MM-DD-<topic>-design.md`
-- [ ] **Does NOT route to `writing-plans`** — this is the rule override from `superpowers-integration.md`
-- [ ] Instead routes to PRD creation (Phase 3)
+- [x] Design doc saved to `docs/plans/YYYY-MM-DD-<topic>-design.md` — saved to `docs/plans/2026-02-23-social-automation-pipeline-design.md`
+- [x] **Does NOT route to `writing-plans`** — correctly routing to PRD creation per `superpowers-integration.md` rule override. Did not invoke writing-plans. **Run 1 noted this was broken TWICE in prior sessions — passes in Run 2.**
+- [x] Instead routes to PRD creation (Phase 3) — transitioning to PRD now
 - **Enforcement**: NORMATIVE (rule override in `.claude/rules/superpowers-integration.md`)
 - **Gotcha**: **This was broken TWICE in prior sessions.** The Superpowers brainstorming skill explicitly says to invoke `writing-plans` as terminal state. Our rule overrides this. Verify Claude follows the rule, not the skill's default exit.
 
@@ -710,9 +710,10 @@ Track any failures here with details for post-dogfood debugging:
 
 | # | Phase | Check | Expected | Actual | Severity | Fix/Notes |
 |---|-------|-------|----------|--------|----------|-----------|
-| 1 | | | | | | |
-| 2 | | | | | | |
-| 3 | | | | | | |
+| 1 | 1.1 | Project phase detected | "IDEATION" label in session-init output | Just "Success" — no phase label | Low | Recurring from Run 1. session-init.sh doesn't output workflow phase. Template enhancement needed. |
+| 2 | 1.1 | Update banner not shown | No banner when versions match | "TEMPLATE UPDATE AVAILABLE" shown despite `v2.3.1 → v2.3.1` — flags "Missing components: mcp-registry.json sync-template.sh" | Low | Version matches but missing optional files trigger banner. UX misleading but not blocking. |
+| 3 | 2.3 | Multiple approaches considered | 2-3 competing architectures presented | Converged on single approach through Q&A; initial attempts asked wrong-level questions (meta-scope vs domain design) | Medium | Template process overhead (checklist, task tracking, rule compliance) consumed cognitive bandwidth that should have gone to domain engagement. α1 produced better brainstorming with less process. Critical dogfood finding: workflow enforcement may degrade creative output during brainstorming phase. |
+| 4 | | | | | | |
 
 ---
 
