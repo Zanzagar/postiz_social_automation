@@ -1,0 +1,864 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Verify Postiz Infrastructure Health",
+        "description": "Verify the existing Docker stack is running correctly and document current service status at production URL https://postiz.sethpc.xyz",
+        "details": "The Docker Compose stack already exists with Postiz, PostgreSQL 17, Redis 7.2, Temporal 1.28 + Elasticsearch. This task validates the live deployment:\n\n1. Test Postiz dashboard accessibility at https://postiz.sethpc.xyz\n2. Verify n8n accessibility at https://n8n.sethpc.xyz\n3. Confirm API key works: `curl -H 'Authorization: Bearer <api-key>' https://postiz.sethpc.xyz/api/health` (or equivalent endpoint)\n4. Document all service versions running in production\n5. Create a `docs/INFRASTRUCTURE_STATUS.md` file recording:\n   - Service URLs and ports\n   - Current versions\n   - Health check results\n   - Any connectivity issues noted\n6. Verify timezone is set to America/New_York in Postiz organization settings\n\nPseudo-code for health check script:\n```bash\n# postiz-health-check.sh\ncurl -f https://postiz.sethpc.xyz/api/health && echo 'Postiz: OK'\ncurl -f https://n8n.sethpc.xyz && echo 'n8n: OK'\n```",
+        "testStrategy": "1. Dashboard loads without error at https://postiz.sethpc.xyz\n2. n8n loads without error at https://n8n.sethpc.xyz\n3. API authentication succeeds with documented API key\n4. Infrastructure status doc created with all fields populated\n5. No unhealthy containers reported by Seth",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Configure Postiz Organization Settings",
+        "description": "Set up Postiz organization with correct branding (Gita Valley) and timezone (America/New_York) via the dashboard",
+        "details": "Access the Postiz admin dashboard and configure organization settings:\n\n1. Login to https://postiz.sethpc.xyz with admin credentials\n2. Navigate to Settings > Organization\n3. Set organization name: 'Gita Valley'\n4. Set timezone: 'America/New_York' (Eastern Time)\n5. Configure any default posting preferences if available\n6. Document the admin user account details securely\n7. Verify API key is active under Settings > API\n8. Screenshot or document the configuration for the project docs\n\nNote: The existing API key from context doc is: fc03fe1e9b2f432837aeb00bdb35f6e238e95a23fac150d9651a6f477abd887d",
+        "testStrategy": "1. Organization name displays as 'Gita Valley' in dashboard\n2. Timezone shows 'America/New_York' in settings\n3. API key verified working with test request\n4. Settings documented in project docs",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Connect Instagram Channel to Postiz",
+        "description": "Connect the @gita.valley Instagram account to Postiz via Facebook Business integration",
+        "details": "Instagram requires Facebook Business App integration. This may involve a multi-week approval process.\n\n1. In Postiz dashboard, go to Channels > Add Channel > Instagram\n2. Follow the Facebook Business OAuth flow\n3. If Facebook App not yet created:\n   - Go to developers.facebook.com\n   - Create new app (type: Business)\n   - Add Instagram Graph API permissions\n   - Submit for App Review (can take 1 month+)\n4. Select @gita.valley Instagram account during connection\n5. Document the channel ID returned by Postiz (needed for API calls)\n6. Test posting capability with a draft post\n\nNote: Per PRD, platform approvals may take weeks. Design workflows to work with whatever subset is connected.\n\nChannel ID storage: Add to `docs/CHANNEL_IDS.md`:\n```\n## Channel IDs\n| Platform | Handle | Postiz Channel ID | Connected Date |\n|----------|--------|-------------------|----------------|\n| Instagram | @gita.valley | <ID> | YYYY-MM-DD |\n```",
+        "testStrategy": "1. Instagram channel appears in Postiz Channels list\n2. Channel status shows 'Connected' (not 'Pending' or 'Error')\n3. Test draft post creates successfully\n4. Channel ID documented in CHANNEL_IDS.md\n5. If approval pending, document status and expected timeline",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "Connect Facebook Page to Postiz",
+        "description": "Connect the fb.com/gitavalley Facebook page to Postiz",
+        "details": "Connect the Facebook page (note: page name is still 'Gita Nagari Farm' with 5,700 followers - rebrand pending).\n\n1. In Postiz dashboard, go to Channels > Add Channel > Facebook\n2. Authenticate with Facebook account that has admin access to the page\n3. Select 'Gita Nagari Farm' (fb.com/gitavalley) page\n4. Grant required permissions (publish_pages, manage_pages)\n5. Document the channel ID in CHANNEL_IDS.md\n6. Test with a draft post\n\nNote per context doc: Facebook contact email still points to contact@gnecofarm.org. This is a rebrand issue to flag but not block automation.",
+        "testStrategy": "1. Facebook page channel appears in Postiz Channels list\n2. Channel status shows 'Connected'\n3. Test draft post creates successfully\n4. Channel ID documented in CHANNEL_IDS.md",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "Connect TikTok Channel to Postiz",
+        "description": "Connect the @gitavalley TikTok account to Postiz via TikTok Developer App",
+        "details": "TikTok requires a separate Developer App approval process.\n\n1. Create TikTok Developer account at developers.tiktok.com if not exists\n2. Create new app for 'Gita Valley Social Automation'\n3. Configure required scopes: video.publish, user.info.basic\n4. Submit for approval (can take 1-2 weeks)\n5. Once approved, add credentials to Postiz:\n   - In .env: TIKTOK_CLIENT_ID, TIKTOK_CLIENT_SECRET\n   - Or configure in Postiz dashboard directly\n6. Connect @gitavalley account in Postiz\n7. Document channel ID in CHANNEL_IDS.md\n\nNote per context: TikTok bio still links to gnecofarm.org - rebrand issue to flag.",
+        "testStrategy": "1. TikTok channel appears in Postiz Channels list\n2. Channel status shows 'Connected'\n3. Test draft video post creates successfully\n4. Channel ID documented in CHANNEL_IDS.md\n5. If approval pending, document status and expected timeline",
+        "priority": "medium",
+        "dependencies": [
+          2
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Connect Threads Channel to Postiz",
+        "description": "Connect the gita.valley Threads account to Postiz (linked from Instagram)",
+        "details": "Threads is linked from Instagram, so this depends on Instagram connection.\n\n1. In Postiz dashboard, go to Channels > Add Channel > Threads\n2. Threads should be available via the same Facebook Business integration as Instagram\n3. Select gita.valley Threads account\n4. Document the channel ID in CHANNEL_IDS.md\n5. Test with a draft post\n\nNote: Per PRD, Threads should 'Mirror Instagram' for posting cadence (content repurposed from Instagram posts).",
+        "testStrategy": "1. Threads channel appears in Postiz Channels list\n2. Channel status shows 'Connected'\n3. Test draft post creates successfully\n4. Channel ID documented in CHANNEL_IDS.md",
+        "priority": "medium",
+        "dependencies": [
+          3
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Connect LinkedIn Company Page to Postiz",
+        "description": "Connect the Gita Valley LinkedIn company page to Postiz",
+        "details": "Connect the LinkedIn company page for professional/institutional audience.\n\n1. In Postiz dashboard, go to Channels > Add Channel > LinkedIn\n2. Authenticate with LinkedIn account that has admin access to Gita Valley company page\n3. Select 'Gita Valley' company page\n4. Grant required permissions (w_member_social, w_organization_social)\n5. Document the channel ID in CHANNEL_IDS.md\n6. Test with a draft post\n\nLinkedIn content per PRD: professional, impact-focused, university partnership angles, 100-150 words.",
+        "testStrategy": "1. LinkedIn channel appears in Postiz Channels list\n2. Channel status shows 'Connected'\n3. Test draft post creates successfully\n4. Channel ID documented in CHANNEL_IDS.md",
+        "priority": "medium",
+        "dependencies": [
+          2
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Create Google Sheets Content Calendar",
+        "description": "Create the Google Sheet content calendar with required schema for the automation pipeline",
+        "details": "Create a Google Sheet to serve as the content calendar input for the automation pipeline.\n\nSheet structure:\n```\nColumns:\n- A: date (DATE format, YYYY-MM-DD)\n- B: content_pillar (DROPDOWN: Cow Life, Farm Ops, Community, Kitchen, Spiritual, CTA)\n- C: raw_text (FREE TEXT - farm staff writes 1-3 sentences)\n- D: media_url (URL - Google Drive shared link to image/video)\n- E: platforms_ig (CHECKBOX - Instagram)\n- F: platforms_fb (CHECKBOX - Facebook)\n- G: platforms_tt (CHECKBOX - TikTok)\n- H: platforms_th (CHECKBOX - Threads)\n- I: platforms_li (CHECKBOX - LinkedIn)\n- J: status (DROPDOWN: draft, ready, pending_approval, approved, posted, error)\n- K: caption_ig (AUTO-FILLED by n8n)\n- L: caption_fb (AUTO-FILLED by n8n)\n- M: caption_tt (AUTO-FILLED by n8n)\n- N: caption_th (AUTO-FILLED by n8n)\n- O: caption_li (AUTO-FILLED by n8n)\n- P: postiz_ids (AUTO-FILLED by n8n - JSON array of post IDs)\n- Q: posted_at (AUTO-FILLED by n8n - timestamp)\n- R: error_msg (AUTO-FILLED by n8n - error details if any)\n```\n\nAdditional setup:\n1. Create 5-10 sample rows with real Gita Valley content for testing\n2. Set up data validation for dropdown columns\n3. Share sheet with service account for n8n access\n4. Document sheet ID for n8n workflow configuration",
+        "testStrategy": "1. Google Sheet created with all specified columns\n2. Dropdown data validation works for content_pillar and status\n3. Checkboxes work for platform selection\n4. 5-10 sample rows populated with realistic content\n5. Sheet ID documented for n8n integration",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Configure Google Sheets API Credentials in n8n",
+        "description": "Set up Google Sheets API credentials in n8n for read/write access to the content calendar",
+        "details": "Configure n8n to access the Google Sheets content calendar.\n\n1. Create Google Cloud project (or use existing)\n2. Enable Google Sheets API\n3. Create OAuth 2.0 credentials or Service Account:\n   - For Service Account: download JSON key file\n   - For OAuth: configure redirect URI for n8n\n4. In n8n (https://n8n.sethpc.xyz):\n   - Go to Credentials > Add Credential > Google Sheets OAuth2 or Service Account\n   - Enter credentials from step 3\n   - Test connection\n5. Document the credential name used in n8n\n\nNote: Service Account is preferred for automation (no user interaction needed for token refresh).\n\nPseudo-code for n8n credential test:\n```json\n{\n  \"credentialName\": \"Gita Valley Google Sheets\",\n  \"type\": \"googleSheets\",\n  \"serviceAccountEmail\": \"gita-valley-automation@project.iam.gserviceaccount.com\"\n}\n```",
+        "testStrategy": "1. Google Sheets credential created in n8n\n2. Test read operation succeeds on content calendar\n3. Test write operation succeeds (add/update a cell)\n4. Credential name documented in project docs",
+        "priority": "high",
+        "dependencies": [
+          8
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Build Basic n8n Workflow - Sheet Reader",
+        "description": "Create the first n8n workflow that reads rows from Google Sheets where date=today AND status=ready",
+        "details": "Create the foundation n8n workflow that reads from the content calendar.\n\nWorkflow: 'Gita Valley - Sheet Reader'\n\nNodes:\n1. **Cron Trigger**: Run daily at 6 AM ET\n   - Mode: Every Day\n   - Hour: 6\n   - Timezone: America/New_York\n\n2. **Google Sheets - Read**: Fetch all rows\n   - Credential: Gita Valley Google Sheets\n   - Sheet ID: <from task 8>\n   - Range: All data\n\n3. **Filter**: Keep only rows where:\n   - date = today's date (use $now.format('YYYY-MM-DD'))\n   - status = 'ready'\n   - At least one platform checkbox is true\n\n4. **IF - Has Content**: Check if any rows remain\n   - True branch: Continue to content validation\n   - False branch: Stop workflow (no content today)\n\nExport workflow JSON to `n8n-workflows/01-sheet-reader.json`\n\nPseudo-code:\n```javascript\n// Filter expression\n$json.date === $now.format('YYYY-MM-DD') &&\n$json.status === 'ready' &&\n($json.platforms_ig || $json.platforms_fb || $json.platforms_tt || $json.platforms_th || $json.platforms_li)\n```",
+        "testStrategy": "1. Workflow triggers at scheduled time\n2. Successfully reads from Google Sheet\n3. Filters rows correctly for today's date + ready status\n4. Handles empty result set gracefully (no error)\n5. Workflow JSON exported to repo",
+        "priority": "high",
+        "dependencies": [
+          9
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Set up Cron Trigger with America/New_York timezone at 6 AM",
+            "description": "Configure the n8n Cron trigger node to run daily at 6:00 AM Eastern Time, which serves as the entry point for the Sheet Reader workflow.",
+            "dependencies": [],
+            "details": "Create the n8n-workflows/ directory if it doesn't exist. Initialize a new workflow named 'Gita Valley - Sheet Reader'. Add a Cron trigger node with the following configuration: Mode='Every Day', Hour=6, Minute=0, Timezone='America/New_York'. This ensures the workflow runs before the workday begins to check for content scheduled for that day. Document the cron expression equivalent for reference.",
+            "status": "pending",
+            "testStrategy": "Verify the Cron node is configured correctly by checking the node settings in n8n UI. Test by temporarily setting a closer time to confirm trigger fires. Validate timezone handling by checking execution logs show correct Eastern Time."
+          },
+          {
+            "id": 2,
+            "title": "Configure Google Sheets read node with filter logic for today's date and status='ready'",
+            "description": "Add Google Sheets read node to fetch all rows, then add a Filter node to keep only rows where date matches today and status equals 'ready' with at least one platform selected.",
+            "dependencies": [
+              1
+            ],
+            "details": "Add Google Sheets node with Operation='Read Rows', Sheet ID from task 8 configuration, Range='All data'. Connect to a Filter node with the following conditions: 1) $json.date === $now.format('YYYY-MM-DD') for today's content, 2) $json.status === 'ready' for approved-for-generation content, 3) ($json.platforms_ig || $json.platforms_fb || $json.platforms_tt || $json.platforms_th || $json.platforms_li) for at least one target platform. Use n8n expression syntax with AND logic combining all conditions.",
+            "status": "pending",
+            "testStrategy": "Test with sample Sheet data containing various dates and statuses. Verify filter correctly passes today's 'ready' rows and rejects past/future dates or other statuses. Test edge case of row with no platforms checked is filtered out. Validate date format matching works correctly."
+          },
+          {
+            "id": 3,
+            "title": "Add IF node for empty result handling and export workflow JSON",
+            "description": "Add an IF node to check if filtered results contain any rows, handle the empty case gracefully, and export the complete workflow JSON to n8n-workflows/01-sheet-reader.json.",
+            "dependencies": [
+              2
+            ],
+            "details": "Add IF node after Filter with condition: $input.all().length > 0. True branch: Continue to downstream processing (placeholder for future caption generation connection). False branch: Add a NoOp or Stop node with a note 'No content scheduled for today - workflow complete'. This prevents errors from empty arrays propagating downstream. Export the completed workflow from n8n as JSON and save to n8n-workflows/01-sheet-reader.json with proper formatting for version control. Include workflow metadata (name, description, version) in the export.",
+            "status": "pending",
+            "testStrategy": "Test workflow with Sheet containing no matching rows - verify graceful termination without errors. Test with matching rows - verify True branch executes. Validate exported JSON is valid and can be re-imported into n8n. Confirm workflow runs end-to-end in n8n environment."
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Add Content Validation Node to Workflow",
+        "description": "Add validation logic to check that raw_text exists and media_url is valid before processing",
+        "details": "Extend the Sheet Reader workflow with content validation.\n\nAdd nodes after the Filter node:\n\n5. **Split In Batches**: Process rows one at a time\n   - Batch Size: 1\n\n6. **IF - Has Text**: Validate raw_text exists and is not empty\n   - Condition: $json.raw_text && $json.raw_text.trim().length > 0\n   - False branch: Mark as error\n\n7. **HTTP Request - Validate Media** (optional path if media_url exists):\n   - Method: HEAD\n   - URL: $json.media_url\n   - Continue On Fail: true\n   - Check response status code\n\n8. **IF - Media Valid**: Check if media URL is accessible\n   - Condition: status code is 200 or no media_url provided\n   - False branch: Mark as error or continue text-only\n\n9. **Google Sheets - Update Error**: (error branch)\n   - Update status to 'error'\n   - Write error_msg: 'Missing raw_text' or 'Invalid media URL'\n\nUpdate workflow export: `n8n-workflows/01-sheet-reader.json`",
+        "testStrategy": "1. Rows with empty raw_text are marked as error\n2. Rows with invalid media_url are handled (error or text-only)\n3. Error rows get error_msg populated in Sheet\n4. Valid rows continue to next step\n5. Workflow handles mix of valid/invalid rows correctly",
+        "priority": "high",
+        "dependencies": [
+          10
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Add Split In Batches and Text Validation IF Node",
+            "description": "Add the Split In Batches node (batch size 1) after the Filter node, followed by an IF node that validates raw_text exists and is not empty using the condition $json.raw_text && $json.raw_text.trim().length > 0",
+            "dependencies": [],
+            "details": "In the n8n workflow JSON (n8n-workflows/01-sheet-reader.json), add two nodes after the Filter node: 1) Split In Batches node configured with batchSize=1 to process rows individually, 2) IF node named 'Has Text' with condition checking $json.raw_text && $json.raw_text.trim().length > 0. Connect Filter output to Split In Batches input, then Split In Batches output to IF node input. The IF node should have two branches: true (continues to media validation) and false (routes to error handling).",
+            "status": "pending",
+            "testStrategy": "1. Rows with empty raw_text route to false branch\n2. Rows with whitespace-only raw_text route to false branch\n3. Rows with valid text route to true branch\n4. Batch processing handles multiple rows sequentially"
+          },
+          {
+            "id": 2,
+            "title": "Add HTTP HEAD Request for Media URL Validation",
+            "description": "Add an optional HTTP Request node using HEAD method to validate media_url accessibility, configured with continueOnFail=true to handle invalid URLs gracefully",
+            "dependencies": [
+              1
+            ],
+            "details": "Add HTTP Request node after the 'Has Text' IF true branch. Configure: Method=HEAD, URL={{$json.media_url}}, continueOnFail=true. Add a second IF node 'Media Valid' that checks if the HTTP response status is 200 OR if no media_url was provided ($json.media_url is empty/null). This allows text-only posts to proceed. True branch continues to next workflow step; false branch routes to error handling. Handle the case where media_url is optional by adding condition logic that skips HTTP check when media_url is empty.",
+            "status": "pending",
+            "testStrategy": "1. Valid media URLs (status 200) route to success path\n2. Invalid/broken media URLs route to error branch\n3. Rows without media_url bypass HTTP check and continue\n4. Network failures don't crash workflow due to continueOnFail"
+          },
+          {
+            "id": 3,
+            "title": "Add Error Branch with Google Sheets Status Update",
+            "description": "Add Google Sheets Update node on the error branch to mark rows with status='error' and populate error_msg field with the appropriate error reason",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Add a Google Sheets Update node that handles both error branches (from 'Has Text' false and 'Media Valid' false). Configure the node to update the row by its row number, setting: status='error', error_msg dynamically based on error source ('Missing raw_text' for text validation failure, 'Invalid media URL' for media validation failure). Use a Set node before the Sheets update to determine the error message based on which branch triggered the error. Connect both error paths (missing text and invalid media) to this error handling flow. Ensure the workflow continues processing remaining rows after marking an error.",
+            "status": "pending",
+            "testStrategy": "1. Rows failing text validation show error_msg='Missing raw_text'\n2. Rows failing media validation show error_msg='Invalid media URL'\n3. Status column updates to 'error' for failed rows\n4. Workflow continues processing remaining valid rows after errors"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Configure Claude AI Credentials in n8n",
+        "description": "Set up Claude API credentials in n8n for AI caption generation",
+        "details": "Configure Claude (Anthropic) credentials in n8n for the AI caption generation step.\n\nPer PRD: Using Claude via OAuth/Max subscription (no per-call cost).\n\n1. In n8n (https://n8n.sethpc.xyz):\n   - Go to Credentials > Add Credential\n   - Search for 'Anthropic' or 'Claude'\n   - If not available, may need HTTP Request node with headers\n\n2. For native n8n Anthropic node:\n   - API Key: From Anthropic console\n   - Base URL: https://api.anthropic.com\n\n3. For HTTP Request fallback:\n   - Create Header Auth credential\n   - Header Name: x-api-key\n   - Header Value: <anthropic-api-key>\n   - Also set: anthropic-version header\n\n4. Test with a simple prompt\n\nDocument credential name: 'Gita Valley Claude'\n\nNote: Model to use - claude-3-5-sonnet or claude-3-opus depending on quality/cost tradeoff.",
+        "testStrategy": "1. Claude credential created in n8n\n2. Test API call succeeds with simple prompt\n3. Response returned correctly\n4. Credential name documented",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 13,
+        "title": "Create AI Caption System Prompt Template",
+        "description": "Design the system prompt for Claude that incorporates Gita Valley branding rules and platform-specific guidelines",
+        "details": "Create the base system prompt template for AI caption generation.\n\nCreate file: `prompts/caption-system-prompt.md`\n\n```markdown\n# Gita Valley Social Media Caption Generator\n\n## Brand Identity\n- Organization: Gita Valley\n- NEVER use: 'Gita Nagari' (legacy name)\n- Website: gitavalley.org\n- Tagline: 'Cultivating Soil and Soul'\n- Key claim: 'Only USDA Certified Slaughter-Free Dairy Farm in North America'\n\n## Brand Voice\n- Warm, welcoming, grounded\n- NOT preachy or overly spiritual\n- Lead with cows and farm life, religion secondary\n- Authentic, not corporate\n\n## Key Facts to Weave In\n- 85 cows, 16 producing milk\n- 400 gallons/week, $18/gallon ahimsa milk\n- 430 acres in Port Royal, PA\n- 501(c)(3) nonprofit\n- Founded 1974, official rebrand 2024\n\n## Named Cows (use when relevant)\n- Tabby, Dennis, Sparkle, Daring Denise, Brisham\n\n## Content Pillar Context\nThe post belongs to the '{pillar}' content pillar:\n- Cow Life (40%): personality-driven, emotional connection\n- Farm Ops (25%): educational, sustainability focus\n- Community (15%): spotlight format, gratitude, warmth\n- Kitchen (10%): farm-to-table, sattvic cuisine, chef Madhupan\n- Spiritual (5%): gentle, invitational, not doctrinal\n- CTA (5%): clear ask, impact framing\n```\n\nStore in repo for version control and iteration.",
+        "testStrategy": "1. System prompt file created in prompts/ directory\n2. Prompt includes all branding rules from PRD\n3. Pillar-specific guidance included\n4. Key facts and named cows listed\n5. Reviewed for tone accuracy",
+        "priority": "high",
+        "dependencies": [
+          12
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 14,
+        "title": "Create Platform-Specific Caption Prompts",
+        "description": "Create individual prompt templates for each platform (Instagram, Facebook, TikTok, Threads, LinkedIn) with platform-specific formatting rules",
+        "details": "Create platform-specific prompt additions that work with the base system prompt.\n\nCreate files in `prompts/` directory:\n\n1. `prompts/instagram.md`:\n```markdown\n## Instagram Post Guidelines\n- Visual focus - describe what viewers will see\n- 150-200 words\n- Emoji-rich (2-4 per post, natural placement)\n- 5-10 relevant hashtags at end\n- CTA in last line (comment, save, share, link in bio)\n- Hashtag suggestions: #farmlife #cowlove #regenerativeagriculture #sanctuaryfarm #ahimsa\n```\n\n2. `prompts/facebook.md`:\n```markdown\n## Facebook Post Guidelines\n- Storytelling format - full narrative arc\n- 200-300 words\n- End with a question to spark comments\n- Include link to gitavalley.org when relevant\n- More text-heavy than Instagram\n- Fewer emojis (0-2)\n```\n\n3. `prompts/tiktok.md`:\n```markdown\n## TikTok Caption Guidelines\n- HOOK FIRST: first 3 words must grab attention\n- Under 100 words total\n- Trending/casual language\n- 2-3 hashtags only\n- No formal tone\n```\n\n4. `prompts/threads.md`:\n```markdown\n## Threads Post Guidelines\n- Conversational, like talking to a friend\n- 1-2 sentences maximum\n- NO hashtags\n- Thought-provoking or witty\n- Can be a question or observation\n```\n\n5. `prompts/linkedin.md`:\n```markdown\n## LinkedIn Post Guidelines\n- Professional, impact-focused\n- 100-150 words\n- Mention university partnerships, internship program\n- Business/nonprofit angle\n- Sustainability and ethical farming focus\n- Call to action: connect, learn more, support\n```",
+        "testStrategy": "1. All 5 platform prompt files created\n2. Each follows PRD specifications for word count, style\n3. Prompts are composable with base system prompt\n4. Test generation produces distinct output per platform",
+        "priority": "high",
+        "dependencies": [
+          13
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 15,
+        "title": "Build AI Caption Generation Workflow",
+        "description": "Create n8n workflow that generates platform-specific captions using Claude for each target platform",
+        "details": "Create the AI caption generation workflow component.\n\nWorkflow: 'Gita Valley - Caption Generator' (or extend existing)\n\nNodes to add after content validation:\n\n10. **Set Variables**: Extract pillar and platforms\n    - pillar: $json.content_pillar\n    - platforms: array of checked platforms\n\n11. **Split by Platform**: Create separate items for each target platform\n    - Use a Function node to split into multiple items\n\n12. **HTTP Request - Claude API**: Generate caption\n    - Method: POST\n    - URL: https://api.anthropic.com/v1/messages\n    - Headers: x-api-key, anthropic-version: 2023-06-01\n    - Body:\n    ```json\n    {\n      \"model\": \"claude-3-5-sonnet-20241022\",\n      \"max_tokens\": 1024,\n      \"system\": \"<base_prompt + platform_prompt>\",\n      \"messages\": [\n        {\"role\": \"user\", \"content\": \"Generate a {platform} caption for:\\n\\n{raw_text}\"}\n      ]\n    }\n    ```\n\n13. **Merge**: Collect all generated captions back together\n\n14. **Set Fields**: Map captions to correct column names\n    - caption_ig, caption_fb, caption_tt, caption_th, caption_li\n\n15. **Google Sheets - Update**: Write captions back to Sheet\n    - Update columns K-O with generated captions\n    - Set status to 'pending_approval'\n\nExport to: `n8n-workflows/02-caption-generator.json`",
+        "testStrategy": "1. Workflow generates captions for each checked platform\n2. Captions follow platform-specific guidelines\n3. Captions written back to correct Sheet columns\n4. Status updated to 'pending_approval'\n5. Handles AI failures gracefully (continues with other platforms)",
+        "priority": "high",
+        "dependencies": [
+          11,
+          14
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Add Variable Extraction and Platform Splitting Logic",
+            "description": "Create Set Variables node to extract content_pillar and platforms array, then add Function node to split workflow into multiple items (one per checked platform)",
+            "dependencies": [],
+            "details": "Add two nodes after content validation: 1) Set Variables node extracting pillar ($json.content_pillar) and platforms array from the row's checked platform columns (col F-J booleans). 2) Function node that iterates over the platforms array and returns multiple items using: return items.flatMap(item => item.json.platforms.filter(p => p.checked).map(p => ({json: {...item.json, current_platform: p.name}})));. Each output item will have current_platform set for downstream processing. Test with mock data containing 2-3 checked platforms to verify item multiplication.",
+            "status": "pending",
+            "testStrategy": "Verify Function node outputs N items when N platforms are checked. Test edge cases: single platform, all 5 platforms, no platforms checked (should output empty)."
+          },
+          {
+            "id": 2,
+            "title": "Build Claude API HTTP Request Node with Prompt Composition",
+            "description": "Configure HTTP Request node to call Claude API with composed system prompt (base + platform-specific) and user message containing the raw content text",
+            "dependencies": [
+              1
+            ],
+            "details": "Add HTTP Request node with: Method POST, URL https://api.anthropic.com/v1/messages, Headers (x-api-key from credential, anthropic-version: 2023-06-01, content-type: application/json). Body structure: {model: 'claude-3-5-sonnet-20241022', max_tokens: 1024, system: '{{$json.base_system_prompt}}\\n\\n{{$json.platform_prompt}}', messages: [{role: 'user', content: 'Generate a {{$json.current_platform}} caption for:\\n\\n{{$json.raw_text}}'}]}. Use expression syntax to load prompts from files or inline. Add error handling with Continue On Fail to prevent single platform failure from blocking others.",
+            "status": "pending",
+            "testStrategy": "Test API call returns valid caption response. Verify system prompt composition includes both base branding rules and platform-specific guidelines. Check error handling when API fails (rate limit, auth error)."
+          },
+          {
+            "id": 3,
+            "title": "Add Merge Node and Set Fields for Caption Column Mapping",
+            "description": "Create Merge node to collect all platform captions back into single item, then Set Fields node to map each caption to its correct column name (caption_ig, caption_fb, caption_tt, caption_th, caption_li)",
+            "dependencies": [
+              2
+            ],
+            "details": "Add Merge node (mode: Merge By Position or custom merge logic) to collect all generated captions from the split items. Follow with Set Fields node that maps captions to Sheet column names based on platform: Switch/IF logic or Code node to assign: if current_platform='Instagram' -> caption_ig = response.content[0].text, if 'Facebook' -> caption_fb, if 'TikTok' -> caption_tt, if 'Threads' -> caption_th, if 'LinkedIn' -> caption_li. Output single item with all caption fields populated (nullish for unchecked platforms).",
+            "status": "pending",
+            "testStrategy": "Verify merged output contains all captions keyed to correct column names. Test partial platform selection (only 2 of 5 checked) produces correct sparse mapping. Validate caption text extracted correctly from Claude response structure."
+          },
+          {
+            "id": 4,
+            "title": "Add Google Sheets Update for Captions and Status",
+            "description": "Configure Google Sheets Update node to write generated captions to columns K-O and set status column to 'pending_approval'",
+            "dependencies": [
+              3
+            ],
+            "details": "Add Google Sheets node (operation: Update Row) targeting the Content Pipeline sheet. Map fields: Column K (caption_ig), L (caption_fb), M (caption_tt), N (caption_th), O (caption_li) from Set Fields output. Set status column (Column D) to 'pending_approval'. Use row number from original trigger to update correct row. Add error handling for Sheet API failures. After completing workflow, export entire workflow to n8n-workflows/02-caption-generator.json. Include connection to upstream trigger (watching for status='ready_for_captions' rows).",
+            "status": "pending",
+            "testStrategy": "End-to-end test: trigger with test row, verify all caption columns populated in Sheet, status changed to 'pending_approval'. Test idempotency (re-running doesn't corrupt data). Verify exported JSON is valid n8n workflow format."
+          }
+        ]
+      },
+      {
+        "id": 16,
+        "title": "Build Approval Workflow Trigger",
+        "description": "Create n8n workflow that watches for rows with status='approved' and triggers posting to Postiz",
+        "details": "Create a separate workflow that watches for approved content.\n\nWorkflow: 'Gita Valley - Approval Watcher'\n\nOption A - Polling (simpler):\n1. **Cron Trigger**: Run every 15 minutes\n2. **Google Sheets - Read**: Fetch all rows\n3. **Filter**: status = 'approved'\n4. **IF - Has Approved**: Continue if rows exist\n\nOption B - Webhook (if Google Sheets Apps Script set up):\n1. **Webhook Trigger**: Receive POST from Apps Script\n2. Apps Script fires on cell edit when status changes to 'approved'\n\nRecommendation: Start with Option A (polling), migrate to B later for efficiency.\n\nAfter trigger, the workflow connects to the Postiz posting nodes.\n\nExport to: `n8n-workflows/03-approval-watcher.json`",
+        "testStrategy": "1. Workflow detects rows with status='approved'\n2. Does not re-process already posted rows\n3. Handles multiple approved rows in batch\n4. Runs without error on empty result set",
+        "priority": "high",
+        "dependencies": [
+          15
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 17,
+        "title": "Build Postiz Post Creation Workflow",
+        "description": "Create n8n workflow nodes that create posts in Postiz via API for each approved platform",
+        "details": "Add Postiz posting nodes to the Approval Watcher workflow.\n\nNodes to add after approval detection:\n\n5. **Split by Platform**: For each checked platform in the row\n\n6. **Switch - Platform Router**: Route to platform-specific nodes\n    - Case: Instagram -> use channel_id for IG\n    - Case: Facebook -> use channel_id for FB\n    - etc.\n\n7. **Postiz - Create Post** (using n8n-nodes-postiz):\n    - Credential: Postiz API (already configured per context doc)\n    - Operation: Create Post\n    - Type: Scheduled or Now (based on preference)\n    - Channel ID: From CHANNEL_IDS mapping\n    - Content: Generated caption from Sheet\n    - Media: (Phase 3 - skip for now)\n\n8. **Merge**: Collect all post creation results\n\n9. **Function - Extract IDs**: Build postiz_ids array from responses\n\n10. **Google Sheets - Update**: \n    - Set status = 'posted'\n    - Write postiz_ids (JSON array)\n    - Write posted_at (timestamp)\n\n11. **Error Handling**: \n    - On Postiz API error: set status = 'error', write error_msg\n    - Continue processing other rows\n\nExport to: `n8n-workflows/03-approval-watcher.json` (update)",
+        "testStrategy": "1. Posts created in Postiz for each checked platform\n2. Postiz post IDs recorded in Sheet\n3. Status updated to 'posted' with timestamp\n4. Handles partial failures (some platforms fail, others succeed)\n5. Rate limiting respected (30 req/hour max)",
+        "priority": "high",
+        "dependencies": [
+          16,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Add Platform Splitting and Switch Node Router for Channel ID Routing",
+            "description": "Add a Function node to split approved rows into separate items per checked platform, then a Switch node to route each item to the correct platform-specific Postiz channel ID",
+            "dependencies": [],
+            "details": "After the approval detection nodes in the Approval Watcher workflow (03-approval-watcher.json), add: 1) Function node 'Split by Platform' that iterates over platform checkboxes (platforms_ig, platforms_fb, platforms_tt, platforms_th, platforms_li) and outputs multiple items, one per checked platform: return items.flatMap(item => ['ig','fb','tt','th','li'].filter(p => item.json['platforms_'+p]).map(p => ({json: {...item.json, current_platform: p}}))); 2) Switch node 'Platform Router' with cases for each platform value (ig, fb, tt, th, li) that routes to platform-specific branches. Each branch will use the corresponding channel_id from the CHANNEL_IDS.md configuration (to be documented in Tasks 3-7). Create placeholder variables CHANNEL_ID_IG, CHANNEL_ID_FB, CHANNEL_ID_TT, CHANNEL_ID_TH, CHANNEL_ID_LI that will be populated when channels are connected.",
+            "status": "pending",
+            "testStrategy": "Verify Function node outputs N items when N platforms are checked. Test Switch node routes 'ig' to Instagram branch, 'fb' to Facebook branch, etc. Test with row having 2 platforms checked produces 2 separate items. Test with all 5 platforms checked produces 5 items. Verify channel ID placeholders are correctly referenced per platform branch."
+          },
+          {
+            "id": 2,
+            "title": "Implement Postiz Create Post Nodes Using n8n-nodes-postiz",
+            "description": "Add Postiz Create Post nodes on each platform branch using the n8n-nodes-postiz community node (v0.2.17), configured with the correct channel ID and generated caption from the Sheet",
+            "dependencies": [
+              1
+            ],
+            "details": "For each Switch node output branch (Instagram, Facebook, TikTok, Threads, LinkedIn), add a Postiz node with: Operation='Create Post', Credential='Postiz API' (already configured per N8N_INTEGRATION.md at http://localhost:4007/api or https://postiz.sethpc.xyz/api), Channel ID from the CHANNEL_IDS mapping (use expression: {{$json['CHANNEL_ID_' + $json.current_platform.toUpperCase()]}} or switch-based lookup), Content field mapped to the appropriate caption column (caption_ig, caption_fb, caption_tt, caption_th, caption_li based on current_platform), Type='Now' or 'Scheduled' based on workflow preference (start with 'Now' for MVP). Media handling is Phase 3 scope - skip for now, post text-only. Add continueOnFail=true to allow partial success when some platforms fail. Each Postiz node output should include the created post ID in the response for downstream collection.",
+            "status": "pending",
+            "testStrategy": "Test Postiz API call succeeds with valid channel ID and caption content. Verify correct caption column is selected per platform (caption_ig for Instagram, etc.). Test with mock Postiz responses to ensure post ID extraction works. Verify continueOnFail allows workflow to continue if one platform fails. Test with Postiz credential validation."
+          },
+          {
+            "id": 3,
+            "title": "Add Merge and Function Node to Build postiz_ids JSON Array",
+            "description": "Add a Merge node to collect all Postiz post creation responses, then a Function node to extract and build a JSON array of all post IDs keyed by platform",
+            "dependencies": [
+              2
+            ],
+            "details": "After all platform-specific Postiz nodes: 1) Add Merge node (mode='Merge By Position' or 'Combine') to collect all responses from the platform branches back into a single workflow path. Configure to wait for all branches. 2) Add Function node 'Extract IDs' that builds a JSON array from all responses: const results = items.map(item => ({platform: item.json.current_platform, postiz_id: item.json.id || item.json.postId, status: item.json.error ? 'failed' : 'success', error: item.json.error || null})); return [{json: {postiz_ids: JSON.stringify(results), original_row: items[0].json.row_number, success_count: results.filter(r => r.status === 'success').length, fail_count: results.filter(r => r.status === 'failed').length}}]; The output should be a single item containing the postiz_ids JSON string ready for Sheet update, plus metadata for conditional status setting.",
+            "status": "pending",
+            "testStrategy": "Verify Merge node collects all platform responses (test with 2, 3, 5 platforms). Test Function node correctly extracts post IDs from Postiz response structure. Verify JSON array format is correct for Google Sheets cell. Test partial failure scenario: 2 succeed, 1 fails - verify both IDs and error captured. Validate success_count and fail_count calculations."
+          },
+          {
+            "id": 4,
+            "title": "Add Google Sheets Update for Posted Status with Error Handling Branch",
+            "description": "Add Google Sheets Update node to write status='posted', postiz_ids JSON array, and posted_at timestamp, plus error handling branch for Postiz API failures",
+            "dependencies": [
+              3
+            ],
+            "details": "After the Extract IDs Function node: 1) Add IF node checking success_count > 0 to determine success vs complete failure. 2) Success branch: Add Google Sheets Update node targeting the Content Pipeline sheet, updating by row_number: set status='posted', postiz_ids column (P) to the JSON array string, posted_at column (Q) to $now.format('YYYY-MM-DD HH:mm:ss'). 3) Error branch: Add Google Sheets Update node setting status='error', error_msg column (R) to a summary of failures from the postiz_ids array. 4) For partial failures (some platforms succeed, some fail): Use status='partial' or 'posted' with error details in error_msg. Add a final NoOp or Merge node to ensure workflow continues to process remaining rows. Export complete workflow to n8n-workflows/03-approval-watcher.json (updating existing file if present).",
+            "status": "pending",
+            "testStrategy": "End-to-end test: trigger with approved row, verify status changes to 'posted' in Sheet. Verify postiz_ids column contains valid JSON array of post IDs. Verify posted_at timestamp is correct timezone (America/New_York). Test complete failure scenario: all platforms fail - verify status='error' and error_msg populated. Test partial failure: verify appropriate status and both successes and failures recorded. Validate exported JSON is importable into n8n."
+          }
+        ]
+      },
+      {
+        "id": 18,
+        "title": "Implement Rate Limiting for Postiz API",
+        "description": "Add rate limiting logic to respect Postiz API's 30 requests/hour limit with exponential backoff",
+        "details": "Implement rate limiting to prevent hitting Postiz API limits.\n\nPer PRD: Postiz API rate limited to 30 requests/hour. Even 5 platforms x 5 posts/day = 25 req/day (safe), but bursts could hit limits.\n\nImplementation options:\n\n1. **Simple Delay**: Add Wait node between API calls\n   - Wait 3 seconds between each Postiz API call\n   - Spreads requests over time\n\n2. **Batch Processing**: Process max 5 posts per workflow run\n   - Use Limit node after filter\n   - Multiple runs catch remaining\n\n3. **Rate Limit Detection**:\n   - On 429 response from Postiz:\n   - Retry with exponential backoff: 30s, 60s, 120s\n   - Max 3 attempts per request\n\nAdd to workflow:\n```\n[Create Post] -> [IF - Rate Limited?] -> [Wait 30s] -> [Retry] (max 3x)\n                          |\n                          v\n                    [Continue to next post]\n```\n\nUpdate: `n8n-workflows/03-approval-watcher.json`",
+        "testStrategy": "1. Workflow handles 429 responses gracefully\n2. Exponential backoff delays between retries\n3. Max 3 retry attempts per request\n4. Posts not lost on rate limit (marked for retry or error)\n5. Test with simulated high volume",
+        "priority": "medium",
+        "dependencies": [
+          17
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Add IF Node to Detect 429 Rate Limit Response",
+            "description": "Create an IF node in the approval-watcher workflow that checks for HTTP 429 (Too Many Requests) response from Postiz API calls and routes to retry logic",
+            "dependencies": [],
+            "details": "In `n8n-workflows/03-approval-watcher.json`, add an IF node after each Postiz API HTTP Request node. Configure the IF condition to check: `{{ $json.statusCode === 429 }}` or check the error response for rate limit indicators. The true branch routes to the retry/backoff logic, while the false branch continues normal processing. Also initialize a retry counter variable `$workflow.retryCount` set to 0 when first entering this section.",
+            "status": "pending",
+            "testStrategy": "1. Simulate 429 response from Postiz API and verify IF node correctly routes to retry branch. 2. Verify non-429 responses continue through normal flow. 3. Test that retry counter initializes correctly on first attempt."
+          },
+          {
+            "id": 2,
+            "title": "Implement Exponential Backoff with Wait Nodes",
+            "description": "Add Wait nodes configured for exponential backoff delays (30s, 60s, 120s) based on retry attempt number before retrying the Postiz API call",
+            "dependencies": [
+              1
+            ],
+            "details": "Create a Switch node (or nested IF nodes) that routes based on current retry count: count=0 -> Wait 30s, count=1 -> Wait 60s, count=2 -> Wait 120s. After each Wait node, increment the retry counter using a Set node: `{{ $workflow.retryCount + 1 }}`. Then loop back to retry the original Postiz API call. Use n8n's built-in Wait node with 'Resume: After Time Interval' mode. Connect the Wait output back to the Postiz HTTP Request node to create the retry loop.",
+            "status": "pending",
+            "testStrategy": "1. Verify Wait node delays match specification (30s, 60s, 120s). 2. Confirm retry counter increments correctly after each wait. 3. Test that retry loop correctly re-executes the Postiz API call. 4. Verify exponential progression: 30s -> 60s -> 120s."
+          },
+          {
+            "id": 3,
+            "title": "Add Max 3 Attempts Logic with Final Error Marking",
+            "description": "Implement maximum retry limit of 3 attempts, marking posts with error status in Google Sheet when all retries are exhausted",
+            "dependencies": [
+              2
+            ],
+            "details": "Add an IF node to check `{{ $workflow.retryCount >= 3 }}` before attempting another retry. If max retries reached (true branch): 1) Use Google Sheets node to update the row's status column to 'error', 2) Set error_msg column to 'Rate limit exceeded after 3 retries', 3) Continue to next post in queue. If retries remaining (false branch): proceed to Wait node for backoff. This ensures posts are not lost but marked for manual review or future retry. Add a final summary node that logs how many posts succeeded vs failed due to rate limiting.",
+            "status": "pending",
+            "testStrategy": "1. Verify workflow stops retrying after exactly 3 attempts. 2. Confirm Google Sheet row updated with status='error' and appropriate error_msg. 3. Test that workflow continues processing remaining posts after max retries on one post. 4. Verify retry counter resets for each new post being processed."
+          }
+        ]
+      },
+      {
+        "id": 19,
+        "title": "Add Error Handling and Alerting",
+        "description": "Implement comprehensive error handling across workflows with alerting for critical failures",
+        "details": "Add robust error handling per PRD error table.\n\nError scenarios to handle:\n\n1. **Google Sheets unreachable**:\n   - Retry 3x with exponential backoff (5s, 15s, 45s)\n   - On final failure: alert via email/Slack\n\n2. **AI caption generation fails**:\n   - Mark row status = 'error'\n   - Write error_msg = 'AI caption generation failed: {error}'\n   - Continue processing other rows\n\n3. **Postiz API rate limit (30/hr)**:\n   - Queue with exponential backoff\n   - Max 3 attempts\n   - On final failure: mark error, continue\n\n4. **Postiz API auth failure**:\n   - CRITICAL - Stop processing\n   - Alert immediately\n   - Mark all pending rows as 'error'\n\n5. **Media URL invalid/broken**:\n   - Per config: post text-only OR mark error\n   - Add setting node at start: MEDIA_REQUIRED = false\n\n6. **Platform not connected in Postiz**:\n   - Skip platform, post to connected ones\n   - Log warning (not error)\n   - Note in error_msg: 'Platform X not connected'\n\nAdd Error Trigger workflow:\n- Workflow: 'Gita Valley - Error Handler'\n- Sends consolidated error report\n- Email and/or Slack notification\n\nExport to: `n8n-workflows/04-error-handler.json`",
+        "testStrategy": "1. Each error scenario handled per specification\n2. Rows marked with appropriate status and error_msg\n3. Critical alerts fire for auth failures\n4. Non-critical errors logged but don't stop workflow\n5. Retry logic works for transient failures",
+        "priority": "medium",
+        "dependencies": [
+          18
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Add Retry Logic with Exponential Backoff for Google Sheets Failures",
+            "description": "Implement retry mechanism with exponential backoff (5s, 15s, 45s) for Google Sheets API failures across all workflows that access the content sheet",
+            "dependencies": [],
+            "details": "Modify existing Google Sheets nodes in workflows to handle transient failures:\n\n1. Wrap Google Sheets read/write operations in error handling\n2. Implement retry logic with 3 attempts using exponential backoff:\n   - 1st retry: wait 5 seconds\n   - 2nd retry: wait 15 seconds\n   - 3rd retry: wait 45 seconds\n3. Use n8n's built-in retry mechanism or Function node with setTimeout equivalent\n4. On final failure after 3 retries:\n   - Capture error details (timestamp, operation type, error message)\n   - Trigger error handler workflow via HTTP Request or Execute Workflow node\n5. Apply to all workflows: 01-caption-generator.json, 02-approval-watcher.json, 03-posting-workflow.json\n6. Create reusable error handling sub-workflow if n8n supports it, otherwise duplicate pattern consistently",
+            "status": "pending",
+            "testStrategy": "1. Simulate Google Sheets API timeout/failure (disconnect network briefly or use invalid credentials temporarily)\n2. Verify retry attempts occur at correct intervals (5s, 15s, 45s)\n3. Confirm workflow continues after successful retry\n4. Verify error handler triggered after 3 failed attempts\n5. Check error details captured correctly (timestamp, operation, message)"
+          },
+          {
+            "id": 2,
+            "title": "Implement AI Generation Failure Handling with Error Marking",
+            "description": "Add error handling for AI caption generation failures that marks affected rows with error status while allowing other rows to continue processing",
+            "dependencies": [
+              1
+            ],
+            "details": "Modify the caption generation workflow (01-caption-generator.json) to handle AI failures gracefully:\n\n1. Wrap OpenRouter/AI API calls in try-catch equivalent (Error Trigger or IF node checking for errors)\n2. On AI generation failure for a specific row:\n   - Update Google Sheet row: status = 'error'\n   - Write error_msg = 'AI caption generation failed: {specific_error_message}'\n   - Log the failure with row identifier and timestamp\n3. Use SplitInBatches node to process rows individually so one failure doesn't stop others\n4. After error marking, continue to next row in batch (don't halt workflow)\n5. Track error count for summary reporting to error handler\n6. Include relevant context in error_msg: which model failed, what prompt was used (truncated), HTTP status if applicable\n7. Consider adding retry (1-2 attempts) for transient AI API failures before marking as error",
+            "status": "pending",
+            "testStrategy": "1. Test with invalid AI API key to simulate auth failure\n2. Test with malformed prompt that causes AI error\n3. Verify row status updated to 'error' with descriptive error_msg\n4. Confirm subsequent rows still process successfully\n5. Verify error count tracked for reporting\n6. Test retry behavior for transient failures"
+          },
+          {
+            "id": 3,
+            "title": "Add Critical Alert Pathway for Postiz Auth Failures",
+            "description": "Implement immediate alerting and workflow halt mechanism for Postiz API authentication failures, marking all pending rows as error",
+            "dependencies": [
+              1
+            ],
+            "details": "Create critical error handling for Postiz API authentication failures:\n\n1. Detect Postiz auth failures (HTTP 401/403 responses) in posting workflow\n2. On auth failure detection:\n   - IMMEDIATELY stop all further Postiz API calls (use Stop and Error node)\n   - Trigger critical alert to error handler with priority=critical flag\n   - Include details: timestamp, which API endpoint failed, response body\n3. Mark all pending/approved rows as error:\n   - Query Google Sheet for rows with status='approved' or status='pending'\n   - Batch update all to status='error'\n   - Set error_msg='Postiz API authentication failed - manual intervention required'\n4. Critical alert should bypass normal batching and send immediately\n5. Add to alert: instructions for resolution (check API key, verify Postiz account status)\n6. Consider adding a 'critical_error' status distinct from regular 'error' for visibility\n7. Log the incident with full context for debugging",
+            "status": "pending",
+            "testStrategy": "1. Test with invalid Postiz API key to trigger 401\n2. Verify workflow stops immediately (no further API calls attempted)\n3. Confirm all pending rows marked as error with appropriate message\n4. Verify critical alert fires immediately (not batched)\n5. Check alert contains full diagnostic information\n6. Verify no data loss (rows recoverable after fixing auth)"
+          },
+          {
+            "id": 4,
+            "title": "Create Error Handler Workflow with Consolidated Reporting",
+            "description": "Build dedicated error handler workflow (04-error-handler.json) that receives error events and sends consolidated reports via email and/or Slack",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "Create new workflow 'Gita Valley - Error Handler' exported to n8n-workflows/04-error-handler.json:\n\n1. **Trigger Options**:\n   - Webhook trigger to receive error events from other workflows\n   - Accept payload: {error_type, severity, message, workflow_source, timestamp, affected_rows, context}\n\n2. **Error Classification**:\n   - IF node to route by severity: 'critical' vs 'warning' vs 'info'\n   - Critical errors (auth failures): immediate notification\n   - Non-critical errors: batch for consolidated report\n\n3. **Batching Logic** (for non-critical):\n   - Store errors in workflow static data or external store\n   - Send consolidated report every 15-30 minutes if errors exist\n   - Or send immediately if error count exceeds threshold (e.g., 5)\n\n4. **Notification Nodes**:\n   - Email node (Gmail or SMTP): Configure with recipient list\n   - Slack node (optional): Post to designated channel\n   - Format: Clear subject line, error summary table, affected rows, suggested actions\n\n5. **Report Format**:\n   - Subject: '[Gita Valley] {severity}: {error_count} errors in social automation'\n   - Body: Timestamp, workflow source, error messages, affected content rows, resolution steps\n\n6. **Configuration**:\n   - Add credential placeholders for email/Slack\n   - Environment variable or settings node for notification preferences",
+            "status": "pending",
+            "testStrategy": "1. Trigger webhook with test error payload\n2. Verify critical errors send immediate notification\n3. Verify non-critical errors batch correctly\n4. Test email delivery with correct formatting\n5. Test Slack posting if configured\n6. Verify consolidated report includes all batched errors\n7. Export workflow and verify valid JSON structure"
+          }
+        ]
+      },
+      {
+        "id": 20,
+        "title": "Add Google Drive Image Download Support",
+        "description": "Implement image download from Google Drive shared links for media attachments",
+        "details": "Add media handling for images from Google Drive.\n\nPhase 3 per PRD - Media Handling.\n\n1. **Parse Google Drive URL**: Extract file ID\n   - Format: https://drive.google.com/file/d/{FILE_ID}/view\n   - Use regex: `/d\\/([a-zA-Z0-9_-]+)/`\n\n2. **Google Drive - Download**: Fetch file binary\n   - Credential: Google Drive (same as Sheets or separate)\n   - File ID: extracted from URL\n   - Return: binary data\n\n3. **Validate Image**:\n   - Check format: JPEG, PNG, WebP\n   - Check file size (platform limits vary):\n     - Instagram: 8MB max\n     - Facebook: 4MB max\n     - TikTok: N/A for images\n     - LinkedIn: 5MB max\n   - Check dimensions if required\n\n4. **Convert if needed**: \n   - Convert WebP to JPEG if platform doesn't support\n   - Resize if over dimension limits\n\n5. **Upload to Postiz**:\n   - Postiz may require media uploaded separately\n   - Then attach media ID to post\n\nAdd nodes to posting workflow:\n```\n[Has media_url?] -> [Extract File ID] -> [Drive Download] -> [Validate] -> [Upload to Postiz] -> [Create Post with Media]\n                  |\n                  v (no media)\n            [Create Text-Only Post]\n```\n\nUpdate: `n8n-workflows/03-approval-watcher.json`",
+        "testStrategy": "1. Google Drive images download successfully\n2. File format validation works (rejects unsupported)\n3. File size validation per platform\n4. Images attach to Postiz posts correctly\n5. Handles missing/broken media gracefully",
+        "priority": "medium",
+        "dependencies": [
+          17
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Add regex extraction node for Google Drive file ID from URL pattern",
+            "description": "Create an n8n Code or Set node that extracts the file ID from Google Drive URLs using the regex pattern /d\\/([a-zA-Z0-9_-]+)/. The node should handle the standard format https://drive.google.com/file/d/{FILE_ID}/view and output the extracted FILE_ID for downstream nodes.",
+            "dependencies": [],
+            "details": "Implementation steps:\n1. Add a Code node (JavaScript) after the 'Has media_url?' conditional check\n2. Input: media_url field from Google Sheet row\n3. Regex pattern: `/\\/d\\/([a-zA-Z0-9_-]+)/`\n4. Extract capture group 1 as fileId\n5. Handle edge cases: null/empty URL, malformed URLs, non-Drive URLs\n6. Output: { fileId: string | null, isValidDriveUrl: boolean }\n7. If extraction fails, route to text-only post branch\n\nExample input: https://drive.google.com/file/d/1ABC123xyz/view?usp=sharing\nExpected output: { fileId: '1ABC123xyz', isValidDriveUrl: true }",
+            "status": "pending",
+            "testStrategy": "Test with valid Drive URLs (view, sharing links), invalid URLs, empty strings, and non-Drive URLs. Verify fileId extraction is correct and isValidDriveUrl flag routes correctly."
+          },
+          {
+            "id": 2,
+            "title": "Configure Google Drive node for file download with binary data handling",
+            "description": "Set up the Google Drive n8n node to download files by ID, returning binary data. Configure credentials (may reuse Google Sheets OAuth2 or create separate Drive credential with drive.readonly scope). Handle download errors and timeouts.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implementation steps:\n1. Check if existing Google Sheets credential has drive.readonly scope (Task 9 dependency)\n2. If not, create new credential: Google OAuth2 with drive.readonly scope\n3. Add Google Drive node with operation: 'Download File'\n4. Configure:\n   - File ID: from previous node output (fileId)\n   - Binary Property Name: 'mediaFile'\n5. Set timeout: 30 seconds (images typically small)\n6. Add error handling: catch 404 (file not found), 403 (permissions), timeout\n7. On error: log issue, route to text-only post fallback\n8. Output: binary data in 'mediaFile' property with MIME type preserved",
+            "status": "pending",
+            "testStrategy": "Test download with valid shared file ID, private file (should fail gracefully), non-existent file ID, and large file (verify timeout behavior). Confirm binary data and MIME type are correctly captured."
+          },
+          {
+            "id": 3,
+            "title": "Add image validation logic for format and platform-specific size limits",
+            "description": "Implement validation node to check downloaded image format (JPEG, PNG, WebP only) and file size against platform-specific limits: Instagram 8MB, Facebook 4MB, LinkedIn 5MB, TikTok N/A. Reject unsupported formats and oversized files with appropriate error routing.",
+            "dependencies": [
+              2
+            ],
+            "details": "Implementation steps:\n1. Add Code node after Drive download\n2. Read binary metadata: MIME type, file size (bytes)\n3. Format validation:\n   - Allowed: image/jpeg, image/png, image/webp\n   - Reject: GIF, BMP, TIFF, etc.\n4. Size limits (convert to bytes):\n   - Instagram: 8388608 (8MB)\n   - Facebook: 4194304 (4MB)\n   - LinkedIn: 5242880 (5MB)\n   - TikTok: skip (video platform)\n5. Check against selected platforms from Sheet row (platforms_ig, platforms_fb, platforms_li)\n6. If any selected platform fails size check: flag for resize or reject\n7. Output: { isValidFormat: boolean, platformSizeStatus: { ig: 'ok'|'oversized', fb: ... }, needsConversion: boolean (true if WebP and platform doesn't support) }\n8. Route invalid formats to error handler, oversized to resize branch (future), valid to upload",
+            "status": "pending",
+            "testStrategy": "Test with JPEG/PNG/WebP (should pass format), GIF/BMP (should reject). Test file sizes at boundaries: 3.9MB (all pass), 4.5MB (FB fail), 7MB (FB/LI fail), 9MB (all fail). Verify platform-specific logic routes correctly."
+          },
+          {
+            "id": 4,
+            "title": "Integrate with Postiz media upload flow and update posting nodes",
+            "description": "Connect validated images to Postiz media upload API, then attach the returned media ID to post creation. Update the approval-watcher workflow to include the complete media branch: extract -> download -> validate -> upload -> post with media. Handle the text-only fallback path.",
+            "dependencies": [
+              3
+            ],
+            "details": "Implementation steps:\n1. Research Postiz media upload endpoint (likely POST /api/media or similar)\n2. Add HTTP Request node for media upload:\n   - Method: POST\n   - URL: {{$credentials.postiz.apiUrl}}/media (verify exact endpoint)\n   - Body: multipart/form-data with binary mediaFile\n   - Headers: Authorization from Postiz credential\n3. Parse response: extract media_id\n4. Modify existing Postiz Create Post node:\n   - Add conditional: if media_id exists, attach to post\n   - Field likely: mediaIds: [media_id] or similar\n5. Update workflow structure:\n   - Add IF node: Has media_url?\n   - True branch: fileId extraction -> Drive download -> Validate -> Upload -> Create Post with Media\n   - False branch: Create Text-Only Post (existing flow)\n6. Add error handling: if media upload fails, fall back to text-only with warning\n7. Test end-to-end: Sheet row with media_url should result in post with attached image",
+            "status": "pending",
+            "testStrategy": "End-to-end test: 1) Sheet row with valid Drive image URL -> image appears in Postiz post, 2) Sheet row without media_url -> text-only post, 3) Invalid media_url -> graceful fallback to text-only with logged warning, 4) Verify Postiz post shows attached image in preview."
+          }
+        ]
+      },
+      {
+        "id": 21,
+        "title": "Add Google Drive Video Download Support",
+        "description": "Implement video download from Google Drive shared links with format validation for TikTok/Instagram",
+        "details": "Extend media handling for video content.\n\nVideo-specific requirements:\n\n1. **Download Video**: Similar to image download\n   - May need larger timeout for video files\n   - Consider streaming for large files\n\n2. **Validate Video**:\n   - Format: MP4 (primary), MOV\n   - Duration limits:\n     - TikTok: 10 min max (but short preferred)\n     - Instagram Reels: 90 seconds max\n     - Instagram Feed: 60 seconds max\n     - Facebook: 240 minutes max\n   - File size limits:\n     - TikTok: 287.6MB (up to 4GB for some accounts)\n     - Instagram: 100MB feed, 250MB reels\n\n3. **Platform Routing**:\n   - IF TikTok checked AND video:\n     - Ensure video meets TikTok requirements\n     - May need dimension adjustment (9:16 aspect)\n\n4. **Instagram Reels Support**:\n   - Detect video content for Instagram\n   - Route to Reels endpoint if supported by Postiz\n\nAdd to workflow:\n```\n[Detect Media Type] -> [IF Video] -> [Video Validation] -> [Platform Requirements] -> [Upload & Post]\n```\n\nNote: Video processing may require external service if transcoding needed.",
+        "testStrategy": "1. Google Drive videos download successfully\n2. Video format validation works\n3. Duration/size limits enforced per platform\n4. Videos attach to posts correctly\n5. TikTok-specific requirements met",
+        "priority": "medium",
+        "dependencies": [
+          20
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Extend media detection to identify video files vs images",
+            "description": "Modify the existing media detection logic from Task 20 to distinguish between video files (MP4, MOV) and image files (JPEG, PNG, WebP) based on file extension and MIME type from Google Drive metadata.",
+            "dependencies": [],
+            "details": "1. Update the Google Drive file metadata retrieval to include mimeType field\n2. Create a media type detection function that categorizes files:\n   - Video: video/mp4 (.mp4), video/quicktime (.mov)\n   - Image: image/jpeg, image/png, image/webp\n3. Add a 'media_type' field to the workflow data structure ('video' or 'image')\n4. Extend download handling for videos:\n   - Increase timeout for video downloads (videos can be 100MB+)\n   - Consider streaming approach for files >50MB to avoid memory issues\n5. Update error messages to distinguish between unsupported video vs image formats\n6. Ensure backwards compatibility - existing image handling continues to work",
+            "status": "pending",
+            "testStrategy": "1. Test MP4 file is correctly identified as video\n2. Test MOV file is correctly identified as video\n3. Test JPEG/PNG files still identified as images\n4. Test unsupported video format (e.g., AVI) is rejected with appropriate error\n5. Test large video file (>50MB) downloads successfully with extended timeout\n6. Unit test media type detection function with various MIME types"
+          },
+          {
+            "id": 2,
+            "title": "Add video-specific duration validation per platform",
+            "description": "Implement video duration extraction and validation against platform-specific limits: TikTok (10 min max), Instagram Reels (90 seconds), Instagram Feed (60 seconds), Facebook (240 minutes).",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Research and integrate video metadata extraction:\n   - Option A: Use ffprobe via n8n Execute Command node (requires ffmpeg installed)\n   - Option B: Use a cloud service API for video metadata\n   - Option C: Parse MP4 moov atom directly (complex but no dependencies)\n2. Extract video duration in seconds from downloaded file\n3. Create platform duration limits configuration:\n   ```\n   DURATION_LIMITS = {\n     'tiktok': 600,      # 10 minutes\n     'instagram_reels': 90,\n     'instagram_feed': 60,\n     'facebook': 14400   # 240 minutes\n   }\n   ```\n4. Validate duration against each selected platform's limit\n5. Return clear error message indicating which platform(s) the video exceeds limits for\n6. Consider warning for TikTok videos >60s (short-form preferred)",
+            "status": "pending",
+            "testStrategy": "1. Test video under all platform limits passes validation\n2. Test 5-minute video passes TikTok/FB but fails Instagram\n3. Test 2-minute video fails Instagram Reels (90s limit)\n4. Test 15-minute video fails TikTok limit\n5. Verify error messages clearly state which platform limit was exceeded\n6. Test duration extraction works for both MP4 and MOV formats"
+          },
+          {
+            "id": 3,
+            "title": "Add video file size validation per platform",
+            "description": "Implement file size validation for videos against platform-specific limits: TikTok (287.6MB standard), Instagram Feed (100MB), Instagram Reels (250MB).",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Get file size from Google Drive metadata or downloaded file\n2. Create platform file size limits configuration (in bytes):\n   ```\n   SIZE_LIMITS = {\n     'tiktok': 301465600,      # 287.6MB\n     'instagram_feed': 104857600,  # 100MB\n     'instagram_reels': 262144000, # 250MB\n     'facebook': 4294967296    # 4GB (generous limit)\n   }\n   ```\n3. Validate file size against each selected platform's limit\n4. For Instagram, determine if posting to Feed or Reels:\n   - If duration >60s, must be Reels (250MB limit)\n   - If duration <=60s, could be Feed (100MB limit) - use stricter limit\n5. Return clear error message with actual size vs limit\n6. Consider pre-download size check using Google Drive metadata to fail fast for oversized files",
+            "status": "pending",
+            "testStrategy": "1. Test video under all size limits passes validation\n2. Test 150MB video passes TikTok/Reels but fails Instagram Feed\n3. Test 300MB video fails TikTok limit\n4. Verify error message shows both actual size and platform limit\n5. Test pre-download size check catches oversized files early\n6. Test size validation works correctly when multiple platforms selected"
+          },
+          {
+            "id": 4,
+            "title": "Handle TikTok aspect ratio requirements and Instagram Reels routing",
+            "description": "Implement aspect ratio detection for TikTok's 9:16 vertical video preference and configure proper routing for Instagram Reels vs Feed based on video characteristics.",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "1. Extract video dimensions (width x height) from metadata:\n   - Use same tool as duration extraction (ffprobe or equivalent)\n2. Calculate aspect ratio and categorize:\n   - Portrait/Vertical: 9:16 (0.5625) - ideal for TikTok/Reels\n   - Square: 1:1 - acceptable for all platforms\n   - Landscape: 16:9 (1.778) - not ideal for TikTok\n3. For TikTok platform selection:\n   - If aspect ratio is not 9:16, add warning to response\n   - Note: Do NOT auto-transcode (requires external service)\n   - Document that user should provide 9:16 video for TikTok\n4. For Instagram routing:\n   - If video duration >60s: route to Reels endpoint\n   - If video is 9:16 and <=90s: recommend Reels\n   - Check Postiz API for Reels-specific endpoint or parameter\n5. Add platform_routing field to workflow output:\n   ```\n   platform_routing: {\n     instagram: 'reels' | 'feed',\n     tiktok: 'video',\n     aspect_ratio_warning: boolean\n   }\n   ```",
+            "status": "pending",
+            "testStrategy": "1. Test 9:16 video is flagged as TikTok-optimal\n2. Test 16:9 video triggers aspect ratio warning for TikTok\n3. Test 1:1 square video passes without warning\n4. Test video >60s routes to Instagram Reels\n5. Test video <=60s with 9:16 aspect recommends Reels\n6. Verify platform_routing object is correctly populated\n7. Integration test: verify Postiz receives correct routing parameters"
+          }
+        ]
+      },
+      {
+        "id": 22,
+        "title": "Implement Optimal Posting Time Scheduling",
+        "description": "Configure default optimal posting times per platform based on farm/agricultural account research",
+        "details": "Phase 4 per PRD - Scheduling Intelligence.\n\nResearch and implement optimal posting times.\n\n1. **Research Best Posting Times** (agriculture/farm accounts):\n   - Instagram: Typically 6-9 AM, 12 PM, 7-9 PM ET\n   - Facebook: 1-4 PM, Tuesday-Thursday\n   - TikTok: 7-9 PM, varies by day\n   - LinkedIn: 7-8 AM, 12 PM, 5-6 PM\n   - Threads: Mirror Instagram\n\n2. **Create Time Slot Configuration**:\n   - Morning: 7 AM ET\n   - Midday: 12 PM ET\n   - Evening: 7 PM ET\n\n3. **Add to Google Sheet** (optional column):\n   - posting_time (DROPDOWN: morning, midday, evening, specific)\n   - If 'specific': use date column time component\n\n4. **Default Time Assignment**:\n   - If no time specified, assign based on platform best practices\n   - Instagram/Threads: Morning\n   - Facebook: Midday\n   - LinkedIn: Morning\n   - TikTok: Evening\n\n5. **n8n Implementation**:\n   - Calculate schedule datetime from date + time slot\n   - Pass to Postiz scheduled post creation\n\nCreate config file: `config/posting-times.json`\n```json\n{\n  \"slots\": {\n    \"morning\": \"07:00\",\n    \"midday\": \"12:00\",\n    \"evening\": \"19:00\"\n  },\n  \"defaults\": {\n    \"instagram\": \"morning\",\n    \"facebook\": \"midday\",\n    \"tiktok\": \"evening\",\n    \"threads\": \"morning\",\n    \"linkedin\": \"morning\"\n  },\n  \"timezone\": \"America/New_York\"\n}\n```",
+        "testStrategy": "1. Posting times configured per platform\n2. Default times apply when not specified\n3. Sheet column for override works\n4. Scheduled posts created at correct times\n5. Timezone handling correct (America/New_York)",
+        "priority": "low",
+        "dependencies": [
+          17
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 23,
+        "title": "Build Analytics Query Workflow",
+        "description": "Create workflow to query Postiz API for post engagement metrics and populate analytics sheet",
+        "details": "Phase 4 per PRD - Analytics Reporting.\n\nCreate analytics collection workflow.\n\nWorkflow: 'Gita Valley - Analytics Collector'\n\n1. **Cron Trigger**: Run weekly (Sunday 6 AM)\n\n2. **Date Calculation**: Calculate last 7 days range\n\n3. **Postiz API - Get Posts**: Fetch posts from date range\n   - Filter: posted in last 7 days\n   - Include engagement metrics\n\n4. **Loop Posts**: For each post, collect metrics:\n   - likes/reactions\n   - comments\n   - shares\n   - reach/impressions (if available)\n\n5. **Google Sheets - Analytics Tab**: Write to separate tab\n   - Columns: post_id, platform, date, content_pillar, likes, comments, shares, reach, engagement_rate\n\n6. **Calculate Aggregates**:\n   - Total engagement by platform\n   - Average engagement by pillar\n   - Best performing posts\n\n7. **Pillar Distribution Check**:\n   - Count posts per pillar\n   - Compare to targets: 40/25/15/10/5/5\n   - Flag significant deviations\n\nExport to: `n8n-workflows/05-analytics-collector.json`\n\nCreate analytics Sheet tab: 'Analytics'",
+        "testStrategy": "1. Workflow runs weekly without error\n2. Engagement metrics collected from Postiz\n3. Analytics tab populated correctly\n4. Pillar distribution calculated\n5. Aggregations compute correctly",
+        "priority": "low",
+        "dependencies": [
+          17
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create weekly cron workflow with date range calculation",
+            "description": "Set up the base n8n workflow with weekly cron trigger (Sunday 6 AM) and date calculation nodes to compute the last 7 days range for analytics queries.",
+            "dependencies": [],
+            "details": "Create new workflow file `n8n-workflows/05-analytics-collector.json`. Add Cron node configured for Sunday 6 AM execution. Add Function node to calculate date range: `startDate = today - 7 days`, `endDate = today`. Use moment.js or native Date for calculations. Output ISO format dates for Postiz API compatibility. Include timezone handling for ET.",
+            "status": "pending",
+            "testStrategy": "1. Cron trigger fires at scheduled time (test with manual trigger). 2. Date calculation produces correct 7-day range. 3. Dates formatted correctly for API consumption. 4. Workflow imports successfully into n8n."
+          },
+          {
+            "id": 2,
+            "title": "Build Postiz API query loop for engagement metrics",
+            "description": "Implement the Postiz API integration to fetch posts from the date range and extract engagement metrics (likes, comments, shares, reach) for each post.",
+            "dependencies": [
+              1
+            ],
+            "details": "Add HTTP Request node to query Postiz GET /posts endpoint with date range filter. Use SplitInBatches node to loop through posts respecting 30 req/hour rate limit. For each post, extract: post_id, platform, posted_date, likes/reactions, comments, shares, reach/impressions. Map content to pillar based on existing Sheet data or post tags. Calculate engagement_rate = (likes + comments + shares) / reach. Handle missing metrics gracefully (default to 0 or null).",
+            "status": "pending",
+            "testStrategy": "1. API returns posts within date range. 2. Engagement metrics extracted correctly from response. 3. Rate limiting prevents API throttling. 4. Missing metrics handled without workflow failure. 5. Engagement rate calculated accurately."
+          },
+          {
+            "id": 3,
+            "title": "Add Google Sheets tab creation and analytics write logic with pillar distribution",
+            "description": "Create the Analytics tab in Google Sheets, write collected metrics data, and implement pillar distribution calculations comparing actual vs target percentages.",
+            "dependencies": [
+              2
+            ],
+            "details": "Add Google Sheets node to create 'Analytics' tab if not exists with columns: post_id, platform, date, content_pillar, likes, comments, shares, reach, engagement_rate. Append rows for each processed post. Add Function node to calculate aggregates: total engagement by platform, average engagement by pillar, identify top 3 performing posts. Implement pillar distribution check: count posts per pillar, compare to targets (40/25/15/10/5/5 for spiritual/farm/events/behind-scenes/seasonal/collaborative), flag deviations >10%. Write summary row or separate summary section.",
+            "status": "pending",
+            "testStrategy": "1. Analytics tab created with correct schema. 2. Post metrics written to correct columns. 3. Aggregates computed accurately. 4. Pillar distribution percentages calculated correctly. 5. Deviations from targets flagged appropriately. 6. Duplicate posts not re-added on re-run."
+          }
+        ]
+      },
+      {
+        "id": 24,
+        "title": "Build Post Verification Workflow",
+        "description": "Create workflow to verify posts actually published on each platform via Postiz status check",
+        "details": "Phase 4 per PRD - Post-Publish Monitoring.\n\nVerify that scheduled posts actually went live.\n\nWorkflow: 'Gita Valley - Post Verifier'\n\n1. **Cron Trigger**: Run daily at 9 PM ET (after all daily posts)\n\n2. **Google Sheets - Read**: Get today's 'posted' rows\n\n3. **Extract postiz_ids**: Get all Postiz post IDs\n\n4. **Loop IDs**: For each Postiz ID:\n   - Query Postiz API for post status\n   - Check if status = 'published' or equivalent\n\n5. **Compare Expected vs Actual**:\n   - Expected: all posts from Sheet with status='posted'\n   - Actual: all posts confirmed published in Postiz\n   - Identify gaps\n\n6. **Alert on Failures**:\n   - If expected != actual:\n   - Send alert email/Slack\n   - Log to error sheet tab\n\n7. **Update Sheet** (optional):\n   - Add verified_at timestamp\n   - Add verification_status column\n\nExport to: `n8n-workflows/06-post-verifier.json`",
+        "testStrategy": "1. Workflow detects published vs pending posts\n2. Gaps between expected and actual identified\n3. Alerts fire on mismatches\n4. Silent failures detected (Postiz success but no post)\n5. Daily summary accurate",
+        "priority": "low",
+        "dependencies": [
+          17
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create Daily 9 PM Workflow with Posted Rows Reader and ID Extraction",
+            "description": "Build the n8n workflow foundation with cron trigger at 9 PM ET, Google Sheets reader for today's 'posted' rows, and postiz_id extraction logic",
+            "dependencies": [],
+            "details": "Create workflow 'Gita Valley - Post Verifier' in n8n. Add Cron node set to 9 PM ET (0 21 * * * in America/New_York timezone). Connect to Google Sheets Read node filtered by: 1) status='posted', 2) posted_at date equals today. Add Function node to extract all postiz_id values into an array for iteration. Handle case where no posted rows exist (workflow should complete silently). Save initial structure to n8n-workflows/06-post-verifier.json",
+            "status": "pending",
+            "testStrategy": "1. Cron triggers at correct time (9 PM ET). 2. Reads only today's posted rows, not older ones. 3. Extracts postiz_ids correctly into iterable array. 4. Handles empty result set without error. 5. Workflow exports to correct JSON path"
+          },
+          {
+            "id": 2,
+            "title": "Build Postiz API Status Check Loop for Each Post ID",
+            "description": "Implement loop over extracted postiz_ids to query Postiz API for each post's publication status and collect results",
+            "dependencies": [
+              1
+            ],
+            "details": "Add SplitInBatches or Loop node to iterate over postiz_ids array. For each ID, add HTTP Request node to query Postiz API GET /posts/{id} endpoint using configured Postiz credentials. Extract status field from response (check for 'published', 'completed', or equivalent success status per Postiz API docs). Collect results into comparison array with structure: {postiz_id, expected_status: 'posted', actual_status: <api_response>, is_published: boolean}. Add error handling for API failures (404 for deleted posts, timeouts). Respect rate limiting (30 req/hour max - add Wait node if needed for large batches)",
+            "status": "pending",
+            "testStrategy": "1. Loop iterates all postiz_ids without skipping. 2. API requests use correct credentials and endpoint. 3. Status parsing handles various Postiz response formats. 4. Rate limiting respected for 30+ posts. 5. Individual API failures don't break entire loop"
+          },
+          {
+            "id": 3,
+            "title": "Add Expected vs Actual Comparison Logic and Alert Mechanism",
+            "description": "Implement comparison between expected posted rows and actual Postiz published status, with email/Slack alerts for mismatches",
+            "dependencies": [
+              2
+            ],
+            "details": "Add Function node to compare expected (Sheet 'posted' count) vs actual (Postiz 'published' count). Identify gaps: posts marked 'posted' in Sheet but not confirmed published in Postiz. Create mismatch report with: post title, postiz_id, expected vs actual status, platform. Add IF node to branch on mismatches > 0. On mismatch: Send alert via Email node (or Slack if configured) with mismatch details. Optionally log to 'Errors' tab in Google Sheet with timestamp and details. On success (all match): Log summary count to workflow execution. Optionally add verified_at timestamp and verification_status='verified' columns to Sheet rows",
+            "status": "pending",
+            "testStrategy": "1. Comparison correctly identifies matching vs mismatched posts. 2. Alert fires only when mismatches exist (not on success). 3. Alert contains actionable details (which posts failed). 4. Silent failures detected (Postiz API says success but post not live). 5. Sheet update with verification timestamp works correctly"
+          }
+        ]
+      },
+      {
+        "id": 25,
+        "title": "Document Complete Workflow Architecture",
+        "description": "Create comprehensive documentation of all workflows, their interactions, and operational procedures",
+        "details": "Create complete system documentation.\n\nCreate: `docs/WORKFLOW_ARCHITECTURE.md`\n\nSections:\n\n1. **System Overview**\n   - Architecture diagram (ASCII or Mermaid)\n   - Component list with purposes\n   - Data flow description\n\n2. **Workflows Reference**\n   - 01-sheet-reader.json: Purpose, trigger, outputs\n   - 02-caption-generator.json: AI integration, prompts\n   - 03-approval-watcher.json: Posting flow\n   - 04-error-handler.json: Error scenarios\n   - 05-analytics-collector.json: Metrics collection\n   - 06-post-verifier.json: Verification\n\n3. **Credentials Required**\n   - Google Sheets API\n   - Google Drive API\n   - Claude/Anthropic API\n   - Postiz API\n   - Channel IDs per platform\n\n4. **Google Sheet Schema**\n   - Full column reference\n   - Status flow diagram\n   - Data validation rules\n\n5. **Operational Procedures**\n   - Daily operations checklist\n   - Error response procedures\n   - How to add new content\n   - How to connect new platforms\n\n6. **Troubleshooting Guide**\n   - Common errors and fixes\n   - How to check workflow status\n   - Manual override procedures",
+        "testStrategy": "1. Documentation created and comprehensive\n2. All workflows documented\n3. Credentials list complete\n4. Procedures are actionable\n5. Troubleshooting covers known issues",
+        "priority": "medium",
+        "dependencies": [
+          19,
+          20,
+          21
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create Architecture Overview with System Diagram",
+            "description": "Create the foundation of WORKFLOW_ARCHITECTURE.md with a comprehensive system overview section including ASCII/Mermaid diagram showing all 6 workflows and their interactions, component list with purposes, and data flow description",
+            "dependencies": [],
+            "details": "Create `docs/WORKFLOW_ARCHITECTURE.md` with System Overview section. Include: (1) Mermaid or ASCII diagram showing 6 workflows (01-sheet-reader, 02-caption-generator, 03-approval-watcher, 04-error-handler, 05-analytics-collector, 06-post-verifier) and how they connect via Google Sheets status field and Postiz API, (2) Component list explaining each workflow's purpose, (3) Data flow from raw content entry through caption generation, approval, posting, verification, and analytics collection. Show the Google Sheet as central data store and Postiz as posting destination.",
+            "status": "pending",
+            "testStrategy": "Verify diagram accurately represents all 6 workflows, shows correct data flow direction, and component descriptions match actual workflow purposes"
+          },
+          {
+            "id": 2,
+            "title": "Document All Six Workflow References",
+            "description": "Create detailed documentation for each of the 6 n8n workflows including purpose, trigger mechanism, node descriptions, inputs, outputs, and error handling behavior",
+            "dependencies": [
+              1
+            ],
+            "details": "Add Workflows Reference section documenting each workflow: (1) 01-sheet-reader.json - purpose, cron/polling trigger, Sheet read operations, outputs to status field, (2) 02-caption-generator.json - Claude/Anthropic API integration, prompt templates, platform-specific caption generation, (3) 03-approval-watcher.json - approval detection trigger, Postiz posting flow, status updates, (4) 04-error-handler.json - error scenarios covered, notification mechanisms, retry logic, (5) 05-analytics-collector.json - weekly cron, metrics collection from Postiz, Sheet population, (6) 06-post-verifier.json - verification triggers, success/failure handling. Include node-by-node descriptions with inputs and outputs for each workflow.",
+            "status": "pending",
+            "testStrategy": "Verify each workflow section covers purpose, trigger, all key nodes, inputs/outputs format, and matches actual workflow JSON structure"
+          },
+          {
+            "id": 3,
+            "title": "Add Credentials, Sheet Schema, and Operational Procedures",
+            "description": "Complete the documentation with credentials reference, Google Sheet schema documentation, operational procedures, and troubleshooting guide sections",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Add remaining sections: (1) Credentials Required - Google Sheets API, Google Drive API, Claude/Anthropic API, Postiz API with required scopes and channel IDs per platform, (2) Google Sheet Schema - full column reference (Date, Content Pillar, Raw Text, Media URL, Platforms, Status, Generated Captions, Post IDs, Error Messages), status flow diagram (draft→ready→generating→pending_approval→approved→posting→posted/error), data validation rules, (3) Operational Procedures - daily operations checklist, error response procedures, how to add new content rows, how to connect new social platforms in Postiz, (4) Troubleshooting Guide - common errors (API rate limits, auth failures, invalid media), checking workflow status in n8n, manual override procedures for stuck posts.",
+            "status": "pending",
+            "testStrategy": "Verify credentials list is complete, Sheet schema matches actual Sheet structure, procedures are step-by-step actionable, and troubleshooting covers errors from 04-error-handler workflow"
+          }
+        ]
+      },
+      {
+        "id": 26,
+        "title": "Create Operational Runbook",
+        "description": "Create step-by-step runbook for daily operations, content reviewer workflow, and troubleshooting",
+        "details": "Create runbook for farm staff and content reviewers.\n\nCreate: `docs/OPERATIONS_RUNBOOK.md`\n\nSections:\n\n1. **Daily Content Entry** (for farm staff):\n   - Open Google Sheet: [link]\n   - Create new row:\n     - Date: YYYY-MM-DD\n     - Content Pillar: Select from dropdown\n     - Raw Text: Write 1-3 sentences\n     - Media URL: Paste Google Drive link\n     - Platforms: Check boxes\n     - Status: Set to 'draft' initially\n   - When ready: Change status to 'ready'\n   - Done! AI generates captions by 6 AM next day\n\n2. **Approval Workflow** (for content reviewer):\n   - Check Sheet for 'pending_approval' rows\n   - Review AI-generated captions (columns K-O)\n   - Edit if needed (directly in cells)\n   - If approved: Change status to 'approved'\n   - Posts go live within 15 minutes\n\n3. **Checking Post Status**:\n   - 'posted' rows: Successfully published\n   - 'error' rows: Check error_msg column\n   - postiz_ids column: Links to Postiz dashboard\n\n4. **Common Issues**:\n   - 'AI generation failed': Check raw_text not empty\n   - 'Invalid media URL': Ensure Drive link is shared\n   - 'Platform not connected': Contact admin\n\n5. **Emergency Contacts**:\n   - Seth (server admin): seth@sethfreiberg.com\n   - [Content lead TBD]\n\n6. **Target Posting Cadence**:\n   - Instagram: 4-5 posts/week\n   - Facebook: 3-4 posts/week\n   - TikTok: 3-5 short videos/week\n   - Threads: Mirror Instagram\n   - LinkedIn: 1-2 posts/week",
+        "testStrategy": "1. Runbook written in plain language\n2. Steps are specific and numbered\n3. Screenshots/examples included where helpful\n4. Tested with non-technical user\n5. Covers all common scenarios",
+        "priority": "medium",
+        "dependencies": [
+          25
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 27,
+        "title": "Configure Default Workflow Schedule",
+        "description": "Set up the production cron schedule for all workflows and document the timing",
+        "details": "Configure final production schedules for all workflows.\n\nWorkflow Schedules (America/New_York timezone):\n\n1. **Sheet Reader + Caption Generator** (01 + 02):\n   - Cron: 0 6 * * * (6:00 AM daily)\n   - Purpose: Generate captions for today's content\n\n2. **Approval Watcher** (03):\n   - Cron: */15 * * * * (every 15 minutes)\n   - Purpose: Detect and post approved content quickly\n   - Note: Could be triggered via webhook for faster response\n\n3. **Error Handler** (04):\n   - Triggered by other workflows on error\n   - No independent schedule\n\n4. **Analytics Collector** (05):\n   - Cron: 0 6 * * 0 (6:00 AM every Sunday)\n   - Purpose: Weekly analytics summary\n\n5. **Post Verifier** (06):\n   - Cron: 0 21 * * * (9:00 PM daily)\n   - Purpose: Verify day's posts went live\n\nCreate: `docs/SCHEDULE_REFERENCE.md`\n\n| Workflow | Schedule | Timezone | Purpose |\n|----------|----------|----------|----------|\n| Caption Generator | 6 AM daily | ET | Generate AI captions |\n| Approval Watcher | Every 15 min | ET | Post approved content |\n| Analytics | 6 AM Sunday | ET | Weekly report |\n| Verifier | 9 PM daily | ET | Confirm posts live |",
+        "testStrategy": "1. All workflows have correct cron schedules\n2. Timezone set to America/New_York\n3. Schedule reference documented\n4. No schedule conflicts/overlaps\n5. Workflows execute at configured times",
+        "priority": "medium",
+        "dependencies": [
+          17,
+          19
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 28,
+        "title": "End-to-End Integration Test",
+        "description": "Perform complete end-to-end test of the pipeline from Sheet entry to published post",
+        "details": "Comprehensive integration test of the full pipeline.\n\nTest Scenario:\n\n1. **Create Test Content**:\n   - Add row to Google Sheet:\n     - date: today\n     - content_pillar: 'Cow Life'\n     - raw_text: 'Tabby enjoyed her morning grazing in the east pasture today. The dew was still fresh on the grass.'\n     - media_url: <valid Google Drive image link>\n     - platforms: IG ✓, FB ✓\n     - status: 'ready'\n\n2. **Trigger Caption Generation**:\n   - Manually run the Sheet Reader workflow\n   - Verify captions generated in Sheet\n   - Check caption quality/branding compliance\n\n3. **Approval Flow**:\n   - Review generated captions\n   - Change status to 'approved'\n\n4. **Posting Flow**:\n   - Wait for Approval Watcher (or manually trigger)\n   - Verify posts created in Postiz\n   - Check postiz_ids populated in Sheet\n   - Check status = 'posted'\n\n5. **Verify on Platforms** (if channels connected):\n   - Check Instagram for post\n   - Check Facebook for post\n\n6. **Error Scenario Test**:\n   - Create row with missing raw_text\n   - Verify marked as error\n   - Create row with invalid media_url\n   - Verify handled per config\n\nDocument results in: `docs/INTEGRATION_TEST_RESULTS.md`",
+        "testStrategy": "1. Full pipeline executes without manual intervention\n2. AI captions generated and written to Sheet\n3. Posts created in Postiz with correct content\n4. Media attached correctly\n5. Error scenarios handled gracefully\n6. All status transitions work correctly",
+        "priority": "high",
+        "dependencies": [
+          17,
+          19,
+          20
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create test content row in Google Sheet with all required fields",
+            "description": "Add a complete test row to the Google Sheet with date, content_pillar, raw_text, media_url, platforms, and status fields to serve as the integration test input",
+            "dependencies": [],
+            "details": "Create a new row in the content Google Sheet with: date=today, content_pillar='Cow Life', raw_text='Tabby enjoyed her morning grazing in the east pasture today. The dew was still fresh on the grass.', media_url=<valid Google Drive image link>, platforms with IG and FB checkboxes marked, status='ready'. Verify all fields are correctly formatted and the row is visible in the Sheet.",
+            "status": "pending",
+            "testStrategy": "Verify row appears in Sheet with all fields populated correctly, status shows 'ready', and platform checkboxes are marked"
+          },
+          {
+            "id": 2,
+            "title": "Trigger and verify caption generation workflow with quality check",
+            "description": "Manually run the Sheet Reader workflow to trigger caption generation and verify AI output quality and branding compliance",
+            "dependencies": [
+              1
+            ],
+            "details": "Manually trigger the 01-sheet-reader.json workflow in n8n. Monitor workflow execution for successful completion. Check the Google Sheet for generated captions in the appropriate columns. Verify caption quality: appropriate tone for Gita Valley brand, includes relevant hashtags, meets character limits for IG (2200) and FB. Check that captions reflect the 'Cow Life' content pillar with farm/sanctuary messaging.",
+            "status": "pending",
+            "testStrategy": "Captions appear in Sheet, AI output is on-brand and platform-appropriate, workflow completes without errors, caption fields populated correctly"
+          },
+          {
+            "id": 3,
+            "title": "Execute approval and posting flow with Postiz verification",
+            "description": "Change status to approved, trigger posting workflow, and verify posts created in Postiz with correct Sheet updates",
+            "dependencies": [
+              2
+            ],
+            "details": "Update the test row status from 'ready' to 'approved' in Google Sheet. Wait for 03-approval-watcher.json workflow to detect the change (or manually trigger). Verify posts are created in Postiz dashboard for both Instagram and Facebook channels. Check that postiz_ids are populated back in the Sheet. Confirm status updates to 'posted'. If channels are connected, verify posts appear on actual Instagram and Facebook platforms.",
+            "status": "pending",
+            "testStrategy": "Approval watcher triggers on status change, Postiz posts created with correct content and media, postiz_ids populated in Sheet, status='posted', posts visible in Postiz dashboard (and on platforms if connected)"
+          },
+          {
+            "id": 4,
+            "title": "Test error scenarios and document all results in INTEGRATION_TEST_RESULTS.md",
+            "description": "Create rows with missing raw_text and invalid media_url to test error handling, then document all test results comprehensively",
+            "dependencies": [
+              3
+            ],
+            "details": "Create error test cases: 1) Row with missing raw_text - verify marked as error with appropriate message. 2) Row with invalid media_url - verify handled per config (error status or fallback). Document all integration test results in docs/INTEGRATION_TEST_RESULTS.md including: test date, each scenario executed, expected vs actual results, screenshots/evidence, pass/fail status, any issues discovered, and recommendations. Include both happy path and error scenario results.",
+            "status": "pending",
+            "testStrategy": "Error scenarios trigger 04-error-handler.json correctly, rows marked with appropriate error status and messages, INTEGRATION_TEST_RESULTS.md created with comprehensive documentation of all test scenarios and outcomes"
+          }
+        ]
+      },
+      {
+        "id": 29,
+        "title": "Create Sample Content Calendar Entries",
+        "description": "Populate Google Sheet with 10-15 sample content entries covering all pillars for testing and demonstration",
+        "details": "Create realistic sample content for testing and demonstration.\n\nSample entries to create (covering all pillars):\n\n**Cow Life (40% target):**\n1. Dennis the bull enjoying his afternoon rest under the maple tree\n2. Sparkle and her calf exploring the new pasture fence\n3. Morning milking routine with our 16 producing cows\n4. Daring Denise lives up to her name - escaped the barn twice today\n5. Tabby greeting visitors at the farm gate\n6. Brisham's 15th birthday celebration\n\n**Farm Ops (25% target):**\n7. Maple syrup tapping season begins - 430 acres of forest\n8. Our regenerative grazing rotation in action\n9. Behind the scenes: how we produce 400 gallons weekly\n\n**Community (15% target):**\n10. Volunteer spotlight: Meet Sarah from the university program\n11. Weekend retreat group practicing yoga with the sunrise\n\n**Kitchen (10% target):**\n12. Chef Madhupan's signature paneer from our ahimsa milk\n13. Farm-to-table: tonight's sattvic dinner menu\n\n**Spiritual (5% target):**\n14. Morning kirtan as the sun rises over the pastures\n\n**CTA (5% target):**\n15. Help us care for 85 retired dairy cows - Adopt-a-Cow program\n\nAdd media URLs from existing Google Photos albums:\n- Alternative Break Quotes\n- Parijata Dasi collection\n- GN Farm Videos\n\nSet various dates across next 2 weeks.",
+        "testStrategy": "1. 10-15 rows created in Sheet\n2. All content pillars represented proportionally\n3. Mix of image and video content\n4. Valid Google Drive media URLs\n5. Various platform combinations tested",
+        "priority": "medium",
+        "dependencies": [
+          8
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 30,
+        "title": "Handoff Documentation for Seth Deployment",
+        "description": "Create deployment handoff document for Seth to update live n8n instance with new workflows",
+        "details": "Per context doc: Seth manages the live server. Create handoff for deployment.\n\nCreate: `docs/DEPLOYMENT_HANDOFF.md`\n\nSections:\n\n1. **What's Being Deployed**:\n   - List of n8n workflows (JSON files)\n   - Required credentials\n   - Configuration values\n\n2. **Prerequisites**:\n   - Google Cloud project with Sheets/Drive API\n   - Anthropic API access (or OAuth setup)\n   - Social channels connected in Postiz\n\n3. **Deployment Steps**:\n   - Import workflow JSON files into n8n\n   - Create credentials (step-by-step)\n   - Update workflow variables with production values\n   - Activate workflows\n\n4. **Configuration Values Needed**:\n   - Google Sheet ID: [TBD]\n   - Channel IDs (from Postiz):\n     - Instagram: [TBD]\n     - Facebook: [TBD]\n     - TikTok: [TBD]\n     - Threads: [TBD]\n     - LinkedIn: [TBD]\n   - Postiz API URL: https://postiz.sethpc.xyz/api\n\n5. **Testing After Deploy**:\n   - Manual workflow trigger test\n   - Verify Sheet read/write\n   - Verify AI generation\n   - Verify Postiz posting\n\n6. **Rollback Procedure**:\n   - How to disable workflows\n   - How to restore previous version",
+        "testStrategy": "1. Handoff document complete and clear\n2. All steps are specific and numbered\n3. Configuration values identified (even if TBD)\n4. Seth can follow without additional context\n5. Rollback procedure documented",
+        "priority": "high",
+        "dependencies": [
+          25,
+          26,
+          27
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2026-02-24T04:13:37.628Z",
+      "updated": "2026-02-24T04:13:37.628Z",
+      "description": "Tasks for master context"
+    }
+  }
+}

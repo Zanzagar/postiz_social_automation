@@ -1,0 +1,277 @@
+# PRD: Gita Valley Social Media Automation Pipeline
+
+## Overview
+
+Build an automated social media content pipeline for Gita Valley (430-acre ISKCON eco-farm and cow sanctuary, Port Royal, PA) using Postiz (self-hosted scheduler) and n8n (workflow automation). The system reads from a Google Sheets content calendar, generates platform-specific AI captions via Claude, routes through a manual approval step, and publishes to Instagram, Facebook, TikTok, Threads, and LinkedIn via the Postiz API.
+
+Architecture: n8n = brain (orchestration + AI), Postiz = hands (scheduling + publishing).
+
+## Problem Statement
+
+Gita Valley has compelling daily content — 85 cows, regenerative farming, community events, cooking, retreats — but no system for consistent social media posting. Posts happen sporadically with multi-month gaps, resulting in 0.2-0.4% engagement rates vs. 3-6% benchmarks for similar farm accounts. One intern's viral TikTok generated 1,200 internship applications, proving the content resonates when posted.
+
+## Goals
+
+1. Automate content publishing to 5 social media platforms from a single Google Sheets content calendar
+2. Generate platform-optimized AI captions that follow Gita Valley branding guidelines
+3. Achieve consistent posting cadence (target 3+ posts/week/platform, configurable)
+4. Reduce manual effort: farm staff write 1-3 sentences of raw text, system handles the rest
+5. Maintain brand consistency across all platforms (always "Gita Valley", never "Gita Nagari")
+6. Support manual approval workflow before publishing (auto-publish configurable later)
+
+## Non-Goals
+
+- User-generated content (UGC) capture and reposting
+- YouTube channel creation and integration (separate initiative)
+- A/B testing of captions or post times
+- Direct message management or community engagement responses
+- Custom analytics dashboard (Phase 4 uses Postiz built-in + Sheet reporting)
+- WhatsApp Business API integration (stretch goal only, not required for MVP)
+- Automated brand consistency validation beyond AI prompt enforcement (pending temple meeting)
+
+## Technical Architecture
+
+### Infrastructure (Already Deployed)
+
+- Postiz at https://postiz.sethpc.xyz (Docker, behind reverse proxy on Seth's server)
+- n8n at https://n8n.sethpc.xyz (Docker, behind reverse proxy)
+- PostgreSQL 17 (Postiz database)
+- Redis 7.2 (Postiz cache)
+- Temporal 1.28 + Elasticsearch (workflow engine)
+- This repo tracks desired state (docker-compose, workflow exports, documentation)
+
+### Pipeline Data Flow
+
+```
+Farm staff fills Google Sheets row:
+  date, content pillar, raw text, media URL, target platforms
+  Sets status -> "ready"
+        |
+        v
+n8n Cron Trigger (daily, configurable time)
+  Reads rows where: date = today AND status = "ready"
+        |
+        v
+Content Validator (n8n IF node)
+  Checks: text exists, media URL valid, platforms specified
+  Invalid -> marks row "error" with error_msg
+        |
+        v
+AI Caption Generator (Claude via OAuth/Max subscription)
+  Generates 1 caption per target platform
+  Brand voice rules baked into system prompt
+  Content pillar context shapes tone
+        |
+        v
+Google Sheets Update
+  Writes generated captions back to Sheet
+  Sets status -> "pending_approval"
+        |
+        v
+Reviewer approves in Sheet (status -> "approved")
+        |
+        v
+n8n Trigger (watches for "approved" rows)
+  Creates post in Postiz via API for each target platform
+  Schedules for optimal time window
+        |
+        v
+Google Sheets Update
+  status -> "posted", stores Postiz post IDs, timestamp
+```
+
+### Key Constraints
+
+- Postiz API is in beta: 30 requests/hour rate limit (sufficient: even 5 platforms x 5 posts/day = 25 req/day)
+- Facebook/Instagram require Facebook Business App review (~1 month approval)
+- TikTok has separate app approval process
+- n8n and Postiz are on separate hosts — communicate via public HTTPS URLs
+- AI cost: $0/call via Claude OAuth/Max subscription (no per-API-call budget needed)
+- Seth manages the live server; we have direct access to n8n
+
+## Feature Requirements
+
+### Phase 1: Foundation
+Depends on: nothing (starting point)
+
+#### 1.1 Environment Setup
+- Verify Docker stack health (all services running via docker compose)
+- Verify Postiz accessible at https://postiz.sethpc.xyz
+- Verify n8n accessible at https://n8n.sethpc.xyz
+- Document current .env configuration and service versions
+
+#### 1.2 Postiz Configuration
+- Verify admin user account in Postiz dashboard
+- Generate and securely store Postiz API key
+- Configure Postiz organization settings (name: "Gita Valley", timezone: America/New_York)
+
+#### 1.3 Social Channel Connections
+- Connect Instagram (@gita.valley) via Facebook Business integration in Postiz
+- Connect Facebook page (fb.com/gitavalley) in Postiz
+- Connect TikTok (@gitavalley) in Postiz
+- Connect Threads (gita.valley) in Postiz
+- Connect LinkedIn (Gita Valley) in Postiz
+- Document channel IDs for each connected platform (needed for API calls)
+- Note: Platform approvals may take weeks. Design workflows to work with whatever subset is connected.
+
+#### 1.4 Google Sheets Content Calendar
+- Create Google Sheet with schema:
+  - Columns: date, content_pillar (dropdown), raw_text, media_url, platforms (checkboxes: IG/FB/TT/TH/LI), status (dropdown: draft/ready/pending_approval/approved/posted/error), caption_ig, caption_fb, caption_tt, caption_th, caption_li, postiz_ids, posted_at, error_msg
+- Configure Google Sheets API credentials in n8n
+- Create 5-10 sample rows with real Gita Valley content for testing
+- Set up n8n Google Sheets node to read/write the sheet
+
+#### 1.5 Basic n8n Workflow (Text-Only, No AI)
+- Create n8n workflow: "Gita Valley Social Publisher"
+- Cron trigger: runs daily at configurable time (default 6 AM ET)
+- Google Sheets read: fetch rows where date = today AND status = "ready"
+- Content validation: verify raw_text exists and at least one platform checked
+- Postiz createPost: publish raw text to each checked platform
+- Google Sheets update: set status = "posted", record postiz_ids and posted_at
+- Error handling: set status = "error" with error_msg on failure, continue other rows
+
+### Phase 2: AI Caption Pipeline
+Depends on: Phase 1 (1.4 Google Sheets, 1.5 basic workflow)
+
+#### 2.1 AI Provider Configuration
+- Configure Claude credentials in n8n (OAuth/Max subscription, no per-call cost)
+- Create n8n AI node with system prompt template
+- System prompt includes: branding rules, voice guidelines, tagline, key claims
+- Model-agnostic prompt design so provider can be swapped in n8n if needed
+
+#### 2.2 Platform-Specific Caption Generation
+- Instagram: visual focus, 5-10 hashtags, emoji-rich, 150-200 words, CTA in last line
+- Facebook: storytelling, 200-300 words, question to spark comments, link to gitavalley.org
+- TikTok: short hook (first 3 words grab attention), trending language, 2-3 hashtags, under 100 words
+- Threads: conversational, no hashtags, 1-2 sentences, thought-provoking
+- LinkedIn: professional, impact-focused, university partnership angles, 100-150 words
+- Each platform gets its own AI call with platform-specific instructions
+- Captions written back to Google Sheet (caption_ig, caption_fb, etc.)
+
+#### 2.3 Content Pillar Integration
+- AI prompt includes the content_pillar from the sheet row
+- Pillar-specific tone adjustments:
+  - "Cow Life" (40%): personality-driven, name specific cows (Tabby, Dennis, Sparkle, Daring Denise, Brisham), emotional connection
+  - "Farm Ops" (25%): educational, sustainability focus, behind-the-scenes, regenerative agriculture
+  - "Community" (15%): spotlight format, gratitude, warmth, volunteer/intern stories
+  - "Kitchen" (10%): recipe teasers, farm-to-table narrative, sattvic cuisine, head chef Madhupan
+  - "Spiritual" (5%): gentle, invitational, not doctrinal, morning routines, festivals
+  - "CTA" (5%): clear ask, impact framing, urgency without pressure (donate, visit, volunteer, adopt-a-cow)
+
+#### 2.4 Approval Workflow Integration
+- After AI generates captions, n8n writes them to Sheet and sets status "pending_approval"
+- Reviewer reads captions in Sheet, edits if needed, sets status "approved"
+- Second n8n trigger watches for "approved" rows and publishes via Postiz
+- Configurable: per-platform or per-pillar auto-publish can bypass approval (future)
+
+#### 2.5 Updated Workflow
+- Full flow: Cron -> Read Sheet -> Validate -> Generate Captions -> Write to Sheet -> Wait for Approval -> Post to Postiz -> Update Sheet
+- Handle AI failures: if caption generation fails for one platform, still generate for others
+
+### Phase 3: Media Handling
+Depends on: Phase 2 (AI pipeline working)
+
+#### 3.1 Image Support
+- Accept Google Drive shared links in media_url column
+- n8n downloads image from Drive URL before passing to Postiz
+- Supported formats: JPEG, PNG, WebP
+- Validate image file size (max per platform) and dimensions before posting
+- Handle missing/broken media URLs: post text-only or mark "error" (configurable)
+
+#### 3.2 Video Support
+- Accept Google Drive video links in media_url column
+- Video format validation: MP4, max duration per platform
+- TikTok: ensure video meets dimension/length requirements
+- Instagram Reels: support video content alongside static posts
+
+#### 3.3 Google Drive Integration
+- n8n Google Drive node watches a shared folder for new media
+- Optional: auto-create Google Sheets rows when new media appears in folder
+- Link media files to content calendar entries
+
+### Phase 4: Optimization & Analytics
+Depends on: Phase 3 (full media pipeline working), 3+ weeks of posting data
+
+#### 4.1 Scheduling Intelligence
+- Research and configure optimal posting times per platform for farm/agricultural accounts
+- Implement posting time slots (morning, afternoon, evening) configurable per platform
+- Default optimal times baked in, overridable per-row in Sheet
+
+#### 4.2 Analytics Reporting
+- Query Postiz API for post engagement metrics (likes, shares, comments, reach)
+- Weekly summary in a separate Google Sheet tab: engagement by platform, pillar, post type
+- Identify top-performing content pillars and posting times
+- Track content pillar distribution vs. targets (40/25/15/10/5/5)
+- Alert when pillar weights deviate significantly from targets
+
+#### 4.3 Per-Platform Workflow Split
+- Refactor monolithic n8n workflow into per-platform child workflows
+- Dispatcher workflow reads Google Sheets, triggers per-platform children
+- Enables independent enable/disable per platform
+- Better error isolation and debugging
+
+#### 4.4 Post-Publish Monitoring
+- Verify posts actually published on each platform (Postiz status check)
+- Alert on silent failures (Postiz returns success but post not visible)
+- Daily health check: compare expected vs. actual published posts
+- Error dashboard in Google Sheet tab
+
+## Branding Rules (Enforced in All AI-Generated Content)
+
+- Name: "Gita Valley" — NEVER "Gita Nagari" in new content
+- Website: gitavalley.org
+- Tagline: "Cultivating Soil and Soul"
+- Key differentiator: "Only USDA Certified Slaughter-Free Dairy Farm in North America"
+- Voice: warm, welcoming, grounded — NOT preachy or overly spiritual
+- Lead with cows and farm, religion secondary
+- Key facts: 85 cows, 16 producing milk, 400 gallons/week, $18/gallon ahimsa milk, 430 acres, Port Royal PA, 501(c)(3) nonprofit
+
+## Social Accounts
+
+| Platform | Handle | Followers | Notes |
+|----------|--------|-----------|-------|
+| Instagram | @gita.valley | 4,414 | Fully rebranded |
+| Facebook | fb.com/gitavalley | 5,700 | Name still "Gita Nagari Farm" — needs admin rebrand |
+| TikTok | @gitavalley | 198 | Partial rebrand, old logo |
+| Threads | gita.valley | Unknown | Linked from Instagram |
+| LinkedIn | Gita Valley | Unknown | Professional/institutional audience |
+
+## Error Handling
+
+| Failure | Response |
+|---------|----------|
+| Google Sheets unreachable | Retry 3x with exponential backoff, then alert |
+| AI caption generation fails | Mark row "error", log reason, continue other rows |
+| Postiz API rate limit (30/hr) | Queue with exponential backoff, max 3 attempts |
+| Postiz API auth failure | Alert, mark "error", stop processing |
+| Media URL invalid/broken | Post text-only or mark "error" (configurable) |
+| Platform not connected in Postiz | Skip platform, post to connected ones, log warning |
+
+## Success Metrics
+
+- Posting consistency: 0 gaps > 3 days on any connected platform
+- Engagement improvement: from 0.2-0.4% to 1%+ within 3 months of consistent posting
+- Staff time: content calendar entry < 5 minutes per post (fill 4 fields, done)
+- System reliability: < 5% error rate on scheduled posts
+- Brand consistency: 100% of AI-generated posts follow branding rules
+- Approval turnaround: < 24 hours from "pending_approval" to "approved" (operational target)
+
+## Posting Cadence (Configurable Defaults)
+
+| Platform | Default Frequency |
+|----------|------------------|
+| Instagram | 4-5 posts/week + daily Stories |
+| Facebook | 3-4 posts/week |
+| TikTok | 3-5 short videos/week |
+| Threads | Mirror Instagram |
+| LinkedIn | 1-2 posts/week |
+
+Finalized at temple president meeting (pushed to after system is built).
+
+## Open Decisions (Pending Temple President Meeting)
+
+- Posting frequency per platform (defaults provided above)
+- Platform priority order for initial rollout
+- Whether to add automated brand consistency validation beyond AI prompts
+- Who is the designated content reviewer for approval workflow
+- Facebook page rebrand authorization (still "Gita Nagari Farm" with 5.7K followers)

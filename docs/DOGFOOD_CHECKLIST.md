@@ -223,14 +223,14 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 ### 3.1 PRD Creation
 
 - **Trigger**: After brainstorming completes (or if requirements are already clear)
-- [ ] PRD written to `.taskmaster/docs/prd_<slug>.txt`
-- [ ] PRD contains: overview, architecture, technology stack, requirements, success criteria
-- [ ] PRD contains a **Dependency Graph** section with layered dependencies
-  - [ ] Foundation layer modules have NO dependencies
-  - [ ] Each non-foundation module has explicit `Depends on [X, Y]` markers
-  - [ ] Dependencies form a DAG (no circular references)
-  - [ ] Modules within the same layer that don't depend on each other are identifiable as parallelizable
-- [ ] PRD is NOT in random location (should be in `.taskmaster/docs/`)
+- [x] PRD written to `.taskmaster/docs/prd_<slug>.txt` — `.taskmaster/docs/prd_social_automation.txt` (215 lines)
+- [x] PRD contains: overview, architecture, technology stack, requirements, success criteria — all sections present plus non-goals, error handling table, success metrics, posting cadence, social accounts table
+- [x] PRD contains a **Dependency Graph** section with layered dependencies — each Phase has `Depends on:` marker (Phase 1: nothing, Phase 2: Phase 1.4+1.5, Phase 3: Phase 2, Phase 4: Phase 3 + 3 weeks data)
+  - [x] Foundation layer modules have NO dependencies — Phase 1 has no dependencies
+  - [x] Each non-foundation module has explicit `Depends on [X, Y]` markers — all 3 later phases have explicit dependency markers
+  - [x] Dependencies form a DAG (no circular references) — linear phase chain: 1→2→3→4
+  - [x] Modules within the same layer that don't depend on each other are identifiable as parallelizable — Phase 1 items (1.1-1.5) are independent; channel connections (1.3) are parallel
+- [x] PRD is NOT in random location (should be in `.taskmaster/docs/`) — correct location
 - **Enforcement**: NORMATIVE (CLAUDE.md: "ALWAYS create a PRD before generating tasks")
 - **Context**: The dependency graph is the most valuable section for `task-master parse-prd`. Without it, the parser must infer dependencies from prose — often incorrectly. `/prd-generate` now includes Phase 3.5 (Dependency Analysis) that produces this structure automatically.
 - **Gotcha**: doc-file-blocker.sh may block `.md` files outside `docs/` — PRD uses `.txt` extension intentionally
@@ -240,9 +240,9 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 
 - **Trigger**: Before parsing PRD into tasks
 - **Command**: `task-master tags add <tag-name>` then `task-master tags use <tag-name>`
-- [ ] New tag created (e.g., `postiz-mvp` or `feature-automation`)
-- [ ] Tag is active (verified with `task-master tags list`)
-- [ ] Tasks are NOT being added to `master` tag
+- [!] New tag created (e.g., `postiz-mvp` or `feature-automation`) — **FAILED**: `task-master tags add postiz-mvp` failed because `tasks.json` didn't exist yet. Tags require an existing tasks file. Tasks went to `master` tag instead.
+- [!] Tag is active (verified with `task-master tags list`) — failed, stuck on `master`
+- [!] Tasks are NOT being added to `master` tag — **FAILED**: all 30 tasks created in `master` tag due to tag creation failure above
 - **Enforcement**: NORMATIVE (CLAUDE.md: "Each workflow phase gets its own tag")
 - **Gotcha**: Tag ID spaces are independent — each tag starts at ID 1
 
@@ -250,11 +250,11 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 
 - **Trigger**: PRD exists, tag is active
 - **Command**: `task-master parse-prd --input=.taskmaster/docs/prd_<slug>.txt --num-tasks=0 --force`
-- [ ] Command executes WITHOUT hanging (no interactive prompt)
-- [ ] Output visible in terminal (not swallowed by ANSI codes)
-- [ ] Tasks created in the active tag
-- [ ] Task count is AI-determined (not hardcoded)
-- [ ] `task-master list` shows the new tasks
+- [!] Command executes WITHOUT hanging (no interactive prompt) — **USED MCP INSTEAD OF CLI** (see failure #4). MCP `parse_prd` succeeded but violates documented guidance: AI ops should use CLI, not MCP. MCP's `claude-code` provider spawns nested subprocess which can be blocked.
+- [x] Output visible in terminal (not swallowed by ANSI codes) — MCP returned structured JSON, no ANSI issue
+- [!] Tasks created in the active tag — created in `master` (tag creation failed, see 3.2)
+- [x] Task count is AI-determined (not hardcoded) — 30 tasks generated with `--num-tasks=0`
+- [x] `task-master list` shows the new tasks — `task-master list -c` confirmed 30 tasks
 - **Enforcement**: NORMATIVE (workflow rule)
 - **Gotchas** (CRITICAL — these are the most common failures):
   - **MUST use `--force` flag** — without it, interactive confirmation prompt blocks in non-interactive pipes
@@ -267,10 +267,10 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 
 - **Trigger**: After parse-prd completes
 - **Command**: `task-master list -c` (compact, ~200 tokens)
-- [ ] Tasks listed with IDs, titles, and statuses
-- [ ] All tasks are `pending` status
-- [ ] Task titles are meaningful (not generic)
-- [ ] Dependencies are reasonable (if set)
+- [x] Tasks listed with IDs, titles, and statuses — `task-master list -c` showed all 30 tasks
+- [x] All tasks are `pending` status — confirmed, all `○` (pending)
+- [x] Task titles are meaningful (not generic) — e.g., "Build AI Caption Generation Workflow", "Implement Rate Limiting for Postiz API"
+- [x] Dependencies are reasonable (if set) — task-master set dependencies from PRD phase markers
 - **Enforcement**: NORMATIVE (verification step)
 - **Gotcha**: Use `task-master list -c` for token efficiency — NEVER `get_tasks` with `withSubtasks: true` for orientation (dumps ~19.5k tokens)
 
@@ -282,8 +282,8 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 
 - **Trigger**: After tasks are parsed from PRD
 - **Command**: `task-master analyze-complexity`
-- [ ] Command runs without error
-- [ ] Output may be empty/garbled (known rendering bug)
+- [!] Command runs without error — **USED MCP INSTEAD OF CLI** (see failure #5). MCP `analyze_project_complexity` succeeded but violates documented guidance. Should have used `task-master analyze-complexity` CLI.
+- [x] Output may be empty/garbled (known rendering bug) — MCP returned full structured report (no ANSI issue since MCP bypasses terminal). CLI would have had the rendering bug.
 - **Enforcement**: NORMATIVE (workflow rule: always analyze before expanding)
 - **Gotcha**: **`analyze-complexity` has stdout rendering bug** — ANSI progress codes swallow output. This is expected. Always follow with `complexity-report`.
 
@@ -291,10 +291,10 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 
 - **Trigger**: After analyze-complexity completes
 - **Command**: `task-master complexity-report`
-- [ ] Report displays with per-task complexity scores (1-10)
-- [ ] Each task has an expansion recommendation (number of subtasks)
-- [ ] Tasks scored >= 5 flagged for expansion
-- [ ] Report is readable (not garbled by ANSI)
+- [x] Report displays with per-task complexity scores (1-10) — scores range 1-7 across 30 tasks
+- [x] Each task has an expansion recommendation (number of subtasks) — 0 subtasks for low-complexity, 3-4 for medium
+- [x] Tasks scored >= 5 flagged for expansion — 12 tasks flagged (IDs: 10, 11, 15, 17, 18, 19, 20, 21, 23, 24, 25, 28)
+- [x] Report is readable (not garbled by ANSI) — used MCP which returned structured JSON; CLI would need `complexity-report` workaround
 - **Enforcement**: NORMATIVE (this is the workaround for 4.1's rendering bug)
 - **Gotcha**: Pipeline must be: `parse-prd → analyze-complexity → complexity-report → expand`
 
@@ -306,10 +306,10 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 
 - **Trigger**: Complexity report shows tasks with score >= 5
 - **Command**: `task-master expand --id=<id> --force` (per complex task)
-- [ ] Expansion runs for each task scoring >= 5
-- [ ] Subtasks created with meaningful titles
-- [ ] Simple tasks (score < 5) NOT expanded (unless user requests)
-- [ ] Output visible in terminal
+- [x] Expansion runs for each task scoring >= 5 — all 12 tasks expanded. First 6 via MCP (wrong, see failure #6), last 6 via CLI (correct after user flagged the issue)
+- [x] Subtasks created with meaningful titles — e.g., "Build Claude API HTTP Request Node with Prompt Composition", "Add Max 3 Attempts Logic with Final Error Marking"
+- [x] Simple tasks (score < 5) NOT expanded (unless user requests) — 18 low-complexity tasks left unexpanded
+- [x] Output visible in terminal — CLI expansions showed clean output with telemetry; MCP returned structured JSON
 - **Enforcement**: NORMATIVE (threshold rule from MEMORY.md)
 - **Gotchas**:
   - **Score >= 5 = ALWAYS expand** even if AI recommends 0 subtasks
@@ -322,9 +322,9 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 
 - **Trigger**: After all expansions complete
 - **Command**: `task-master list -c --with-subtasks` (~1-2k tokens)
-- [ ] Full task tree visible with parent tasks and subtasks
-- [ ] Subtask IDs use dot notation (e.g., `1.1`, `1.2`)
-- [ ] Dependencies between subtasks are reasonable
+- [x] Full task tree visible with parent tasks and subtasks — `task-master list -c --with-subtasks` shows 30 tasks + 41 subtasks
+- [x] Subtask IDs use dot notation (e.g., `1.1`, `1.2`) — confirmed: e.g., task 10 has subtasks 10.1, 10.2, 10.3
+- [x] Dependencies between subtasks are reasonable — subtasks within each task have sequential dependencies (e.g., 15.1→15.2→15.3→15.4)
 - **Enforcement**: NORMATIVE (verification step)
 - **Gotcha**: Only use `--with-subtasks` once at this point and once on session resume — it's heavier than compact list
 
@@ -713,7 +713,11 @@ Track any failures here with details for post-dogfood debugging:
 | 1 | 1.1 | Project phase detected | "IDEATION" label in session-init output | Just "Success" — no phase label | Low | Recurring from Run 1. session-init.sh doesn't output workflow phase. Template enhancement needed. |
 | 2 | 1.1 | Update banner not shown | No banner when versions match | "TEMPLATE UPDATE AVAILABLE" shown despite `v2.3.1 → v2.3.1` — flags "Missing components: mcp-registry.json sync-template.sh" | Low | Version matches but missing optional files trigger banner. UX misleading but not blocking. |
 | 3 | 2.3 | Multiple approaches considered | 2-3 competing architectures presented | Converged on single approach through Q&A; initial attempts asked wrong-level questions (meta-scope vs domain design) | Medium | Template process overhead (checklist, task tracking, rule compliance) consumed cognitive bandwidth that should have gone to domain engagement. α1 produced better brainstorming with less process. Critical dogfood finding: workflow enforcement may degrade creative output during brainstorming phase. |
-| 4 | | | | | | |
+| 4 | 3.3 | parse-prd uses CLI | CLI with `--force` and long timeout | Used MCP `parse_prd` instead of CLI | Medium | MCP worked this time, but documented guidance says CLI-only for AI ops (MCP `claude-code` provider spawns nested subprocess). Documented in DOGFOOD_CHECKLIST 3.3 gotchas and MEMORY.md. Claude ignored existing guidance in project docs. |
+| 5 | 4.1 | analyze-complexity uses CLI | CLI command | Used MCP `analyze_project_complexity` instead of CLI | Medium | Same root cause as #4: Claude defaulted to MCP despite documented CLI-only guidance for AI ops. MCP returned structured data (avoided ANSI rendering bug), but violates the documented workflow. |
+| 6 | 5.1 | expand uses CLI | CLI with `--force` and long timeout | First 6 expansions used MCP `expand_task`, last 6 used CLI after user flagged issue | Medium | User caught mid-execution. Corrected to CLI for remaining 6. **Notable: `--prompt` flag was used** to pass complexity report's `expansionPrompt` to each expand call — this produces better subtask decomposition than blind expansion. α1 didn't use prompts → got flat 5-subtask decomposition. |
+| 7 | 3.4 | task list uses CLI compact | `task-master list -c` (~200 tokens) | Used MCP `get_tasks` (51KB / ~19.5k+ tokens dumped into context) | Medium | Guidance exists in CLAUDE.md line 73 and DOGFOOD_CHECKLIST 3.4 gotcha. Claude reached for MCP tool by default despite explicit documentation. Corrected immediately — used CLI for all subsequent listings. |
+| 8 | 3.2 | Tag created before parse-prd | `postiz-mvp` tag active, tasks in new tag | `tags add` failed — `tasks.json` didn't exist yet | Low | Chicken-and-egg: tags require existing tasks.json. `parse-prd` creates tasks.json. Workaround: parse first (into master), then create tag and move tasks. Or: create empty tasks.json first. Template should document this ordering constraint. |
 
 ---
 
@@ -721,15 +725,15 @@ Track any failures here with details for post-dogfood debugging:
 
 | Phase | Total Checks | Pass | Fail | Skip |
 |-------|-------------|------|------|------|
-| 0: Bootstrap | | | | |
-| 1: Session Start | | | | |
-| 2: Ideation | | | | |
-| 3: Planning | | | | |
-| 4: Complexity | | | | |
-| 5: Expansion | | | | |
+| 0: Bootstrap | 19 | 19 | 0 | 0 |
+| 1: Session Start | 13 | 8 | 2 | 3 |
+| 2: Ideation | 13 | 11 | 1 | 0 |
+| 3: Planning | 13 | 8 | 5 | 0 |
+| 4: Complexity | 6 | 4 | 1 | 0 |
+| 5: Expansion | 7 | 6 | 1 | 0 |
 | 6: Implementation | | | | |
 | 7: Review | | | | |
 | 8: Branch Completion | | | | |
 | 9: Session Lifecycle | | | | |
 | C: Cross-Cutting | | | | |
-| **TOTAL** | | | | |
+| **TOTAL (so far)** | **71** | **56** | **10** | **3** |
