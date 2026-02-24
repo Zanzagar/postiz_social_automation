@@ -621,7 +621,7 @@
         "dependencies": [
           "2"
         ],
-        "status": "in-progress",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -629,9 +629,10 @@
             "description": "Build the foundational _request method with proper authentication headers (no Bearer prefix), exponential backoff retry logic, and 30 requests/hour rate limit handling.",
             "dependencies": [],
             "details": "Implement the PostizClient.__init__ and _request methods in src/content_engine/postiz.py. The client must: (1) Initialize requests.Session with Authorization header set to raw API key (no 'Bearer ' prefix per Postiz API requirements), (2) Implement _request method with 3-attempt retry loop, (3) Handle HTTP 429 rate limit responses with exponential backoff (2^attempt * 60 seconds), (4) Raise appropriate exceptions after exhausting retries, (5) Parse JSON responses. Add type hints and docstrings. Consider adding a request counter to proactively avoid hitting the 30/hour limit.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "In tests/test_postiz.py: Mock requests.Session to verify auth header is set without Bearer prefix, test _request retries on 429 with correct backoff timing, test successful response parsing, test exception raised after 3 failed attempts, test non-429 errors raise immediately.",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-02-24T08:40:06.453Z"
           },
           {
             "id": 2,
@@ -641,9 +642,10 @@
               1
             ],
             "details": "Implement two methods in PostizClient: (1) list_integrations() - GET /integrations endpoint, parse response to extract 'integrations' list, return list[dict] with channel info. (2) create_draft_post() - POST /posts with payload containing content, integrations array (batch all platforms in single call to minimize API requests), status='draft', optional scheduledAt (ISO format), optional media array. Note: media_url handling should call upload_media (Task 18 dependency), but stub it for now with a TODO. Return the created post dict. Both methods use _request from subtask 1.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Mock _request to test: list_integrations parses response correctly and handles empty integrations, create_draft_post builds correct payload structure, scheduled_at is formatted correctly when provided, media array is included when media_url is provided, integrations array batches multiple platform_ids correctly.",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-02-24T08:40:10.760Z"
           },
           {
             "id": 3,
@@ -653,15 +655,16 @@
               1
             ],
             "details": "Implement get_post_analytics(post_id: str) -> PostPerformance in PostizClient: (1) GET endpoint for post analytics (likely /posts/{post_id}/analytics or similar - verify against Postiz API docs), (2) Parse response fields (likes, comments, shares, impressions, reach, etc.), (3) Map API response to PostPerformance Pydantic model from content_engine.models, (4) Handle missing/optional fields gracefully with defaults, (5) Handle case where post has no analytics yet (newly published). Consider caching analytics to reduce API calls given 30/hour limit.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Mock _request to test: get_post_analytics returns valid PostPerformance object, handles all expected metric fields, defaults missing metrics to 0 or None appropriately, raises appropriate error for non-existent post_id, handles posts with no analytics data yet.",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-02-24T08:40:14.943Z"
           }
         ],
         "complexity": 5,
         "recommendedSubtasks": 3,
         "expansionPrompt": "Break into: (1) Core HTTP client with authentication and rate limit handling (30 req/hr), (2) Post CRUD operations (list_integrations, create_draft_post), (3) Analytics retrieval (get_post_analytics). Note: media upload is separate Task 18.",
-        "updatedAt": "2026-02-24T08:31:29.926Z"
+        "updatedAt": "2026-02-24T08:40:14.943Z"
       },
       {
         "id": "5",
@@ -673,7 +676,7 @@
         "dependencies": [
           "2"
         ],
-        "status": "pending",
+        "status": "in-progress",
         "subtasks": [
           {
             "id": 1,
@@ -724,7 +727,8 @@
         ],
         "complexity": 7,
         "recommendedSubtasks": 4,
-        "expansionPrompt": "Break into: (1) Brand rules and platform instructions constants module, (2) Prompt builder with learning context integration, (3) Claude CLI subprocess invocation with timeout/error handling, (4) Response parser for multi-platform output format. Consider structured JSON output format for reliable parsing."
+        "expansionPrompt": "Break into: (1) Brand rules and platform instructions constants module, (2) Prompt builder with learning context integration, (3) Claude CLI subprocess invocation with timeout/error handling, (4) Response parser for multi-platform output format. Consider structured JSON output format for reliable parsing.",
+        "updatedAt": "2026-02-24T08:40:47.050Z"
       },
       {
         "id": "6",
@@ -1575,9 +1579,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-02-24T08:31:29.926Z",
+      "lastModified": "2026-02-24T08:40:47.051Z",
       "taskCount": 25,
-      "completedCount": 3,
+      "completedCount": 4,
       "tags": [
         "content-engine-v2"
       ]
