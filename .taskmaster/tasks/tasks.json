@@ -676,7 +676,7 @@
         "dependencies": [
           "2"
         ],
-        "status": "in-progress",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -684,9 +684,10 @@
             "description": "Extract BRAND_RULES and PLATFORM_INSTRUCTIONS into a dedicated constants module (src/content_engine/constants.py) for better maintainability and reusability across the codebase.",
             "dependencies": [],
             "details": "Create src/content_engine/constants.py containing:\n\n1. BRAND_RULES constant with Gita Valley branding:\n   - Name: 'Gita Valley' (never 'Gita Nagari')\n   - Website: gitavalley.org\n   - Tagline: 'Cultivating Soil and Soul'\n   - Key claim about USDA Certified Slaughter-Free Dairy\n   - Voice guidelines: warm, welcoming, grounded, cow/farm-first\n\n2. PLATFORM_INSTRUCTIONS dict mapping Platform enum to instructions:\n   - Instagram: visual focus, 5-10 hashtags, emoji-rich, 150-200 words\n   - Facebook: storytelling, 200-300 words, engagement question\n   - TikTok: short hook, trending language, 2-3 hashtags, under 100 words\n   - Threads: conversational, no hashtags, 1-2 sentences\n   - LinkedIn: professional, impact-focused, 100-150 words\n\n3. Add JSON_OUTPUT_SCHEMA constant defining expected Claude response structure for reliable parsing.\n\nUpdate generator.py to import from constants module.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test constants are importable, PLATFORM_INSTRUCTIONS has entries for all Platform enum values, BRAND_RULES contains required branding elements (Gita Valley, tagline, voice guidelines).",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-02-24T08:43:42.405Z"
           },
           {
             "id": 2,
@@ -696,9 +697,10 @@
               1
             ],
             "details": "Implement in generator.py:\n\n1. _load_learning_context() method:\n   - Load from data/learning-context.json if exists\n   - Return empty dict if file missing\n   - Handle JSON parse errors gracefully\n\n2. _build_prompt() method that constructs prompt with sections:\n   - System context with BRAND_RULES\n   - Learning context (top performers, pillar performance, hashtag data)\n   - Content details (raw_text, pillar, media_url, scheduled_date)\n   - Platform-specific instructions for each requested platform\n   - JSON output format specification for structured response\n\n3. Add optional feedback parameter support for re-prompting (Task 9 dependency):\n   - If feedback provided, include 'STAFF FEEDBACK' section\n   - Instruct AI to revise captions based on feedback\n\nPrompt should request JSON response with structure: {\"platform_name\": \"caption_text\", ...}",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test _build_prompt includes all required sections, learning context is loaded correctly, missing learning-context.json returns empty dict, feedback is included in prompt when provided, prompt requests JSON output format.",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-02-24T08:43:46.773Z"
           },
           {
             "id": 3,
@@ -708,9 +710,10 @@
               2
             ],
             "details": "Implement Claude CLI invocation in generator.py:\n\n1. Create _call_claude_cli(prompt: str) -> str method:\n   - Use subprocess.run with ['claude', '-p', prompt]\n   - Set capture_output=True, text=True\n   - Set timeout=120 seconds (configurable via __init__)\n   - Return stdout on success\n\n2. Error handling for specific failure modes:\n   - subprocess.TimeoutExpired: raise TimeoutError with helpful message\n   - returncode != 0: parse stderr for error type\n   - 'not authenticated' in stderr: raise AuthenticationError\n   - 'rate limit' in stderr: raise RateLimitError with retry guidance\n   - Other errors: raise GeneratorError with stderr content\n\n3. Create custom exception classes:\n   - GeneratorError (base class)\n   - AuthenticationError(GeneratorError)\n   - RateLimitError(GeneratorError)\n   - TimeoutError(GeneratorError)\n\n4. Add retry logic with exponential backoff for transient failures (optional, max 3 retries).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Mock subprocess.run to test: successful call returns stdout, timeout raises TimeoutError, auth failure raises AuthenticationError, rate limit raises RateLimitError, non-zero exit raises GeneratorError with stderr. Test retry logic if implemented.",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-02-24T08:43:50.965Z"
           },
           {
             "id": 4,
@@ -720,15 +723,16 @@
               3
             ],
             "details": "Implement _parse_response(response: str, platforms: list[Platform]) -> dict[Platform, str]:\n\n1. Primary parsing strategy - JSON:\n   - Try json.loads(response) first\n   - Handle response wrapped in markdown code blocks (```json ... ```)\n   - Map platform names to Platform enum values (case-insensitive)\n\n2. Fallback parsing strategy - Delimited sections:\n   - Look for patterns like '### INSTAGRAM ###' or '[INSTAGRAM]'\n   - Extract text between platform headers\n   - Strip whitespace and clean up formatting\n\n3. Validation:\n   - Verify all requested platforms have captions\n   - Raise ParsingError if any platform missing\n   - Log warnings for unexpected platforms in response\n\n4. Create ParsingError exception class for parse failures\n\n5. Implement helper methods:\n   - _extract_json_from_markdown(text: str) -> str\n   - _parse_delimited_sections(text: str, platforms: list) -> dict\n   - _normalize_platform_name(name: str) -> Platform\n\nEnsure robust handling of varied Claude output formats.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test parsing: valid JSON response extracts all platforms, markdown-wrapped JSON is handled, delimited format fallback works, missing platform raises ParsingError, extra platforms in response are ignored with warning, case-insensitive platform matching works.",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-02-24T08:43:55.165Z"
           }
         ],
         "complexity": 7,
         "recommendedSubtasks": 4,
         "expansionPrompt": "Break into: (1) Brand rules and platform instructions constants module, (2) Prompt builder with learning context integration, (3) Claude CLI subprocess invocation with timeout/error handling, (4) Response parser for multi-platform output format. Consider structured JSON output format for reliable parsing.",
-        "updatedAt": "2026-02-24T08:40:47.050Z"
+        "updatedAt": "2026-02-24T08:43:55.165Z"
       },
       {
         "id": "6",
@@ -740,11 +744,12 @@
         "dependencies": [
           "1"
         ],
-        "status": "pending",
+        "status": "in-progress",
         "subtasks": [],
         "complexity": 2,
         "recommendedSubtasks": 0,
-        "expansionPrompt": "Create 5 JSON/Markdown files with Gita Valley-specific content. Files are independent and well-specified in the task details. No expansion needed."
+        "expansionPrompt": "Create 5 JSON/Markdown files with Gita Valley-specific content. Files are independent and well-specified in the task details. No expansion needed.",
+        "updatedAt": "2026-02-24T08:44:20.037Z"
       },
       {
         "id": "7",
@@ -1579,9 +1584,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-02-24T08:40:47.051Z",
+      "lastModified": "2026-02-24T08:44:20.038Z",
       "taskCount": 25,
-      "completedCount": 4,
+      "completedCount": 5,
       "tags": [
         "content-engine-v2"
       ]

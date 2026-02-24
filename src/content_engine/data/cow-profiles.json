@@ -1,0 +1,17 @@
+{
+  "cows": [
+    {"name": "Lakshmi", "personality": "Gentle mother, loves morning sun", "notable": "Just had calf"},
+    {"name": "Tabby", "personality": "Curious and playful, always investigating"},
+    {"name": "Dennis", "personality": "Protective of the herd"},
+    {"name": "Sparkle", "personality": "Friendly with visitors, loves scratches"},
+    {"name": "Daring Denise", "personality": "Adventurous explorer, often found in unexpected places"},
+    {"name": "Brisham", "personality": "Calm senior cow, leads the herd to pasture"}
+  ],
+  "oxen": [
+    {"name": "Rama", "role": "Plow team, trained for field work"},
+    {"name": "Krishna", "role": "Plow team, works alongside Rama"}
+  ],
+  "total_count": 85,
+  "producing_milk": 16,
+  "weekly_milk_gallons": 400
+}
