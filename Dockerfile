@@ -17,6 +17,10 @@ COPY .streamlit/ .streamlit/
 # Install Python dependencies
 RUN pip install --no-cache-dir -e .
 
+# Create non-root user
+RUN useradd --create-home appuser
+USER appuser
+
 # Ensure 'from app.xxx' imports resolve correctly
 ENV PYTHONPATH=/app
 

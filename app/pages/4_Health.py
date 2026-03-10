@@ -33,8 +33,8 @@ if os.getenv("GOOGLE_SHEETS_CREDENTIALS") and os.getenv("SPREADSHEET_ID"):
             credentials_path=os.environ["GOOGLE_SHEETS_CREDENTIALS"],
             spreadsheet_id=os.environ["SPREADSHEET_ID"],
         )
-    except Exception as e:
-        st.error(f"Failed to initialize Sheets client: {e}")
+    except Exception:
+        st.error("Failed to initialize Sheets client. Check credentials.")
 
 if os.getenv("POSTIZ_API_KEY"):
     try:
@@ -44,8 +44,8 @@ if os.getenv("POSTIZ_API_KEY"):
             api_key=os.environ["POSTIZ_API_KEY"],
             base_url=os.getenv("POSTIZ_BASE_URL", "https://postiz.sethpc.xyz/api/public/v1"),
         )
-    except Exception as e:
-        st.error(f"Failed to initialize Postiz client: {e}")
+    except Exception:
+        st.error("Failed to initialize Postiz client. Check API key.")
 
 # Run health checks
 col1, col2, col3, col4 = st.columns(4)
@@ -100,7 +100,7 @@ if sheets_client:
                 st.error(f"**{err['timestamp']}** [{err['source']}]{row_info}: {err['message']}")
         else:
             st.success("No recent errors.")
-    except Exception as e:
-        st.warning(f"Could not fetch errors: {e}")
+    except Exception:
+        st.warning("Could not fetch error logs.")
 else:
     st.info("Configure Google Sheets credentials to view error logs.")

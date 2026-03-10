@@ -31,8 +31,8 @@ if "sheets_client" not in st.session_state:
                 credentials_path=creds,
                 spreadsheet_id=sheet_id,
             )
-        except Exception as e:
-            st.error(f"Failed to initialize Sheets client: {e}")
+        except Exception:
+            st.error("Failed to initialize Sheets client. Check credentials.")
             st.session_state.sheets_client = None
     else:
         st.session_state.sheets_client = None
@@ -85,7 +85,7 @@ if st.session_state.sheets_client:
 
                     st.divider()
 
-    except Exception as e:
-        st.error(f"Failed to load suggestions: {e}")
+    except Exception:
+        st.error("Failed to load suggestions.")
 else:
     st.info("Configure Google Sheets credentials to view suggestions.")

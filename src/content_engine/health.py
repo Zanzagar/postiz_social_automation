@@ -73,10 +73,11 @@ def check_claude_health() -> tuple[bool, str]:
         result = subprocess.run(
             ["claude", "--version"],
             capture_output=True,
+            text=True,
             timeout=10,
         )
         if result.returncode == 0:
-            version = result.stdout.decode().strip()
+            version = result.stdout.strip()
             return True, version
         return False, f"Exit code {result.returncode}"
     except FileNotFoundError:

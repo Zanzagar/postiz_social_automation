@@ -33,8 +33,8 @@ if "sheets_client" not in st.session_state:
                 credentials_path=creds,
                 spreadsheet_id=sheet_id,
             )
-        except Exception as e:
-            st.error(f"Failed to initialize Sheets client: {e}")
+        except Exception:
+            st.error("Failed to initialize Sheets client. Check credentials.")
             st.session_state.sheets_client = None
     else:
         st.session_state.sheets_client = None
@@ -45,8 +45,8 @@ if st.session_state.get("sheets_client"):
 
         for status in [ContentStatus.APPROVED, ContentStatus.SCHEDULED, ContentStatus.POSTED]:
             rows.extend(st.session_state.sheets_client.get_rows_by_status(status))
-    except Exception as e:
-        st.error(f"Failed to load content: {e}")
+    except Exception:
+        st.error("Failed to load content from Google Sheets.")
 
 # ---------------------------------------------------------------------------
 # Display calendar view
@@ -79,7 +79,7 @@ if rows:
         st.divider()
 else:
     # Check for local suggestion data as fallback
-    suggestions_path = Path("data") / "suggestions.json"
+    suggestions_path = Path(__file__).resolve().parent.parent.parent / "data" / "suggestions.json"
     if suggestions_path.exists():
         try:
             suggestions = json.loads(suggestions_path.read_text())
