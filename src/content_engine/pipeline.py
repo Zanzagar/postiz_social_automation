@@ -14,6 +14,8 @@ from content_engine.validator import ContentValidator
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+
 
 @dataclass
 class PipelineResult:
@@ -44,7 +46,18 @@ def enhance_pipeline(
 
     # Build platform → integration ID map from Postiz
     integrations = postiz.list_integrations()
-    platform_map: dict[str, str] = {i["platform"]: i["id"] for i in integrations}
+    platform_map: dict[str, str] = {}
+    for i in integrations:
+        plat = i["platform"]
+        if plat in platform_map:
+            logger.warning(
+                "Duplicate integration for platform '%s' (using first: %s, ignoring: %s)",
+                plat,
+                platform_map[plat],
+                i["id"],
+            )
+        else:
+            platform_map[plat] = i["id"]
 
     ready_rows = sheets.get_rows_by_status(ContentStatus.READY)
     logger.info("Found %d ready rows to process", len(ready_rows))
@@ -124,7 +137,11 @@ def reprompt_pipeline(
     result = PipelineResult()
 
     integrations = postiz.list_integrations()
-    platform_map: dict[str, str] = {i["platform"]: i["id"] for i in integrations}
+    platform_map: dict[str, str] = {}
+    for i in integrations:
+        plat = i["platform"]
+        if plat not in platform_map:
+            platform_map[plat] = i["id"]
 
     feedback_rows = sheets.get_rows_with_feedback()
     logger.info("Found %d rows with feedback to re-process", len(feedback_rows))
@@ -247,7 +264,7 @@ def learn_pipeline(
     sheets: SheetsClient,
     postiz: PostizClient,
     intelligence: ContentIntelligence,
-    data_dir: Path = Path("data"),
+    data_dir: Path = _DEFAULT_DATA_DIR,
 ) -> PipelineResult:
     """Run the Learning Pipeline.
 

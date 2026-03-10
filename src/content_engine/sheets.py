@@ -81,7 +81,7 @@ def _safe_get(row: list, index: int, default: str = "") -> str:
     return default
 
 
-def _parse_bool(val) -> bool:
+def _parse_bool(val: object) -> bool:
     """Parse a checkbox value from Sheets (TRUE/FALSE/True/False/bool)."""
     if isinstance(val, bool):
         return val
@@ -111,7 +111,13 @@ def _parse_content_row(row: list, row_number: int) -> ContentRow | None:
             platforms[platform] = _parse_bool(row[col_idx]) if col_idx < len(row) else False
 
         status_str = _safe_get(row, 9)
-        status = ContentStatus(status_str) if status_str else ContentStatus.DRAFT
+        try:
+            status = ContentStatus(status_str) if status_str else ContentStatus.DRAFT
+        except ValueError:
+            logger.warning(
+                "Unknown status '%s' in row %d, defaulting to DRAFT", status_str, row_number
+            )
+            status = ContentStatus.DRAFT
 
         captions: dict[Platform, str | None] = {}
         for i, platform in enumerate(_CAPTION_PLATFORMS):
@@ -138,7 +144,7 @@ def _parse_content_row(row: list, row_number: int) -> ContentRow | None:
             error_msg=error_msg,
             feedback=feedback,
         )
-    except Exception:
+    except (ValueError, IndexError, KeyError, TypeError):
         logger.exception("Failed to parse row %d", row_number)
         return None
 

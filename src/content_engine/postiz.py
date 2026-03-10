@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlparse
 import requests
 
 from content_engine.models import ContentPillar, Platform, PostPerformance
+from content_engine.validator import validate_external_url
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +184,7 @@ class PostizClient:
         Returns the Postiz media ID.
         """
         download_url = parse_google_drive_url(url)
+        validate_external_url(download_url)
 
         # Download to temp file
         resp = requests.get(download_url, stream=True, timeout=60)
