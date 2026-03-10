@@ -1,6 +1,9 @@
 """Content validation — verify rows are ready for AI generation."""
 
+import ipaddress
 import logging
+import socket
+from urllib.parse import urlparse
 
 import requests
 
@@ -15,6 +18,34 @@ SUPPORTED_MEDIA_TYPES = {
     "video/mp4",
     "image/gif",
 }
+
+# Allowed URL schemes for media downloads
+_ALLOWED_SCHEMES = {"http", "https"}
+
+
+def validate_external_url(url: str) -> None:
+    """Validate that a URL points to an external (non-private) host.
+
+    Raises ValueError if the URL targets a private/internal IP, localhost,
+    or uses a non-HTTP scheme. Prevents SSRF attacks.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in _ALLOWED_SCHEMES:
+        raise ValueError(f"URL scheme '{parsed.scheme}' not allowed (must be http or https)")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("URL has no hostname")
+
+    try:
+        resolved = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise ValueError(f"Cannot resolve hostname '{hostname}'") from exc
+
+    for _, _, _, _, sockaddr in resolved:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            raise ValueError("URL resolves to non-public IP address")
 
 
 class ContentValidator:
@@ -40,6 +71,7 @@ class ContentValidator:
     def validate_media_format(self, url: str) -> tuple[bool, str | None]:
         """Validate media is a supported format (JPEG, PNG, WebP, MP4, GIF)."""
         try:
+            validate_external_url(url)
             resp = requests.head(url, timeout=10, allow_redirects=True)
             if resp.status_code != 200:
                 return False, f"Media URL returned status {resp.status_code}"
@@ -55,7 +87,8 @@ class ContentValidator:
     def _is_media_accessible(self, url: str) -> bool:
         """Check if media URL returns 200 via HEAD request."""
         try:
+            validate_external_url(url)
             resp = requests.head(url, timeout=10, allow_redirects=True)
             return resp.status_code == 200
-        except requests.RequestException:
+        except (requests.RequestException, ValueError):
             return False

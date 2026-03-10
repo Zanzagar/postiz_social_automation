@@ -37,8 +37,8 @@ if "sheets_client" not in st.session_state:
                 credentials_path=creds,
                 spreadsheet_id=sheet_id,
             )
-        except Exception as e:
-            st.error(f"Failed to initialize Sheets client: {e}")
+        except Exception:
+            st.error("Failed to initialize Sheets client. Check credentials.")
             st.session_state.sheets_client = None
     else:
         st.session_state.sheets_client = None
@@ -65,8 +65,8 @@ if not st.session_state.sheets_client:
 
 try:
     drafts = st.session_state.sheets_client.get_rows_by_status(ContentStatus.PENDING_APPROVAL)
-except Exception as e:
-    st.error(f"Failed to load drafts: {e}")
+except Exception:
+    st.error("Failed to load drafts.")
     st.stop()
 
 if not drafts:
@@ -139,8 +139,8 @@ for draft in drafts:
                                 draft.row_number, updated
                             )
                             st.rerun()
-                        except Exception as e:
-                            st.error(f"Regeneration failed: {e}")
+                        except Exception:
+                            st.error("Regeneration failed. Please try again.")
                 else:
                     st.warning("Enter feedback and ensure AI generator is available.")
 
@@ -198,8 +198,8 @@ if selected_drafts:
                                     draft.row_number, ",".join(draft_ids)
                                 )
                         success_count += 1
-                    except Exception as e:
-                        st.error(f"Failed to approve row {draft.row_number}: {e}")
+                    except Exception:
+                        st.error(f"Failed to approve row {draft.row_number}.")
 
                 if success_count:
                     st.success(f"{success_count} draft(s) approved and sent to Postiz!")

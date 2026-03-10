@@ -1,11 +1,14 @@
 """Create & Review page — generate AI captions and send to Postiz."""
 
+import logging
 import os
 from datetime import datetime
 
 import streamlit as st
 
 from content_engine.models import Platform
+
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Create & Review", page_icon="\u270d\ufe0f", layout="wide")
 
@@ -26,8 +29,8 @@ if "generator" not in st.session_state:
         from content_engine.generator import CaptionGenerator
 
         st.session_state.generator = CaptionGenerator()
-    except Exception as e:
-        st.error(f"Failed to initialize AI generator: {e}")
+    except Exception:
+        st.error("Failed to initialize AI generator. Check Claude CLI configuration.")
         st.session_state.generator = None
 
 if "postiz_client" not in st.session_state:
@@ -54,6 +57,7 @@ with st.form("create_post_form"):
             "Your caption (1 sentence is enough!)",
             placeholder="Lakshmi enjoying the morning sun...",
             height=120,
+            max_chars=2000,
         )
         media_url = st.text_input(
             "Google Drive media URL (optional)",
@@ -117,7 +121,8 @@ if generate_btn:
                     st.session_state.media_url = media_url
                     st.success(f"Generated captions for {len(result)} platform(s)!")
                 except Exception as e:
-                    st.error(f"Generation failed: {e}")
+                    logger.error("Caption generation failed: %s", e)
+                    st.error("Caption generation failed. Please try again.")
 
 # ---------------------------------------------------------------------------
 # Display generated captions (editable)
@@ -168,7 +173,8 @@ if "generated_captions" in st.session_state and st.session_state.generated_capti
                 st.session_state.generated_captions = updated
                 st.rerun()
             except Exception as e:
-                st.error(f"Re-generation failed: {e}")
+                logger.error("Caption re-generation failed: %s", e)
+                st.error("Re-generation failed. Please try again.")
 
     # -----------------------------------------------------------------------
     # Send to Postiz
@@ -196,6 +202,7 @@ if "generated_captions" in st.session_state and st.session_state.generated_capti
                     else:
                         st.warning("No connected platforms found in Postiz.")
                 except Exception as e:
-                    st.error(f"Failed to create Postiz drafts: {e}")
+                    logger.error("Failed to create Postiz drafts: %s", e)
+                    st.error("Failed to create Postiz drafts. Please try again.")
     else:
         st.info("Set POSTIZ_API_KEY environment variable to enable sending to Postiz.")

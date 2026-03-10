@@ -52,7 +52,7 @@ class TestCheckClaudeHealth:
         import subprocess
 
         def mock_run(*args, **kwargs):
-            result = subprocess.CompletedProcess(args=args, returncode=0, stdout=b"claude 1.0.0\n")
+            result = subprocess.CompletedProcess(args=args, returncode=0, stdout="claude 1.0.0\n")
             return result
 
         monkeypatch.setattr("content_engine.health.subprocess.run", mock_run)

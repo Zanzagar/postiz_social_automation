@@ -12,6 +12,8 @@ from content_engine.sheets import SheetsClient
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+
 TARGET_PILLAR_WEIGHTS: dict[ContentPillar, float] = {
     ContentPillar.COW_LIFE: 0.40,
     ContentPillar.FARM_OPS: 0.25,
@@ -29,7 +31,7 @@ class ContentIntelligence:
         self,
         sheets: SheetsClient,
         postiz: PostizClient,
-        data_dir: Path = Path("data"),
+        data_dir: Path = _DEFAULT_DATA_DIR,
     ) -> None:
         self.sheets = sheets
         self.postiz = postiz
