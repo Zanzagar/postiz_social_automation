@@ -336,16 +336,16 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 
 - **Trigger**: Ready to implement
 - **Command**: `task-master next` or `task-master list --ready --blocking`
-- [x] Returns a task/subtask with all dependencies satisfied — `task-master next` returned Task 1 (no deps), then Task 8 (no deps) after Task 1 completed. Session 2: `list -c --ready` correctly surfaced Tasks 8, 10, 15, 18, 22. After completing Task 8, Task 9 appeared (dep on 8). After Task 10, Tasks 11/12/14/19 appeared. After Task 15, Tasks 16/17 appeared.
-- [x] Task is the highest-impact starting point — Task 1 (infra verification) is correct foundation task. Session 2: Followed dependency chain 8→9→10→22→15 (pipeline → reprompt → UI → config → intelligence).
+- [x] Returns a task/subtask with all dependencies satisfied — `task-master next` returned Task 1 (no deps), then Task 8 (no deps) after Task 1 completed. Session 2: `list -c --ready` correctly surfaced Tasks 8, 10, 15, 18, 22. After completing Task 8, Task 9 appeared (dep on 8). After Task 10, Tasks 11/12/14/19 appeared. After Task 15, Tasks 16/17 appeared. Sessions 3-4: Dependency unlocks continued correctly — Task 16 done → Task 12 unblocked, Task 11 done → Task 13 unblocked. Session 5: Final 6 tasks (13, 19, 20, 21, 24, 25) all correctly surfaced as ready with deps satisfied.
+- [x] Task is the highest-impact starting point — Task 1 (infra verification) is correct foundation task. Session 2: Followed dependency chain 8→9→10→22→15 (pipeline → reprompt → UI → config → intelligence). Sessions 3-4: 18→23→11→16→17→12→14 (media → alerting → UI pages → pipelines → dashboard).
 - **Enforcement**: NORMATIVE (workflow rule)
 
 ### 6.2 Set Task In-Progress
 
 - **Trigger**: Starting work on a task
 - **Command**: `task-master set-status <id> in-progress`
-- [x] Status updated successfully — both Task 1 and Task 8 set in-progress before work began. Session 2: Tasks 8, 9, 10, 22, 15 all set in-progress before work, done after.
-- [x] Only ONE task is in-progress at a time — Task 1 set done before Task 8 started. Session 2: Maintained throughout — each task done before next started.
+- [x] Status updated successfully — both Task 1 and Task 8 set in-progress before work began. Session 2: Tasks 8, 9, 10, 22, 15 all set in-progress before work, done after. Sessions 3-4: Tasks 18, 23, 11, 16, 17, 12, 14 — all set in-progress before work, done after (including subtasks). Session 5: Tasks 13, 19, 20, 21, 24, 25 — all set in-progress before work, done after.
+- [x] Only ONE task is in-progress at a time — Task 1 set done before Task 8 started. Session 2: Maintained throughout — each task done before next started. Sessions 3-4: Maintained across 7 tasks. Session 5: Maintained across 6 tasks.
 - **Enforcement**: NORMATIVE (one task in-progress rule from workflow-enforcement.md)
 
 ### 6.3 Create Feature Branch
@@ -360,10 +360,10 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 ### 6.4 Superpowers TDD — RED Phase
 
 - **Trigger**: `superpowers:test-driven-development` skill invoked
-- [x] Skill is invoked BEFORE writing any production code — Session 2: `/tdd` invoked before Task 8 implementation. Tests written first for Tasks 8, 9, 15. Task 10 (Streamlit UI) had tests but less strict TDD. Task 22 (env config, complexity 2) direct implementation.
-- [x] Failing test written FIRST — Session 2: Task 8 (11 tests RED → ImportError), Task 9 (8 tests RED), Task 15 (14 tests RED). All failed for correct reason (module not found).
-- [x] Test describes the expected behavior — Session 2: Test names describe behavior ("test_processes_ready_rows", "test_skips_invalid_rows", "test_continues_after_row_failure", etc.)
-- [x] Test actually FAILS when run (not a false pass) — Session 2: All 3 TDD rounds confirmed RED before GREEN.
+- [x] Skill is invoked BEFORE writing any production code — Session 2: `/tdd` invoked before Task 8 implementation. Tests written first for Tasks 8, 9, 15. Task 10 (Streamlit UI) had tests but less strict TDD. Task 22 (env config, complexity 2) direct implementation. Sessions 3-4: TDD by discipline (no `/tdd` invocation) for all 7 tasks — tests written first in every case.
+- [x] Failing test written FIRST — Session 2: Task 8 (11 tests RED → ImportError), Task 9 (8 tests RED), Task 15 (14 tests RED). All failed for correct reason (module not found). Sessions 3-4: Task 11 (13 RED → ModuleNotFoundError), Task 16 (7 RED → ImportError), Task 17 (9 RED → ImportError), Task 12 (7 RED → ModuleNotFoundError), Task 14 (10 RED → ModuleNotFoundError). Session 5: Task 13 (16 RED), Task 19 (7 RED), Task 21 (8 RED), Task 20 (12 RED), Task 24 (5 RED), Task 25 (N/A — tests ARE the deliverable). All failed for correct reason.
+- [x] Test describes the expected behavior — Session 2: Test names describe behavior ("test_processes_ready_rows", "test_skips_invalid_rows", "test_continues_after_row_failure", etc.) Sessions 3-4: Continued pattern ("test_builds_row_with_all_platforms", "test_skips_already_known_post_ids", "test_filter_by_specific_pillar", etc.)
+- [x] Test actually FAILS when run (not a false pass) — Session 2: All 3 TDD rounds confirmed RED before GREEN. Sessions 3-4: All 5 TDD rounds confirmed RED before GREEN (8 total across all sessions).
 - **Enforcement**: NORMATIVE (Superpowers TDD) — if installed, Superpowers may delete code written without tests
 - **Gotcha**: Superpowers TDD is strict — it deletes production code written without failing tests first
 - **Finding #9**: Tasks 1-8 in our PRD are infrastructure/config tasks with no testable code. TDD became active in Session 2 (Tasks 8+). The `/tdd` skill was invoked but acted as advisory only (Superpowers enforcement not active). TDD was followed by discipline, not enforcement.
@@ -371,27 +371,27 @@ Mark each: `[x]` pass, `[!]` fail (note details), `[-]` skipped (with reason)
 ### 6.5 Superpowers TDD — GREEN Phase
 
 - **Trigger**: Failing test exists
-- [x] Minimal production code written to make test pass — Session 2: Task 8 pipeline.py (96 lines), Task 9 additions to 3 files, Task 15 intelligence.py (200 lines). Each made tests pass on first implementation.
-- [x] Test now PASSES — Session 2: Task 8 (11/11), Task 9 (9/9), Task 15 (14/14). All GREEN on first run.
-- [x] No other tests broken — Session 2: Full suite verified after each task (84→93→102→107→121 tests, all passing).
+- [x] Minimal production code written to make test pass — Session 2: Task 8 pipeline.py (96 lines), Task 9 additions to 3 files, Task 15 intelligence.py (200 lines). Each made tests pass on first implementation. Sessions 3-4: Task 11 create_post_helpers.py, Task 16 suggest_pipeline in pipeline.py, Task 17 learn_pipeline in pipeline.py, Task 12 suggestions_helpers.py, Task 14 dashboard_helpers.py. All GREEN on first implementation. Session 5: Task 13 drafts_helpers.py, Task 19 auth.py, Task 21 scheduler.py, Task 20 Dockerfile + compose, Task 24 check_oauth_health in health.py. All GREEN on first implementation.
+- [x] Test now PASSES — Session 2: Task 8 (11/11), Task 9 (9/9), Task 15 (14/14). All GREEN on first run. Sessions 3-4: Task 11 (14/14), Task 16 (7/7), Task 17 (9/9), Task 12 (7/7), Task 14 (11/11). Session 5: Task 13 (16/16), Task 19 (7/7), Task 21 (11/11), Task 20 (12/12), Task 24 (5/5), Task 25 (12/12). All GREEN on first run.
+- [x] No other tests broken — Session 2: Full suite verified after each task (84→93→102→107→121 tests, all passing). Sessions 3-4: Suite growth 121→131→145→152→166→173→182→189→200. Session 5: 200→216→223→234→246→251→263. Zero regressions across all sessions.
 - **Enforcement**: NORMATIVE (Superpowers TDD)
 
 ### 6.6 Superpowers TDD — REFACTOR Phase
 
 - **Trigger**: Test passes
-- [x] Code cleaned up (if needed) — Session 2: Unused imports removed after each task (ruff F401 fixes). pyproject.toml updated with per-file-ignores for Streamlit.
-- [x] All tests still pass after refactor — Session 2: Full suite run after each lint fix confirmed no regressions.
-- [x] No behavior changes — Session 2: Refactor phase was minimal (import cleanup only). No logic changes.
+- [x] Code cleaned up (if needed) — Session 2: Unused imports removed after each task (ruff F401 fixes). pyproject.toml updated with per-file-ignores for Streamlit. Sessions 3-4: Same pattern — ruff --fix for unused imports (F401) after each task. No structural refactors needed.
+- [x] All tests still pass after refactor — Session 2: Full suite run after each lint fix confirmed no regressions. Sessions 3-4: Confirmed after every lint fix.
+- [x] No behavior changes — Session 2: Refactor phase was minimal (import cleanup only). No logic changes. Sessions 3-4: Same — import cleanup only.
 - **Enforcement**: NORMATIVE (Superpowers TDD)
 
 ### 6.7 Commit After TDD Cycle
 
 - **Trigger**: TDD cycle complete (RED-GREEN-REFACTOR), or non-TDD task complete
-- [x] `git add <specific-files>` (not `git add .`) — used specific file lists for all commits. Session 2: 5 commits, all with explicit file lists.
-- [x] Commit message uses conventional format: `feat:`, `fix:`, `test:`, etc. — Session 2: `feat:` x4 (Tasks 8, 9, 10, 15), `chore:` x1 (Task 22)
+- [x] `git add <specific-files>` (not `git add .`) — used specific file lists for all commits. Session 2: 5 commits, all with explicit file lists. Sessions 3-4: 7 commits, all with explicit file lists. Session 5: 6 commits, all with explicit file lists.
+- [x] Commit message uses conventional format: `feat:`, `fix:`, `test:`, etc. — Session 2: `feat:` x4 (Tasks 8, 9, 10, 15), `chore:` x1 (Task 22). Sessions 3-4: `feat:` x7 (Tasks 18, 23, 11, 16, 17, 12, 14). Session 5: `feat:` x6 (Tasks 13, 19, 20, 21, 24, 25).
 - [x] pre-commit-check.sh validates commit message format — hook ran on all commits
 - [x] pre-commit-check.sh blocks if committing to main branch — on feature/postiz-mvp, not main
-- [x] Commit succeeds — Session 1: 3 commits. Session 2: 5 commits (`98af990`, `55bbabf`, `84836ad`, `c392f50`, `b36508e`)
+- [x] Commit succeeds — Session 1: 3 commits. Session 2: 5 commits. Session 3: 2 commits. Session 4: 5 commits. Session 5: 6 commits. Total: 21 implementation commits on branch (38 ahead of main).
 - **Enforcement**: HOOK (pre-commit-check.sh)
 - **Gotcha**: Hook checks conventional commit format — "Fixed bug" will be rejected, must be "fix: ..."
 
@@ -416,8 +416,8 @@ These hooks fire during normal coding work:
 
 #### 6.8c post-edit-format.sh
 - **Trigger**: PostToolUse on `Edit` or `Write`
-- [ ] Auto-formats edited files (runs formatter if configured)
-- [ ] Silent if no formatter configured for file type
+- [x] Auto-formats edited files (runs formatter if configured) — Sessions 3-4: Ruff auto-formatted Python files on Write (e.g., long lines wrapped, import blocks reorganized). Visible as system-reminder notes showing file was "modified by a linter."
+- [x] Silent if no formatter configured for file type — Non-Python files (e.g., .md in `.claude/sessions/`) did not trigger formatting.
 - **Enforcement**: HOOK (auto-runs, advisory output)
 
 #### 6.8d console-log-audit.sh
@@ -471,19 +471,19 @@ These hooks fire during normal coding work:
 ### 6.9 Execution Readiness Check
 
 - **Trigger**: About to start implementing 3+ tasks in current session
-- [x] Claude checks context usage before proceeding — Session 2: Started at 27% (54k/200k). After 5 tasks, user checked `/context` at ~150k. Claude recommended handoff.
-- [x] At < 70%: proceeds normally — Session 2: Started 5 tasks at 27%, proceeded through all.
-- [x] At 70-80%: asks user whether to proceed or defer — Session 2: At ~75% (150k), Claude listed ready tasks and asked "Want me to continue?" User said to hand off.
-- [ ] At > 80%: recommends deferring to fresh session — Not reached this session (handed off at ~75%).
+- [x] Claude checks context usage before proceeding — Session 2: Started at 27% (54k/200k). After 5 tasks, user checked `/context` at ~150k. Claude recommended handoff. Session 4: User asked at 119k (~60%), Claude assessed correctly ("below 70% threshold"), continued for 2 more tasks, then handed off at ~70%.
+- [x] At < 70%: proceeds normally — Session 2: Started 5 tasks at 27%, proceeded through all. Session 4: At 60% (119k), assessed as safe and continued.
+- [x] At 70-80%: asks user whether to proceed or defer — Session 2: At ~75% (150k), Claude listed ready tasks and asked "Want me to continue?" User said to hand off. Session 4: At ~70% after 5 tasks, Claude offered handoff option. User chose handoff.
+- [ ] At > 80%: recommends deferring to fresh session — Not reached (handed off at ~70-75% in both Sessions 2 and 4).
 - **Enforcement**: NORMATIVE (new rule from v2.3.1 context-management.md)
-- **Gotcha**: This was added specifically because it was violated — Claude auto-executed 8 tasks at ~140k tokens. Session 2: Correctly respected. 5 tasks in ~75% context is good velocity without degradation.
+- **Gotcha**: This was added specifically because it was violated — Claude auto-executed 8 tasks at ~140k tokens. Sessions 2-4: Correctly respected across 3 sessions. 5 tasks per session in ~70-75% context is consistent velocity.
 
 ### 6.10 Set Task Done
 
 - **Trigger**: Task implementation complete, tests passing
 - **Command**: `task-master set-status <id> done`
-- [x] Status updated — Task 1 and Task 8 both set to `done` after completion. Session 2: Tasks 8, 9, 10, 15, 22 all set to `done` after completion (including all subtasks for 8 and 15).
-- [x] Claude suggests next task or milestone check-in — `task-master next` used after each completion. Session 2: `task-master list -c --ready` after each task, with suggested pick order.
+- [x] Status updated — Task 1 and Task 8 both set to `done` after completion. Session 2: Tasks 8, 9, 10, 15, 22 all set to `done` after completion (including all subtasks for 8 and 15). Sessions 3-4: Tasks 18, 23, 11, 16, 17, 12, 14 all set to `done` (including subtasks for 11). Session 5: Tasks 13, 19, 20, 21, 24, 25 all set to `done`. **All 25/25 tasks complete.**
+- [x] Claude suggests next task or milestone check-in — `task-master next` used after each completion. Session 2: `task-master list -c --ready` after each task, with suggested pick order. Sessions 3-4: Same pattern — `list -c` or `show <id>` after each task, with dependency-aware ordering. Session 5: Same pattern; after final task, suggested deployment testing and PR.
 - **Enforcement**: NORMATIVE (workflow rule)
 
 ---
@@ -624,18 +624,18 @@ These hooks fire during normal coding work:
 
 ### C.2 One Task In-Progress Rule
 
-- [x] Only one task has `in-progress` status at any time — Session 2: Verified. Each task set done before next set in-progress.
-- [x] Before switching tasks: current task set to done/blocked/pending — Session 2: 8→done, 9→done, 10→done, 22→done, 15→done.
-- [x] Then new task set to in-progress — Session 2: set-status in-progress called before work on each task.
+- [x] Only one task has `in-progress` status at any time — Session 2: Verified. Each task set done before next set in-progress. Sessions 3-4: Maintained across 7 additional tasks.
+- [x] Before switching tasks: current task set to done/blocked/pending — Session 2: 8→done, 9→done, 10→done, 22→done, 15→done. Sessions 3-4: 18→done, 23→done, 11→done, 16→done, 17→done, 12→done, 14→done.
+- [x] Then new task set to in-progress — Session 2: set-status in-progress called before work on each task. Sessions 3-4: Same pattern maintained.
 - **Enforcement**: NORMATIVE (workflow-enforcement.md)
 
 ### C.3 Commit Frequency
 
-- [x] Commits after every completed function/feature — Session 2: 5 commits for 5 tasks, each atomic.
-- [-] Commits after every bug fix — No bugs this session.
-- [x] Commits before switching tasks — Session 2: Every task committed before moving to next.
-- [x] No commits with broken code — Session 2: Full test suite (121) and ruff verified before every commit.
-- [x] All commit messages use conventional format — Session 2: `feat:` x4, `chore:` x1. All passed pre-commit hook.
+- [x] Commits after every completed function/feature — Session 2: 5 commits for 5 tasks, each atomic. Sessions 3-4: 7 commits for 7 tasks, each atomic.
+- [-] Commits after every bug fix — No bugs across any session.
+- [x] Commits before switching tasks — Session 2: Every task committed before moving to next. Sessions 3-4: Same pattern.
+- [x] No commits with broken code — Session 2: Full test suite (121) and ruff verified before every commit. Sessions 3-4: Full suite (up to 200) and ruff verified before every commit.
+- [x] All commit messages use conventional format — Session 2: `feat:` x4, `chore:` x1. Sessions 3-4: `feat:` x7. All passed pre-commit hook.
 - **Enforcement**: HOOK (pre-commit-check.sh validates format) + NORMATIVE (frequency)
 
 ### C.4 Branch Discipline
@@ -941,6 +941,67 @@ The brainstorming skill focuses on user intent, architecture, and design decisio
 
 ---
 
+### Finding #16 (Medium): No Frontend Development Workflow in Template
+
+**Severity**: Medium (workflow gap — no guidance for frontend-heavy projects)
+
+**Summary**: The template has mature workflows for Python backend development (TDD, task decomposition, code review, debugging), but no guidance for frontend development using available tools. When this project needed a React frontend rebuild, we discovered three powerful tools that should be standard workflow:
+
+1. **Magic MCP** (`mcp__magic__*`) — 21st.dev component generation
+   - `21st_magic_component_builder` — generates production React + Tailwind components
+   - `21st_magic_component_inspiration` — browse existing patterns before building
+   - `21st_magic_component_refiner` — iterate on components
+   - `logo_search` — brand-appropriate icons/logos
+
+2. **`frontend-design` skill** — guides overall design direction, layout strategy, color palette, typography. Prevents generic AI aesthetics. Should be invoked per-page during implementation.
+
+3. **shadcn/ui** as base component library — Radix primitives + Tailwind. Magic MCP components build on top of this. Should be the default recommendation for React projects.
+
+**Recommended frontend workflow for template:**
+
+```
+1. Design System Setup
+   - Invoke frontend-design skill for brand direction
+   - Configure Tailwind theme (colors, typography, spacing)
+   - Install shadcn/ui base primitives
+
+2. Component Design (per page)
+   - component_inspiration → browse patterns for the UI need
+   - frontend-design skill → creative direction for the page
+   - component_builder → generate polished components
+   - component_refiner → iterate until quality bar met
+
+3. Recommended Stack (internal tools / dashboards)
+   - React 18 + Vite (no SSR needed for internal tools)
+   - Tailwind CSS + shadcn/ui
+   - React Router (file-based routing unnecessary for <10 pages)
+   - TanStack Query (API state management)
+   - React Hook Form (form handling)
+
+4. Recommended Stack (public-facing apps)
+   - Next.js + Tailwind CSS + shadcn/ui
+   - Same component workflow with Magic MCP
+```
+
+**What the template should add:**
+- A `.claude/rules/frontend-workflow.md` rule defining when/how to use Magic MCP and frontend-design skill
+- Frontend stack recommendations in project setup wizard (`/setup`)
+- Integration with existing TDD workflow: component tests with Vitest + React Testing Library
+- Phase detection in `workflow-guide.md`: recognize "frontend implementation" as distinct from backend (different tools, different test patterns)
+
+**Why this matters**: Without this guidance, Claude defaults to generic Streamlit or basic HTML. The Magic MCP + frontend-design skill combination produces dramatically better output, but only if Claude knows to use them. The auto-invoke table in `proactive-steering.md` should include frontend signals.
+
+**Suggested additions to `proactive-steering.md` auto-invoke table:**
+
+| Context Signal | Auto-Invoke |
+|----------------|-------------|
+| "Build a UI", "create a page", "frontend" | frontend-design skill |
+| Building React/Next.js components | Magic MCP component_builder |
+| Starting frontend work | Magic MCP component_inspiration |
+| "Make it look better", "polish the UI" | Magic MCP component_refiner |
+
+---
+
 ## Summary
 
 | Phase | Total Checks | Pass | Fail | Skip |
@@ -958,6 +1019,20 @@ The brainstorming skill focuses on user intent, architecture, and design decisio
 | C: Cross-Cutting | 16 | 13 | 0 | 3 |
 | **TOTAL (so far)** | **120** | **93** | **13** | **13** |
 
-**Phase 6 notes (updated Session 2)**: TDD items (6.4-6.6) now PASSED — exercised on Tasks 8, 9, 10, 15. Full RED→GREEN→REFACTOR cycle confirmed for 3 tasks (8, 9, 15). 121 tests passing. Remaining skips: `>80%` context check (not reached), bugfix commits (none needed), bugfix branches (none needed).
+**Phase 6 notes (updated Session 4)**: TDD exercised on 12 tasks total (8, 9, 10, 15, 18, 23, 11, 16, 17, 12, 14 + Task 10 partial). Full RED→GREEN→REFACTOR cycle confirmed for 10 tasks. 200 tests passing, zero regressions across 4 sessions. Remaining skips: `>80%` context check (not reached — consistently handed off at ~70-75%), bugfix commits (none needed), bugfix branches (none needed).
 
 **Session 2 highlight**: First fully clean session — zero new failures. All template workflows (TDD, task management, commit discipline, context management, session handoff) worked as designed. The `/tdd` skill was advisory only (Superpowers not enforcing), but TDD was followed by discipline.
+
+**Sessions 3-4 highlight**: Sustained velocity — 7 tasks across 2 sessions with zero new failures. Established reusable architecture pattern: Streamlit page + testable helpers module + test file. Context management check-ins worked correctly at 119k (Session 4). 19/25 tasks complete (76%).
+
+**Session 6 highlight (deployment testing)**: Found 5 deployment bugs that 263 unit tests missed. Key findings:
+
+1. **Unit tests don't catch deployment issues** — PYTHONPATH, Docker module resolution, and auth bypass on sub-pages all passed unit tests but failed in Docker. Template recommendation: add a "deployment smoke test" phase between implementation and review.
+
+2. **Streamlit auto-discovers all .py in pages/** — helper modules placed alongside pages appeared as blank sidebar entries. Architecture pattern updated: helpers must live outside `pages/` directory (moved to `app/helpers/`).
+
+3. **Auth gate must be on every page** — Streamlit pages are independently accessible via URL. Auth on only the main page is a security bypass. No template rule or review skill specifically catches this pattern.
+
+4. **PRD constraint violation caught by user, not by tools** — The PRD specified "$0/call via Claude CLI with OAuth" but the Docker architecture containerized the engine (where Claude CLI can't run). This is a design-level constraint that `/code-review` and `/security-audit` would not catch — it requires understanding the business requirements. `/orchestrate review` might catch it if agents read the PRD.
+
+5. **Review should happen BEFORE deployment testing** — The handoff doc had the correct order (review then deploy), but we inverted it. Running `/orchestrate review` first might have flagged the auth bypass and architecture mismatch earlier.

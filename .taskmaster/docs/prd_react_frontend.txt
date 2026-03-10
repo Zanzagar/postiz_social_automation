@@ -1,0 +1,228 @@
+# PRD: React Frontend Rebuild — Gita Valley Content Hub
+
+## Overview
+
+Rebuild the Streamlit Content Hub as a polished React single-page application with a FastAPI backend. The existing Python content engine (generator, pipeline, intelligence, sheets, postiz, validator, health modules) is preserved — FastAPI wraps it with REST endpoints. The React frontend replaces all 6 Streamlit pages with a visually strong, mobile-first interface built using Magic MCP components, shadcn/ui, and Tailwind CSS.
+
+## Problem
+
+The current Streamlit UI is functional but looks like a data dashboard. Farm staff need a content creation tool that feels intuitive, warm, and professional — matching the Gita Valley brand. Streamlit's layout constraints prevent achieving the visual quality needed for a staff-facing MVP.
+
+## Users
+
+- **Primary**: Temple/farm staff (non-technical). Take photos of cows and farm life, write 1-sentence captions, need AI to generate platform-specific posts.
+- **Secondary**: Content reviewer (approves drafts before publishing).
+- **Environment**: Often on mobile phones in the field. Must be responsive and touch-friendly.
+
+## Architecture
+
+### System Diagram
+
+```
+┌──────────────────────────────────────────┐
+│  React SPA (Vite + Tailwind + shadcn/ui) │
+│  Docker: nginx:alpine on :3000           │
+│  Pages: /, /create, /drafts, /calendar,  │
+│         /suggestions, /health            │
+└──────────────────┬───────────────────────┘
+                   │ HTTP/JSON (+ SSE for generation)
+                   ▼
+┌──────────────────────────────────────────┐
+│  FastAPI Backend (host, :8000)           │
+│                                          │
+│  Wraps existing Python modules:          │
+│  - content_engine.generator              │
+│  - content_engine.pipeline               │
+│  - content_engine.intelligence           │
+│  - content_engine.sheets                 │
+│  - content_engine.postiz                 │
+│  - content_engine.validator              │
+│  - content_engine.health                 │
+│                                          │
+│  Calls: claude -p (subprocess, OAuth)    │
+│  Calls: Google Sheets API                │
+│  Calls: Postiz API                       │
+└──────────────────────────────────────────┘
+```
+
+### Key Constraint
+
+The FastAPI backend MUST run on the host (not Docker) because it calls `claude -p` via subprocess, which requires the host user's OAuth token from `~/.claude/`. The React frontend can run anywhere (Docker, CDN, static hosting).
+
+## Tech Stack
+
+### Frontend
+- React 18 + Vite (build tool, no SSR needed for internal tool)
+- Tailwind CSS (utility-first styling)
+- shadcn/ui (Radix primitives + Tailwind — accessible base components)
+- React Router v6 (client-side routing, 6 pages)
+- TanStack Query (React Query) for API state management, caching, optimistic updates
+- React Hook Form + Zod for form validation
+- Magic MCP components (21st.dev) for polished UI during development
+
+### Backend
+- FastAPI + uvicorn
+- Existing content_engine package (no modifications to business logic)
+- python-jose for JWT token generation
+- python-multipart for file uploads
+- sse-starlette for Server-Sent Events (generation progress)
+
+### Design System
+- Gita Valley brand: warm earth tones, green accents, clean typography
+- Mobile-first responsive design (staff use phones in the field)
+- Use `frontend-design` skill per-page for creative direction
+- Use Magic MCP `component_inspiration` → `component_builder` → `component_refiner` pipeline
+
+## API Endpoints
+
+### Authentication
+- `POST /api/auth/login` — password verify → JWT token (1-hour expiry)
+- All other endpoints require `Authorization: Bearer <token>` header
+
+### Content Creation
+- `POST /api/generate` — generate AI captions for a content row (SSE stream for progress)
+- `POST /api/reprompt` — regenerate captions with staff feedback
+- `POST /api/send-to-postiz` — create draft posts in Postiz for generated captions
+
+### Content Reading
+- `GET /api/drafts` — list pending_approval rows from Sheets
+- `GET /api/calendar` — list approved/scheduled/posted rows
+- `GET /api/suggestions` — list AI-generated content suggestions
+- `GET /api/content/{row_number}` — get single content row details
+
+### Content Actions
+- `POST /api/drafts/{row_number}/approve` — approve a draft, send to Postiz
+- `POST /api/drafts/{row_number}/edit` — update captions for a draft
+- `POST /api/suggest` — trigger suggestion pipeline (analyze gaps + generate)
+
+### System
+- `GET /api/health` — all service health checks (sheets, postiz, claude, oauth)
+- `GET /api/integrations` — list connected Postiz platforms
+
+## Pages
+
+### 1. Dashboard (`/`)
+- Overview cards: pending drafts count, scheduled this week, recent posts
+- Quick-create shortcut (photo upload + caption → generate)
+- Calendar mini-view of upcoming scheduled content
+- Health status indicators (green/red dots for each service)
+- Recent activity feed
+
+### 2. Create & Generate (`/create`)
+- Photo upload area (drag-and-drop, mobile camera capture, Google Drive URL)
+- Caption text input (1 sentence, max 2000 chars)
+- Platform selector (checkboxes with platform icons)
+- Date picker for scheduling
+- "Generate" button → SSE stream shows progress → captions appear
+- Generated captions displayed in platform-specific cards (editable inline)
+- Re-prompt input with "Regenerate" button
+- "Send to Postiz" button to create drafts
+
+### 3. Review Drafts (`/drafts`)
+- List of pending_approval content rows
+- Each draft shows: raw text preview, platforms, generated captions in tabs
+- Inline caption editing per platform
+- Re-prompt per draft with feedback input
+- Batch select + approve button
+- Link to Postiz for each draft (if postiz_ids exist)
+
+### 4. Content Calendar (`/calendar`)
+- Monthly/weekly calendar view showing scheduled and posted content
+- Color-coded by content pillar
+- Click on a day to see content details
+- Visual indicators for gaps (empty days highlighted)
+- Pillar balance bar chart (actual vs target distribution)
+
+### 5. Suggestions (`/suggestions`)
+- List of AI-generated content ideas
+- Filter by pillar, status
+- Each suggestion shows: idea, pillar, rationale, media suggestion, suggested date
+- "Accept" → pre-fills Create page with suggestion data
+- "Dismiss" → marks suggestion as dismissed
+- "Generate New Suggestions" button → triggers suggestion pipeline
+
+### 6. System Health (`/health`)
+- Service status cards (Google Sheets, Postiz API, Claude CLI, OAuth Token)
+- Each shows: status (OK/Error), message, last checked
+- Recent errors table (from Sheets Errors tab)
+- Manual refresh button
+
+## Authentication
+
+- Simple password-based auth (same as current Streamlit implementation)
+- FastAPI issues JWT token on successful login (1-hour expiry)
+- React stores token in localStorage, includes in Authorization header
+- Brute-force protection: 5 attempts, then 5-minute lockout (server-side)
+- Automatic redirect to login page on 401 response
+
+## Real-Time Generation
+
+Caption generation takes 30-120 seconds (Claude CLI). Use Server-Sent Events (SSE) for progress:
+
+1. Client POSTs to `/api/generate`
+2. Server returns SSE stream
+3. Events: `{"status": "validating"}`, `{"status": "generating", "platform": "instagram"}`, `{"status": "complete", "captions": {...}}`
+4. Client updates UI progressively as each platform caption arrives
+
+## File Upload
+
+- Frontend: drag-and-drop zone or file picker (mobile camera capture via `accept="image/*,video/*"`)
+- Uploads to FastAPI as multipart form data
+- Backend stores temporarily, passes URL to existing `upload_media` flow
+- Alternative: Google Drive URL input (existing flow, no upload needed)
+
+## Mobile-First Design Requirements
+
+- Touch-friendly tap targets (min 44px)
+- Bottom navigation bar on mobile (top nav on desktop)
+- Swipe gestures for navigating between draft cards
+- Camera capture integration for photo upload
+- Responsive grid: 1 column mobile, 2-3 columns desktop
+- No hover-only interactions (everything accessible via tap)
+
+## Brand Design Direction
+
+- **Colors**: Warm earth tones (terracotta, sage green, cream) with accent green (#4A7C59)
+- **Typography**: Clean, readable sans-serif (Inter or similar). Headers can use a warmer serif.
+- **Imagery**: Rounded corners, soft shadows, nature-inspired spacing
+- **Tone**: Friendly, approachable — not corporate. Should feel like opening a farm journal.
+- **Icons**: Nature/farm themed where possible (cow, leaf, sun, calendar)
+
+## Non-Goals (Explicitly Out of Scope)
+
+- **No Google Sheets replacement** — Sheets remains the data store. The frontend reads/writes via the API which calls the existing SheetsClient.
+- **No Postiz replacement** — Postiz handles scheduling and publishing. The frontend creates drafts in Postiz; final scheduling is done in Postiz's own UI.
+- **No user management** — Single shared password for all staff (same as current). Multi-user auth is a future enhancement.
+- **No offline mode** — Requires internet for all operations (Sheets, Postiz, Claude).
+- **No rewrite of content engine** — All business logic stays in the existing Python modules. FastAPI is a thin wrapper.
+
+## Testing Strategy
+
+### Backend (FastAPI)
+- pytest for API endpoint tests (TestClient)
+- Mock existing content engine modules (they're already tested with 264 tests)
+- Test auth flow, JWT validation, error responses
+- Test SSE streaming for generation endpoint
+
+### Frontend (React)
+- Vitest + React Testing Library for component tests
+- Test form validation, API error handling, auth flow
+- Mock API responses with MSW (Mock Service Worker)
+- E2e tests with Playwright for critical flows (create → generate → send)
+
+## Migration Path
+
+1. Build FastAPI backend wrapping existing modules (no Streamlit changes yet)
+2. Build React frontend page by page
+3. Both Streamlit (:8501) and React (:3000) can run simultaneously during migration
+4. Once React frontend is complete and tested, remove Streamlit code and Docker config
+5. Update docker-compose.yaml: replace content-hub Streamlit service with nginx serving React build
+
+## Success Criteria
+
+- Staff can create a post (upload photo, write caption, generate, send to Postiz) in under 2 minutes
+- All 6 pages functional and visually polished
+- Mobile-responsive on iPhone/Android
+- Page load under 2 seconds on 4G connection
+- All existing 264 content engine tests continue passing
+- New test coverage: >80% for FastAPI endpoints, >70% for React components

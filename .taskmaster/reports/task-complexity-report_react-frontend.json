@@ -1,0 +1,213 @@
+{
+	"meta": {
+		"generatedAt": "2026-03-10T19:08:34.484Z",
+		"tasksAnalyzed": 25,
+		"totalTasks": 25,
+		"analysisCount": 25,
+		"thresholdScore": 5,
+		"projectName": "postiz_social_automation",
+		"usedResearch": false
+	},
+	"complexityAnalysis": [
+		{
+			"taskId": 1,
+			"taskTitle": "Set up FastAPI backend project structure",
+			"complexityScore": 4,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Create api/ directory structure with __init__.py, main.py with FastAPI app, CORS, exception handlers 2) Create config.py using pydantic-settings for env vars (POSTIZ_API_KEY, SPREADSHEET_ID, etc.) 3) Create dependencies.py with DI for existing SheetsClient, PostizClient, CaptionGenerator from content_engine module",
+			"reasoning": "Moderate complexity. The content_engine modules already exist (sheets.py, postiz.py, generator.py) and just need to be wrapped. FastAPI setup is standard boilerplate. Main work is wiring existing code via dependency injection. pyproject.toml already exists and just needs new deps added."
+		},
+		{
+			"taskId": 2,
+			"taskTitle": "Implement JWT authentication endpoints",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Create api/auth.py with POST /api/auth/login endpoint, reuse existing verify_password() from app/auth.py 2) Implement JWT generation with python-jose (1-hour expiry) 3) Create rate limiting middleware with in-memory failed attempt tracking by IP 4) Create api/middleware.py with get_current_user dependency for Bearer token validation",
+			"reasoning": "Medium complexity. The verify_password() function already exists in app/auth.py with constant-time comparison. Need to add JWT generation/validation and brute-force protection. Existing auth module has MAX_ATTEMPTS=5 and LOCKOUT_SECONDS=300 constants to reuse."
+		},
+		{
+			"taskId": 3,
+			"taskTitle": "Implement content generation SSE endpoint",
+			"complexityScore": 6,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Create api/routes/generate.py with POST /api/generate accepting JSON body 2) Implement SSE streaming using sse-starlette EventSourceResponse 3) Wrap existing CaptionGenerator.generate_captions() with asyncio.to_thread() for non-blocking 4) Create POST /api/reprompt endpoint for feedback-based regeneration",
+			"reasoning": "Higher complexity due to SSE streaming which requires careful async handling. The CaptionGenerator already exists and calls Claude CLI synchronously, so needs asyncio.to_thread() wrapper. Must coordinate progress events with actual generation steps."
+		},
+		{
+			"taskId": 4,
+			"taskTitle": "Implement Postiz integration endpoints",
+			"complexityScore": 4,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Create api/routes/postiz.py with POST /api/send-to-postiz endpoint 2) Map platform names to integration IDs using existing postiz.list_integrations() 3) Create GET /api/integrations endpoint and add error handling for PostizAPIError/MediaValidationError",
+			"reasoning": "Moderate complexity. PostizClient already exists with list_integrations() and create_draft_post() methods. Error classes PostizAPIError and MediaValidationError are already defined. Mainly wrapping existing code with HTTP endpoints."
+		},
+		{
+			"taskId": 5,
+			"taskTitle": "Implement content reading endpoints",
+			"complexityScore": 4,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Create api/routes/content.py with GET /api/drafts and GET /api/calendar endpoints using existing sheets.get_rows_by_status() 2) Create GET /api/suggestions using sheets.get_suggestions() and GET /api/content/{row_number} 3) Create api/schemas.py with Pydantic response models using camelCase alias_generator",
+			"reasoning": "Moderate complexity. SheetsClient already has get_rows_by_status(), get_all_content_rows(), get_suggestions() methods. Main work is creating Pydantic response schemas with camelCase serialization and grouping calendar data by date."
+		},
+		{
+			"taskId": 6,
+			"taskTitle": "Implement content action endpoints",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Add POST /api/drafts/{row_number}/approve with sheets.update_status() and Postiz draft creation 2) Add POST /api/drafts/{row_number}/edit with sheets.update_captions() 3) Create api/routes/suggestions.py with POST /api/suggest triggering suggest_pipeline in background 4) Add POST /api/suggestions/{id}/accept and /dismiss endpoints",
+			"reasoning": "Medium complexity. Combines multiple existing functions (update_status, update_captions, create_draft_post). Background task for suggest_pipeline adds complexity. Need to handle coordination between Sheets updates and Postiz API calls."
+		},
+		{
+			"taskId": 7,
+			"taskTitle": "Implement health check endpoint",
+			"complexityScore": 3,
+			"recommendedSubtasks": 2,
+			"expansionPrompt": "Break down into: 1) Create api/routes/health.py calling existing health module functions (check_sheets_health, check_postiz_health, check_claude_health, check_oauth_health) 2) Add caching with 30-second TTL and include sheets.get_recent_errors() in response",
+			"reasoning": "Low complexity. All health check functions already exist in content_engine/health.py. Just need to expose them via HTTP endpoint with JSON serialization and simple time-based caching."
+		},
+		{
+			"taskId": 8,
+			"taskTitle": "Implement file upload endpoint",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Create api/routes/upload.py with POST /api/upload for multipart form data 2) Implement file type and size validation using existing postiz.validate_media() 3) Add temp file handling with UUID filenames 4) Create background task for temp file cleanup after 1 hour",
+			"reasoning": "Medium complexity. PostizClient already has validate_media() with SUPPORTED_IMAGE_TYPES/SUPPORTED_VIDEO_TYPES and size limits. Need to handle multipart uploads, temp storage, and scheduled cleanup."
+		},
+		{
+			"taskId": 9,
+			"taskTitle": "Set up React frontend with Vite and Tailwind",
+			"complexityScore": 4,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Initialize Vite React TypeScript project with npm create vite@latest 2) Install and configure Tailwind CSS with Gita Valley brand colors (terracotta #C4A484, sage #4A7C59, cream #FFF8E7) 3) Install core dependencies (react-router-dom, @tanstack/react-query, react-hook-form, zod, lucide-react, date-fns) and configure vite proxy to backend",
+			"reasoning": "Moderate complexity. Standard React/Vite/Tailwind setup with custom theming. No frontend/ directory exists yet so this is greenfield. Most commands are well-documented boilerplate."
+		},
+		{
+			"taskId": 10,
+			"taskTitle": "Install and configure shadcn/ui components",
+			"complexityScore": 2,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "Single task: Run shadcn init and add all required components (button, card, input, textarea, label, checkbox, form, select, tabs, toast, dialog, calendar, dropdown-menu, avatar, badge, progress, skeleton, alert) in one installation session",
+			"reasoning": "Low complexity. shadcn/ui has a well-defined CLI workflow. Just running init + add commands. No custom logic needed, just configuration choices."
+		},
+		{
+			"taskId": 11,
+			"taskTitle": "Implement API client and auth context",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Create src/lib/api.ts with fetch wrapper, auth header interceptor, and typed API functions 2) Create src/contexts/AuthContext.tsx with AuthProvider, login/logout state, localStorage JWT handling 3) Create ProtectedRoute component with redirect to /login 4) Set up TanStack Query client with QueryClientProvider",
+			"reasoning": "Medium complexity. Standard React auth pattern but multiple interconnected pieces: API client, context, protected routes, query client. Token expiry checking and 401 handling add some nuance."
+		},
+		{
+			"taskId": 12,
+			"taskTitle": "Implement Login page",
+			"complexityScore": 3,
+			"recommendedSubtasks": 2,
+			"expansionPrompt": "Break down into: 1) Create src/pages/LoginPage.tsx with centered card layout, password form using react-hook-form + zod 2) Add error handling for invalid password (401) and lockout countdown display (429)",
+			"reasoning": "Low-moderate complexity. Single-purpose page with form validation. Lockout countdown is the only non-trivial feature. Gita Valley branding is straightforward styling."
+		},
+		{
+			"taskId": 13,
+			"taskTitle": "Implement app shell and navigation",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Create src/components/layout/AppShell.tsx with responsive layout switching at 768px breakpoint 2) Create Sidebar.tsx with nav items, active state styling, logout 3) Create BottomNav.tsx with icon buttons and touch-friendly targets 4) Set up React Router in App.tsx with all routes",
+			"reasoning": "Medium complexity. Responsive layout with two navigation modes (sidebar/bottom nav) requires careful CSS breakpoint handling. Multiple routes to configure. Navigation state management across components."
+		},
+		{
+			"taskId": 14,
+			"taskTitle": "Implement Dashboard page",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Create src/pages/DashboardPage.tsx with stats cards layout 2) Create quick-create card with mini upload and caption input 3) Create calendar mini-view showing current week with scheduled content dots 4) Create useDashboardData hook combining drafts, calendar, and health data",
+			"reasoning": "Medium complexity. Combines multiple data sources (drafts count, calendar, health status). Calendar mini-view with date calculations. Quick-create flow navigating to /create with prefilled data."
+		},
+		{
+			"taskId": 15,
+			"taskTitle": "Implement Create & Generate page",
+			"complexityScore": 7,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Break down into: 1) Create src/pages/CreatePage.tsx with photo upload zone (drag-drop, file browse, camera capture) 2) Create form with caption textarea, platform checkboxes, date picker 3) Create GenerationProgress.tsx with SSE listener for /api/generate 4) Create CaptionCards.tsx with platform-specific cards, inline editing 5) Add re-prompt input with regenerate functionality and send-to-Postiz action",
+			"reasoning": "Higher complexity. Multiple interactive components: file upload with preview, SSE streaming, inline editing, re-prompt flow. SSE handling in React requires careful cleanup. Mobile camera capture adds platform considerations."
+		},
+		{
+			"taskId": 16,
+			"taskTitle": "Implement Review Drafts page",
+			"complexityScore": 6,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Create src/pages/DraftsPage.tsx with list view and select-all functionality 2) Create DraftCard.tsx with selection checkbox, platform tabs, inline caption editing 3) Create re-prompt input per draft with regenerate button 4) Create BatchActions.tsx with fixed bottom bar for batch approval",
+			"reasoning": "Medium-high complexity. Selection state management across multiple cards. Inline editing with optimistic updates. Batch operations need to coordinate multiple API calls. Platform tabs using shadcn components."
+		},
+		{
+			"taskId": 17,
+			"taskTitle": "Implement Content Calendar page",
+			"complexityScore": 6,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Create src/pages/CalendarPage.tsx with month/week view toggle and navigation 2) Create CalendarDay.tsx with content dots color-coded by pillar 3) Create DayModal.tsx dialog showing content for selected day 4) Create PillarBalance.tsx with horizontal bar chart showing distribution",
+			"reasoning": "Medium-high complexity. Calendar grid rendering with date-fns calculations. Multiple view modes. Color-coding by pillar requires mapping ContentPillar to colors. Pillar balance visualization."
+		},
+		{
+			"taskId": 18,
+			"taskTitle": "Implement Suggestions page",
+			"complexityScore": 4,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Create src/pages/SuggestionsPage.tsx with list view and status filter dropdown 2) Create SuggestionCard.tsx with pillar badge, accept/dismiss buttons 3) Create useSuggestions hook with TanStack Query mutations for accept/dismiss with optimistic updates",
+			"reasoning": "Moderate complexity. Standard list/filter/action pattern. Accept navigates to /create with prefilled data. Optimistic updates for dismiss. Generate New Suggestions triggers background API call."
+		},
+		{
+			"taskId": 19,
+			"taskTitle": "Implement System Health page",
+			"complexityScore": 3,
+			"recommendedSubtasks": 2,
+			"expansionPrompt": "Break down into: 1) Create src/pages/HealthPage.tsx with service status cards grid and refresh button 2) Create ServiceCard.tsx and ErrorLog.tsx table with auto-refresh via TanStack Query refetchInterval",
+			"reasoning": "Low-moderate complexity. Display-only page consuming /api/health endpoint. Service cards with status icons. Error table with simple column layout. Auto-refresh is built into TanStack Query."
+		},
+		{
+			"taskId": 20,
+			"taskTitle": "Add mobile-first responsive styling",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Audit all components for 44px touch targets and fix spacing 2) Update forms for full-width inputs, vertical stacking on mobile 3) Create SwipeableCard.tsx with touch event handling for draft navigation 4) Add safe-area-inset padding for iPhone notch on BottomNav",
+			"reasoning": "Medium complexity. Cross-cutting concern affecting multiple components. Swipe gestures require touch event handling. Safe-area-inset is iOS-specific. Requires testing across viewport sizes."
+		},
+		{
+			"taskId": 21,
+			"taskTitle": "Create Dockerfile for React frontend",
+			"complexityScore": 4,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Create frontend/Dockerfile with multi-stage build (node:20-alpine for build, nginx:alpine for serve) 2) Create nginx.conf with SPA fallback, /api/* proxy to backend, gzip, static caching 3) Update docker-compose.yaml with frontend service on port 3000",
+			"reasoning": "Moderate complexity. Multi-stage Docker build is standard pattern. nginx proxy config for SPA + API requires careful try_files and proxy_pass setup. docker-compose.yaml already exists and needs service addition."
+		},
+		{
+			"taskId": 22,
+			"taskTitle": "Write FastAPI endpoint tests",
+			"complexityScore": 6,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Break down into: 1) Create tests/test_api/ directory structure with conftest.py fixtures for TestClient and mocked dependencies 2) Write test_auth.py for login, lockout, protected endpoints 3) Write test_generate.py for SSE stream format and mocked CaptionGenerator 4) Write test_content.py for all content CRUD endpoints 5) Write test_health.py for health check aggregation",
+			"reasoning": "Medium-high complexity. Comprehensive test coverage across all endpoints. SSE testing requires special handling. Mocking multiple dependencies (SheetsClient, PostizClient, CaptionGenerator). Target 80%+ coverage."
+		},
+		{
+			"taskId": 23,
+			"taskTitle": "Write React component tests",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Set up Vitest + React Testing Library + MSW for API mocking 2) Write LoginPage.test.tsx and AppShell.test.tsx 3) Write CreatePage.test.tsx testing form fields and SSE handling 4) Write DraftsPage.test.tsx testing selection and batch actions",
+			"reasoning": "Medium complexity. Standard React Testing Library patterns. MSW setup for API mocking. SSE testing in React requires careful mock setup. Target 70%+ coverage."
+		},
+		{
+			"taskId": 24,
+			"taskTitle": "Create Playwright E2E tests",
+			"complexityScore": 5,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Initialize Playwright with config for baseURL and webServer startup 2) Write auth.spec.ts for login/logout/session flows 3) Write create-post.spec.ts and drafts.spec.ts for critical user journeys",
+			"reasoning": "Medium complexity. Playwright setup is straightforward. E2E tests need backend and frontend running. Critical flows: auth, content creation, draft approval. Test fixtures for auth state."
+		},
+		{
+			"taskId": 25,
+			"taskTitle": "Update docker-compose and deployment configuration",
+			"complexityScore": 4,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Add content-hub-frontend service to docker-compose.yaml with depends_on 2) Update README.md with frontend section, FastAPI startup, and architecture diagram 3) Create Makefile with frontend-dev, api-dev, and combined dev targets",
+			"reasoning": "Moderate complexity. docker-compose.yaml already exists with content-hub service. Adding frontend service is straightforward. README update and Makefile are documentation/convenience tasks."
+		}
+	]
+}
