@@ -1,0 +1,237 @@
+{
+	"meta": {
+		"generatedAt": "2026-02-24T07:10:05.098Z",
+		"tasksAnalyzed": 28,
+		"totalTasks": 28,
+		"analysisCount": 28,
+		"thresholdScore": 5,
+		"projectName": "postiz_social_automation",
+		"usedResearch": true
+	},
+	"complexityAnalysis": [
+		{
+			"taskId": 31,
+			"taskTitle": "Initialize Python Project with pyproject.toml",
+			"complexityScore": 2,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - straightforward project scaffolding",
+			"reasoning": "Standard Python project initialization with pyproject.toml. The task details already provide exact file contents and directory structure. No existing code to refactor. Simply create directories and files as specified. Low complexity - experienced Python developer can complete in under 30 minutes."
+		},
+		{
+			"taskId": 32,
+			"taskTitle": "Create Data Models for Content Pipeline",
+			"complexityScore": 3,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - models are fully specified",
+			"reasoning": "Dataclass models are straightforward to implement. The task details provide complete code for all models (ContentPillar, ContentStatus, ContentRow, Suggestion, PostDraft). No complex inheritance or validation logic required. Just implement the provided specifications in models.py."
+		},
+		{
+			"taskId": 33,
+			"taskTitle": "Implement Google Sheets Client Module",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Authentication setup with service account credentials, 2) Read operations (get_rows_by_status, get_ready_rows), 3) Write operations (update_captions, update_status), 4) Suggestions tab operations (write_suggestion, get_suggestions) with error handling and retry logic",
+			"reasoning": "Moderate complexity - requires Google Sheets API knowledge, proper authentication handling, and row parsing to map sheet columns to ContentRow models. Multiple methods with different read/write patterns. Error handling for API failures, permission issues, and quota limits. Tests need mocking of Google API responses."
+		},
+		{
+			"taskId": 34,
+			"taskTitle": "Implement Postiz API Client Module",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Base client setup with authentication and request handling, 2) Post creation and media upload methods, 3) Post status and engagement metrics queries, 4) Rate limiting with exponential backoff (30 req/hr constraint) and error handling",
+			"reasoning": "Moderate complexity - HTTP client with rate limiting (30/hr documented in PRD), retry logic, media upload handling. The Postiz API is in beta and may have quirks. Need to implement exponential backoff for 429 responses. Authentication format is specific (no Bearer prefix). Testing requires mocking HTTP responses."
+		},
+		{
+			"taskId": 35,
+			"taskTitle": "Implement Claude Code CLI Integration",
+			"complexityScore": 6,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Brand guide loading and prompt building, 2) Claude CLI subprocess execution with timeout handling, 3) Response parsing and caption extraction for structured output, 4) Error handling for auth/timeout/malformed output with retry logic",
+			"reasoning": "Higher complexity due to: subprocess management with proper timeout handling (120s), OAuth token state detection, parsing potentially malformed AI output into structured captions, building complex multi-part prompts with brand guide and platform instructions. The CLI integration pattern is less common than API calls."
+		},
+		{
+			"taskId": 36,
+			"taskTitle": "Create Brand Guide and Platform Prompt Templates",
+			"complexityScore": 2,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - content creation task",
+			"reasoning": "Documentation/content task, not code. The PRD and design doc already contain all branding rules, platform guidelines, and content pillar definitions. Simply consolidate into brand-guide.md. No technical complexity - just careful transcription and organization of existing content."
+		},
+		{
+			"taskId": 37,
+			"taskTitle": "Create Content Repository Data Files",
+			"complexityScore": 2,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - data file creation",
+			"reasoning": "Create 4 JSON files with static content. The task details provide example structures. Content comes from PRD (cow names, farm facts, festival calendar). No code logic - just data authoring. Low complexity."
+		},
+		{
+			"taskId": 38,
+			"taskTitle": "Implement Content Intelligence Module",
+			"complexityScore": 6,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Break down into: 1) Learning context loading and persistence, 2) Content gap analysis (days without content), 3) Pillar distribution calculation against targets (40/25/15/10/5/5), 4) Festival calendar integration with upcoming event detection, 5) Pattern extraction from engagement data for learning context updates",
+			"reasoning": "Higher complexity - multiple analytical functions working with Sheet data and local JSON files. Pillar distribution calculation requires understanding the target percentages. Gap analysis needs date manipulation. Festival calendar needs date parsing and lookups. Learning context updates require pattern extraction logic."
+		},
+		{
+			"taskId": 39,
+			"taskTitle": "Build run-enhance.py Script (Mode 1)",
+			"complexityScore": 4,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - integration script using existing modules",
+			"reasoning": "This is an orchestration script that calls already-implemented modules (sheets, postiz, generator, intelligence). The logic flow is clear in the task details. Primary complexity is error handling to ensure one failed row doesn't stop others. With modules already built (tasks 33-35, 38), this becomes straightforward assembly."
+		},
+		{
+			"taskId": 40,
+			"taskTitle": "Build run-suggest.py Script (Mode 2)",
+			"complexityScore": 4,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - integration script using existing modules",
+			"reasoning": "Similar to task 39 - orchestration script using already-built modules. Calls intelligence module for gap/pillar analysis, then generator for suggestions, then writes to Sheet. Dependencies on tasks 33, 35, 38 mean the hard work is already done."
+		},
+		{
+			"taskId": 41,
+			"taskTitle": "Build run-learn.py Script",
+			"complexityScore": 4,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - data collection script using existing modules",
+			"reasoning": "Script to pull engagement data from Postiz API and update learning context. Uses postiz.py and intelligence.py modules. Main logic is correlating posted content with engagement metrics. Moderate complexity due to data transformation, but uses existing module infrastructure."
+		},
+		{
+			"taskId": 42,
+			"taskTitle": "Create Streamlit App Skeleton and Navigation",
+			"complexityScore": 3,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - standard Streamlit setup",
+			"reasoning": "Standard Streamlit multi-page app setup. The task details provide most of the code. Includes session state initialization, simple password protection, sidebar navigation, and custom CSS for branding. Streamlit makes this straightforward. No complex state management."
+		},
+		{
+			"taskId": 43,
+			"taskTitle": "Build Create Post Page",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Input form with photo upload/URL, text input, pillar dropdown, platform checkboxes, 2) AI generation integration calling ClaudeGenerator, 3) Generated caption display with inline editing and session state, 4) Re-generation with feedback and Postiz submission flow",
+			"reasoning": "Most complex Streamlit page - combines file upload, form inputs, AI integration, state management for editing, and Postiz API calls. Multiple user interaction flows (generate, edit, regenerate, submit). Requires careful session state handling for edited captions."
+		},
+		{
+			"taskId": 44,
+			"taskTitle": "Build Suggestions Page",
+			"complexityScore": 4,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - display-focused page",
+			"reasoning": "Read-heavy page displaying suggestions from Sheet. Accept/dismiss actions update suggestion status. Gap visualization and pillar distribution chart use Streamlit's built-in charting. Less complex than Create Post page - mainly display logic with simple action buttons."
+		},
+		{
+			"taskId": 45,
+			"taskTitle": "Build Drafts Review Page",
+			"complexityScore": 5,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Draft listing with side-by-side platform caption display, 2) Inline editing with session state management, 3) Re-prompt functionality and batch approve/send to Postiz flow",
+			"reasoning": "Similar complexity to Create Post - multiple editable fields per draft, re-prompt integration, and Postiz submission. Side-by-side platform display requires careful layout. Session state management for tracking edits across multiple drafts."
+		},
+		{
+			"taskId": 46,
+			"taskTitle": "Build Performance Dashboard Page",
+			"complexityScore": 3,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - read-only dashboard",
+			"reasoning": "Read-only dashboard displaying metrics from learning context. Uses Streamlit's built-in charts (bar_chart, line_chart). Data comes from post-performance.json. No complex interactions - just data visualization. Lower complexity than interactive pages."
+		},
+		{
+			"taskId": 47,
+			"taskTitle": "Configure Streamlit Theming and Secrets",
+			"complexityScore": 2,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - configuration files",
+			"reasoning": "Create two TOML configuration files. The task details provide exact content. Add .gitignore entry. No code logic - just configuration. Very low complexity."
+		},
+		{
+			"taskId": 48,
+			"taskTitle": "Implement Re-prompting Flow with Feedback",
+			"complexityScore": 4,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - enhancement to existing generator",
+			"reasoning": "Adds regenerate_caption method to generator.py and integrates with Create Post and Drafts pages. The core AI calling infrastructure already exists from task 35. This is an incremental enhancement. Moderate complexity due to feedback context handling."
+		},
+		{
+			"taskId": 49,
+			"taskTitle": "Add Media Upload and Preview to Streamlit",
+			"complexityScore": 3,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - Streamlit UI enhancement",
+			"reasoning": "Adds file_uploader widget with preview for images/videos. Google Drive URL validation with regex. Streamlit provides built-in media preview capabilities. Straightforward enhancement to Create Post page."
+		},
+		{
+			"taskId": 50,
+			"taskTitle": "Create Dockerfile for Content Engine and Streamlit",
+			"complexityScore": 4,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - standard Dockerfile",
+			"reasoning": "Docker containerization with Python + Node.js (for Claude CLI). Multi-stage build not required. Volume mounts for data persistence and OAuth token. The task details provide most of the Dockerfile content. Some complexity around Claude CLI installation in container."
+		},
+		{
+			"taskId": 51,
+			"taskTitle": "Integrate Content Engine with Docker Compose",
+			"complexityScore": 3,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - docker-compose addition",
+			"reasoning": "Add two services to existing docker-compose.yaml. The task details provide the service definitions. Network already exists (postiz-network). Straightforward integration with existing infrastructure."
+		},
+		{
+			"taskId": 52,
+			"taskTitle": "Set Up Cron Scheduling Inside Container",
+			"complexityScore": 4,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - cron setup",
+			"reasoning": "Standard cron configuration inside Docker container. Requires entrypoint script to start cron daemon. Log file management. The task details provide shell script content. Moderate complexity around daemon process management in containers."
+		},
+		{
+			"taskId": 53,
+			"taskTitle": "Implement OAuth Token Health Check",
+			"complexityScore": 4,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - monitoring enhancement",
+			"reasoning": "Add auth status checking to generator.py. Check for token file existence and validity. Display status in Streamlit sidebar. Clear instructions for re-authentication. Moderate complexity due to OAuth token file inspection logic."
+		},
+		{
+			"taskId": 54,
+			"taskTitle": "Add Error Handling and Alerting System",
+			"complexityScore": 4,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - cross-cutting concern",
+			"reasoning": "Create AlertManager class with logging, JSON persistence, and optional email alerting. The task details provide the class structure. Needs integration into existing modules. Moderate complexity due to SMTP configuration and cross-module integration."
+		},
+		{
+			"taskId": 55,
+			"taskTitle": "Write Unit Tests for Content Engine Modules",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Tests for sheets.py with Google API mocking, 2) Tests for postiz.py with HTTP mocking using responses library, 3) Tests for generator.py with subprocess mocking, 4) Tests for intelligence.py with file system fixtures",
+			"reasoning": "Comprehensive test suite requiring mocking of external services (Google API, HTTP requests, subprocess). Each module has different mocking patterns. Target >80% coverage. Tests for error cases and edge conditions. Moderate-high complexity due to mocking requirements."
+		},
+		{
+			"taskId": 56,
+			"taskTitle": "End-to-End Integration Test",
+			"complexityScore": 5,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - single integration test file",
+			"reasoning": "Full pipeline test with real APIs (Google Sheets, Claude CLI, Postiz). Requires test data setup and teardown. Marked as integration test (separate test run). Complexity from coordinating multiple real services. Needs test Sheet and credentials."
+		},
+		{
+			"taskId": 57,
+			"taskTitle": "Create Deployment Handoff Documentation",
+			"complexityScore": 2,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - documentation task",
+			"reasoning": "Technical documentation for deployment. The task details provide the document structure. Consolidates information from existing docs and docker-compose configuration. No code - just documentation authoring."
+		},
+		{
+			"taskId": 58,
+			"taskTitle": "Create Operations Runbook for Farm Staff",
+			"complexityScore": 2,
+			"recommendedSubtasks": 0,
+			"expansionPrompt": "No expansion needed - documentation task",
+			"reasoning": "User-facing documentation in plain language. The task details provide the document structure. Depends on having the Streamlit pages built to describe. No technical complexity - just clear writing for non-technical users."
+		}
+	]
+}

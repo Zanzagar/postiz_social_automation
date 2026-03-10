@@ -1,0 +1,13 @@
+{
+  "festivals": [
+    {"name": "Ekadashi", "frequency": "biweekly", "description": "Fasting day, spiritual focus"},
+    {"name": "Janmashtami", "date": "2026-08-14", "description": "Krishna's appearance day — biggest festival of the year"},
+    {"name": "Gaura Purnima", "date": "2026-03-07", "description": "Appearance of Lord Chaitanya"},
+    {"name": "Govardhan Puja", "date": "2026-11-02", "description": "Worship of Govardhan Hill, cow celebration day"},
+    {"name": "Ratha Yatra", "date": "2026-07-05", "description": "Festival of the Chariots — community parade"},
+    {"name": "Radhashtami", "date": "2026-09-01", "description": "Appearance of Srimati Radharani"},
+    {"name": "Diwali", "date": "2026-10-20", "description": "Festival of Lights"},
+    {"name": "Ram Navami", "date": "2026-04-02", "description": "Appearance of Lord Rama"},
+    {"name": "Nrsimha Caturdasi", "date": "2026-05-10", "description": "Appearance of Lord Nrsimhadeva"}
+  ]
+}

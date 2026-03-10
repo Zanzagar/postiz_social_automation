@@ -1,0 +1,48 @@
+{
+  "name": "Gita Valley",
+  "never_use": ["Gita Nagari"],
+  "tagline": "Cultivating Soil and Soul",
+  "key_claim": "Only USDA Certified Slaughter-Free Dairy Farm in North America",
+  "voice": {
+    "style": "Warm, welcoming, grounded",
+    "lead_with": "cows and farm, not religion",
+    "avoid": "preachy or dogmatic tone"
+  },
+  "dos": [
+    "Show real farm moments (unpolished is authentic)",
+    "Name individual cows — people connect with personalities",
+    "Highlight the slaughter-free distinction",
+    "Include calls to action (visit, donate, share)",
+    "Use seasonal themes (planting, harvest, festivals)"
+  ],
+  "donts": [
+    "Don't use heavy Sanskrit without explanation",
+    "Don't assume audience knows ISKCON terminology",
+    "Don't post low-quality photos (natural light preferred)",
+    "Don't be preachy or guilt-trip about veganism",
+    "Don't use Gita Nagari in new content"
+  ],
+  "hashtags": {
+    "instagram": {
+      "count": "5-10",
+      "core": ["#GitaValley", "#SlaughterFreeDairy", "#CowSanctuary", "#RegenerativeFarm"],
+      "rotating": ["#FarmLife", "#SimpleLiving", "#CowsOfInstagram", "#SustainableAg", "#PortRoyalPA"]
+    },
+    "facebook": {
+      "count": "2-3",
+      "core": ["#GitaValley", "#SlaughterFreeDairy"]
+    },
+    "tiktok": {
+      "count": "2-3",
+      "core": ["#FarmTok", "#CowTok", "#GitaValley"]
+    },
+    "threads": {
+      "count": "0",
+      "note": "No hashtags (platform convention)"
+    },
+    "linkedin": {
+      "count": "2-3",
+      "core": ["#SustainableAgriculture", "#RegenerativeFarming", "#GitaValley"]
+    }
+  }
+}
