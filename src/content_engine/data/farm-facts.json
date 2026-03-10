@@ -1,0 +1,26 @@
+{
+  "name": "Gita Valley",
+  "legal_name": "ISKCON Gita Nagari Inc.",
+  "location": "Port Royal, PA",
+  "acreage": 430,
+  "status": "501(c)(3) nonprofit",
+  "website": "gitavalley.org",
+  "tagline": "Cultivating Soil and Soul",
+  "key_claim": "Only USDA Certified Slaughter-Free Dairy Farm in North America",
+  "programs": [
+    {"name": "Farm Internship", "description": "Hands-on sustainable agriculture training"},
+    {"name": "Retreats", "description": "Weekend spiritual and wellness retreats"},
+    {"name": "Sunday Feast", "description": "Free vegetarian feast open to public every Sunday"},
+    {"name": "School Visits", "description": "Educational tours for K-12 students"},
+    {"name": "Cow Cuddling", "description": "Therapeutic cow interaction sessions"}
+  ],
+  "partnerships": [
+    {"name": "Penn State", "type": "University research partnership"},
+    {"name": "Juniata College", "type": "Student internship program"}
+  ],
+  "products": [
+    {"name": "Slaughter-Free Milk", "note": "From protected cows who live their full natural lives"},
+    {"name": "Ahimsa Ghee", "note": "Clarified butter from slaughter-free dairy"},
+    {"name": "Farm Produce", "note": "Seasonal organic vegetables and herbs"}
+  ]
+}

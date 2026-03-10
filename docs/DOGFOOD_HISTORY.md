@@ -67,6 +67,7 @@ Tests 1 and 2 were early explorations on different projects. **α1 and α2 are t
 
 | Artifact | Detail |
 |----------|--------|
+| **Research/audits** | 3 domain audit docs (~35KB total): online presence audit, technology assessment, client context |
 | **PRD** | None — tasks.json empty, Task Master never populated |
 | **Tasks** | 0 (Task Master initialized but unused) |
 | **Code** | ~500 LOC across 5 feature modules (health monitor, alerter, checker, storage, orchestrator) |
@@ -80,6 +81,7 @@ Tests 1 and 2 were early explorations on different projects. **α1 and α2 are t
 
 | Dimension | Rating | Evidence |
 |-----------|--------|----------|
+| **Research/audit depth** | High | 3 comprehensive domain docs: platform-by-platform rebrand audit (16KB), Postiz vs SaaS technology assessment (11KB), client context with branding rules (7KB). These informed all subsequent work. |
 | **Task decomposition** | None | No tasks created. Work was ad-hoc, driven by developer intuition, not structured decomposition. |
 | **Task quality** | N/A | Task Master unused entirely. |
 | **Code quality** | High | 5 modules with comprehensive test suites. 66+ tests in alerter. |
@@ -99,8 +101,10 @@ This is the core question: **does the full v2.3.1 workflow produce better outcom
 
 | Dimension | α1 (Planning-first) | α2 (Build-first) | Test 4 (Full workflow) | What v2.3.1 adds |
 |-----------|:-------------------:|:-----------------:|:---------------------:|-----------------|
-| **Task decomposition** | Poor (blind expand) | None (no tasks) | Expected: High | Complexity-first expansion, threshold rule (≥5 = expand) |
-| **Task quality** | Medium (generic) | N/A | Expected: High | PRD → parse → complexity scoring → guided expansion |
+| **Research/audit depth** | Used α2's docs as input | High (3 domain audits, 35KB) | Expected: High | Brainstorming skill step 1 + checklist verification |
+| **PRD dependency structure** | None (flat phases only) | N/A (no PRD) | Expected: High | `/prd-generate` now includes Phase 3.5 (Dependency Graph) with explicit `Depends on [X, Y]` markers |
+| **Task decomposition** | Poor (default 5 subtasks — no complexity analysis run) | None (no tasks) | Expected: High | Complexity-first expansion, threshold rule (≥5 = expand) |
+| **Task quality** | Medium (generic) | N/A | Expected: High | PRD dependency graph → parse → complexity scoring → guided expansion |
 | **Code quality** | High (1 task) | High (5 modules) | Expected: High | TDD enforced via Superpowers, not just advisory |
 | **TDD compliance** | 1 task only | Yes (advisory) | Expected: Full | Superpowers enforcement (deletes code without tests) |
 | **Git discipline** | No branches | No branches | Expected: Full | pre-commit-check.sh blocks main commits + validates format |
@@ -225,6 +229,8 @@ To demonstrate improvement over both alphas, Test 4 must show:
 | Planning gets skipped under time pressure | α2 | Normative-only gap identified | — |
 | Local squash merge needs `-D` | Prep | Docs clarified | v2.3.1 |
 | Execution readiness check needed | Prep | Rule added to context-management.md | v2.3.1 |
+| PRD lacks dependency structure for parse-prd | α1 analysis | `/prd-generate` Phase 3.5 (Dependency Graph) added | v2.3.1+ |
+| Research docs not verified during brainstorming | α2 analysis | Checklist Phase 2.2 (Research & Context Intake) added | v2.3.1+ |
 
 ---
 
