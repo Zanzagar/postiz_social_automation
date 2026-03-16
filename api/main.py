@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.auth import router as auth_router
 from api.dependencies import get_settings
 
 
@@ -35,6 +36,8 @@ def _configure_cors() -> None:
 
 
 _configure_cors()
+
+app.include_router(auth_router)
 
 
 @app.get("/")
