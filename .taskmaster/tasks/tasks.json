@@ -1999,7 +1999,7 @@
         "dependencies": [
           "10"
         ],
-        "status": "in-progress",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -2049,7 +2049,7 @@
         "complexity": 5,
         "recommendedSubtasks": 4,
         "expansionPrompt": "Break down into: 1) Create src/lib/api.ts with fetch wrapper, auth header interceptor, and typed API functions 2) Create src/contexts/AuthContext.tsx with AuthProvider, login/logout state, localStorage JWT handling 3) Create ProtectedRoute component with redirect to /login 4) Set up TanStack Query client with QueryClientProvider",
-        "updatedAt": "2026-03-16T18:11:27.839Z"
+        "updatedAt": "2026-03-16T18:19:10.515Z"
       },
       {
         "id": "12",
@@ -2061,11 +2061,12 @@
         "dependencies": [
           "11"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [],
         "complexity": 3,
         "recommendedSubtasks": 2,
-        "expansionPrompt": "Break down into: 1) Create src/pages/LoginPage.tsx with centered card layout, password form using react-hook-form + zod 2) Add error handling for invalid password (401) and lockout countdown display (429)"
+        "expansionPrompt": "Break down into: 1) Create src/pages/LoginPage.tsx with centered card layout, password form using react-hook-form + zod 2) Add error handling for invalid password (401) and lockout countdown display (429)",
+        "updatedAt": "2026-03-16T18:25:21.593Z"
       },
       {
         "id": "13",
@@ -2077,7 +2078,7 @@
         "dependencies": [
           "12"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -2130,7 +2131,8 @@
         ],
         "complexity": 5,
         "recommendedSubtasks": 4,
-        "expansionPrompt": "Break down into: 1) Create src/components/layout/AppShell.tsx with responsive layout switching at 768px breakpoint 2) Create Sidebar.tsx with nav items, active state styling, logout 3) Create BottomNav.tsx with icon buttons and touch-friendly targets 4) Set up React Router in App.tsx with all routes"
+        "expansionPrompt": "Break down into: 1) Create src/components/layout/AppShell.tsx with responsive layout switching at 768px breakpoint 2) Create Sidebar.tsx with nav items, active state styling, logout 3) Create BottomNav.tsx with icon buttons and touch-friendly targets 4) Set up React Router in App.tsx with all routes",
+        "updatedAt": "2026-03-16T18:28:56.801Z"
       },
       {
         "id": "14",
@@ -2142,7 +2144,7 @@
         "dependencies": [
           "13"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -2191,7 +2193,8 @@
         ],
         "complexity": 5,
         "recommendedSubtasks": 4,
-        "expansionPrompt": "Break down into: 1) Create src/pages/DashboardPage.tsx with stats cards layout 2) Create quick-create card with mini upload and caption input 3) Create calendar mini-view showing current week with scheduled content dots 4) Create useDashboardData hook combining drafts, calendar, and health data"
+        "expansionPrompt": "Break down into: 1) Create src/pages/DashboardPage.tsx with stats cards layout 2) Create quick-create card with mini upload and caption input 3) Create calendar mini-view showing current week with scheduled content dots 4) Create useDashboardData hook combining drafts, calendar, and health data",
+        "updatedAt": "2026-03-16T18:33:08.562Z"
       },
       {
         "id": "15",
@@ -2203,7 +2206,7 @@
         "dependencies": [
           "13"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -2266,7 +2269,8 @@
         ],
         "complexity": 7,
         "recommendedSubtasks": 5,
-        "expansionPrompt": "Break down into: 1) Create src/pages/CreatePage.tsx with photo upload zone (drag-drop, file browse, camera capture) 2) Create form with caption textarea, platform checkboxes, date picker 3) Create GenerationProgress.tsx with SSE listener for /api/generate 4) Create CaptionCards.tsx with platform-specific cards, inline editing 5) Add re-prompt input with regenerate functionality and send-to-Postiz action"
+        "expansionPrompt": "Break down into: 1) Create src/pages/CreatePage.tsx with photo upload zone (drag-drop, file browse, camera capture) 2) Create form with caption textarea, platform checkboxes, date picker 3) Create GenerationProgress.tsx with SSE listener for /api/generate 4) Create CaptionCards.tsx with platform-specific cards, inline editing 5) Add re-prompt input with regenerate functionality and send-to-Postiz action",
+        "updatedAt": "2026-03-16T18:37:24.100Z"
       },
       {
         "id": "16",
@@ -2278,7 +2282,7 @@
         "dependencies": [
           "13"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -2329,7 +2333,8 @@
         ],
         "complexity": 6,
         "recommendedSubtasks": 4,
-        "expansionPrompt": "Break down into: 1) Create src/pages/DraftsPage.tsx with list view and select-all functionality 2) Create DraftCard.tsx with selection checkbox, platform tabs, inline caption editing 3) Create re-prompt input per draft with regenerate button 4) Create BatchActions.tsx with fixed bottom bar for batch approval"
+        "expansionPrompt": "Break down into: 1) Create src/pages/DraftsPage.tsx with list view and select-all functionality 2) Create DraftCard.tsx with selection checkbox, platform tabs, inline caption editing 3) Create re-prompt input per draft with regenerate button 4) Create BatchActions.tsx with fixed bottom bar for batch approval",
+        "updatedAt": "2026-03-16T18:48:01.330Z"
       },
       {
         "id": "17",
@@ -2341,7 +2346,7 @@
         "dependencies": [
           "13"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -2393,7 +2398,8 @@
         ],
         "complexity": 6,
         "recommendedSubtasks": 4,
-        "expansionPrompt": "Break down into: 1) Create src/pages/CalendarPage.tsx with month/week view toggle and navigation 2) Create CalendarDay.tsx with content dots color-coded by pillar 3) Create DayModal.tsx dialog showing content for selected day 4) Create PillarBalance.tsx with horizontal bar chart showing distribution"
+        "expansionPrompt": "Break down into: 1) Create src/pages/CalendarPage.tsx with month/week view toggle and navigation 2) Create CalendarDay.tsx with content dots color-coded by pillar 3) Create DayModal.tsx dialog showing content for selected day 4) Create PillarBalance.tsx with horizontal bar chart showing distribution",
+        "updatedAt": "2026-03-16T18:52:16.479Z"
       },
       {
         "id": "18",
@@ -2405,11 +2411,12 @@
         "dependencies": [
           "13"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [],
         "complexity": 4,
         "recommendedSubtasks": 3,
-        "expansionPrompt": "Break down into: 1) Create src/pages/SuggestionsPage.tsx with list view and status filter dropdown 2) Create SuggestionCard.tsx with pillar badge, accept/dismiss buttons 3) Create useSuggestions hook with TanStack Query mutations for accept/dismiss with optimistic updates"
+        "expansionPrompt": "Break down into: 1) Create src/pages/SuggestionsPage.tsx with list view and status filter dropdown 2) Create SuggestionCard.tsx with pillar badge, accept/dismiss buttons 3) Create useSuggestions hook with TanStack Query mutations for accept/dismiss with optimistic updates",
+        "updatedAt": "2026-03-16T18:52:20.633Z"
       },
       {
         "id": "19",
@@ -2421,11 +2428,12 @@
         "dependencies": [
           "13"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [],
         "complexity": 3,
         "recommendedSubtasks": 2,
-        "expansionPrompt": "Break down into: 1) Create src/pages/HealthPage.tsx with service status cards grid and refresh button 2) Create ServiceCard.tsx and ErrorLog.tsx table with auto-refresh via TanStack Query refetchInterval"
+        "expansionPrompt": "Break down into: 1) Create src/pages/HealthPage.tsx with service status cards grid and refresh button 2) Create ServiceCard.tsx and ErrorLog.tsx table with auto-refresh via TanStack Query refetchInterval",
+        "updatedAt": "2026-03-16T18:52:24.876Z"
       },
       {
         "id": "20",
@@ -2442,7 +2450,7 @@
           "18",
           "19"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -2493,7 +2501,8 @@
         ],
         "complexity": 5,
         "recommendedSubtasks": 4,
-        "expansionPrompt": "Break down into: 1) Audit all components for 44px touch targets and fix spacing 2) Update forms for full-width inputs, vertical stacking on mobile 3) Create SwipeableCard.tsx with touch event handling for draft navigation 4) Add safe-area-inset padding for iPhone notch on BottomNav"
+        "expansionPrompt": "Break down into: 1) Audit all components for 44px touch targets and fix spacing 2) Update forms for full-width inputs, vertical stacking on mobile 3) Create SwipeableCard.tsx with touch event handling for draft navigation 4) Add safe-area-inset padding for iPhone notch on BottomNav",
+        "updatedAt": "2026-03-16T18:58:11.725Z"
       },
       {
         "id": "21",
@@ -2505,11 +2514,12 @@
         "dependencies": [
           "20"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [],
         "complexity": 4,
         "recommendedSubtasks": 3,
-        "expansionPrompt": "Break down into: 1) Create frontend/Dockerfile with multi-stage build (node:20-alpine for build, nginx:alpine for serve) 2) Create nginx.conf with SPA fallback, /api/* proxy to backend, gzip, static caching 3) Update docker-compose.yaml with frontend service on port 3000"
+        "expansionPrompt": "Break down into: 1) Create frontend/Dockerfile with multi-stage build (node:20-alpine for build, nginx:alpine for serve) 2) Create nginx.conf with SPA fallback, /api/* proxy to backend, gzip, static caching 3) Update docker-compose.yaml with frontend service on port 3000",
+        "updatedAt": "2026-03-16T19:00:07.289Z"
       },
       {
         "id": "22",
@@ -2521,7 +2531,7 @@
         "dependencies": [
           "7"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -2584,7 +2594,8 @@
         ],
         "complexity": 6,
         "recommendedSubtasks": 5,
-        "expansionPrompt": "Break down into: 1) Create tests/test_api/ directory structure with conftest.py fixtures for TestClient and mocked dependencies 2) Write test_auth.py for login, lockout, protected endpoints 3) Write test_generate.py for SSE stream format and mocked CaptionGenerator 4) Write test_content.py for all content CRUD endpoints 5) Write test_health.py for health check aggregation"
+        "expansionPrompt": "Break down into: 1) Create tests/test_api/ directory structure with conftest.py fixtures for TestClient and mocked dependencies 2) Write test_auth.py for login, lockout, protected endpoints 3) Write test_generate.py for SSE stream format and mocked CaptionGenerator 4) Write test_content.py for all content CRUD endpoints 5) Write test_health.py for health check aggregation",
+        "updatedAt": "2026-03-16T19:02:12.922Z"
       },
       {
         "id": "23",
@@ -2596,7 +2607,7 @@
         "dependencies": [
           "20"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -2647,7 +2658,8 @@
         ],
         "complexity": 5,
         "recommendedSubtasks": 4,
-        "expansionPrompt": "Break down into: 1) Set up Vitest + React Testing Library + MSW for API mocking 2) Write LoginPage.test.tsx and AppShell.test.tsx 3) Write CreatePage.test.tsx testing form fields and SSE handling 4) Write DraftsPage.test.tsx testing selection and batch actions"
+        "expansionPrompt": "Break down into: 1) Set up Vitest + React Testing Library + MSW for API mocking 2) Write LoginPage.test.tsx and AppShell.test.tsx 3) Write CreatePage.test.tsx testing form fields and SSE handling 4) Write DraftsPage.test.tsx testing selection and batch actions",
+        "updatedAt": "2026-03-16T19:02:32.254Z"
       },
       {
         "id": "24",
@@ -2660,7 +2672,7 @@
           "22",
           "23"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -2700,7 +2712,8 @@
         ],
         "complexity": 5,
         "recommendedSubtasks": 3,
-        "expansionPrompt": "Break down into: 1) Initialize Playwright with config for baseURL and webServer startup 2) Write auth.spec.ts for login/logout/session flows 3) Write create-post.spec.ts and drafts.spec.ts for critical user journeys"
+        "expansionPrompt": "Break down into: 1) Initialize Playwright with config for baseURL and webServer startup 2) Write auth.spec.ts for login/logout/session flows 3) Write create-post.spec.ts and drafts.spec.ts for critical user journeys",
+        "updatedAt": "2026-03-16T19:03:45.271Z"
       },
       {
         "id": "25",
@@ -2713,18 +2726,19 @@
           "21",
           "22"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [],
         "complexity": 4,
         "recommendedSubtasks": 3,
-        "expansionPrompt": "Break down into: 1) Add content-hub-frontend service to docker-compose.yaml with depends_on 2) Update README.md with frontend section, FastAPI startup, and architecture diagram 3) Create Makefile with frontend-dev, api-dev, and combined dev targets"
+        "expansionPrompt": "Break down into: 1) Add content-hub-frontend service to docker-compose.yaml with depends_on 2) Update README.md with frontend section, FastAPI startup, and architecture diagram 3) Create Makefile with frontend-dev, api-dev, and combined dev targets",
+        "updatedAt": "2026-03-16T19:04:21.264Z"
       }
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-03-16T18:11:27.840Z",
+      "lastModified": "2026-03-16T19:04:21.265Z",
       "taskCount": 25,
-      "completedCount": 10,
+      "completedCount": 25,
       "tags": [
         "react-frontend"
       ]

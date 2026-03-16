@@ -8,6 +8,7 @@ import {
   Lightbulb,
   Activity,
   LogOut,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -70,6 +71,19 @@ export function Sidebar() {
             </NavLink>
           ))}
         </nav>
+
+        {/* Postiz Admin */}
+        <div className="px-3">
+          <a
+            href="https://postiz.sethpc.xyz"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent/50"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Postiz Admin
+          </a>
+        </div>
 
         {/* Logout */}
         <div className="border-t border-sidebar-border p-3">
