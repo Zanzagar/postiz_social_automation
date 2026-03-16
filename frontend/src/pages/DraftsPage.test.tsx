@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { DraftsPage } from "./DraftsPage";
+import type { ContentRow } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
   api: {
@@ -26,7 +27,7 @@ import { api } from "@/lib/api";
 const mockGetDrafts = vi.mocked(api.getDrafts);
 const mockApproveDraft = vi.mocked(api.approveDraft);
 
-const sampleDrafts = [
+const sampleDrafts: ContentRow[] = [
   {
     row_number: 2,
     date: "2026-03-17",
