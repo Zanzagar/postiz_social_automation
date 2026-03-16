@@ -1637,27 +1637,31 @@
   "react-frontend": {
     "tasks": [
       {
-        "id": 1,
+        "id": "1",
         "title": "Set up FastAPI backend project structure",
         "description": "Create the FastAPI backend application structure with proper project layout, dependencies, and configuration for wrapping the existing content_engine modules.",
         "details": "Create `api/` directory with:\n- `api/__init__.py`\n- `api/main.py` - FastAPI app with CORS, exception handlers\n- `api/config.py` - Settings using pydantic-settings (POSTIZ_API_KEY, SPREADSHEET_ID, GOOGLE_SHEETS_CREDENTIALS, JWT_SECRET, PASSWORD)\n- `api/dependencies.py` - Dependency injection for SheetsClient, PostizClient, CaptionGenerator\n\nUpdate `pyproject.toml` with new dependencies:\n- fastapi>=0.109.0\n- uvicorn[standard]>=0.27.0\n- python-jose[cryptography]>=3.3.0\n- python-multipart>=0.0.6\n- sse-starlette>=1.8.0\n\nCreate `api/run.py` entry point for `uvicorn api.main:app --host 0.0.0.0 --port 8000`",
         "testStrategy": "Write pytest tests using FastAPI TestClient to verify app initialization, CORS headers present, and health endpoint returns 200. Test that dependencies can be injected correctly.",
         "priority": "high",
         "dependencies": [],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down into: 1) Create api/ directory structure with __init__.py, main.py with FastAPI app, CORS, exception handlers 2) Create config.py using pydantic-settings for env vars (POSTIZ_API_KEY, SPREADSHEET_ID, etc.) 3) Create dependencies.py with DI for existing SheetsClient, PostizClient, CaptionGenerator from content_engine module",
+        "updatedAt": "2026-03-16T16:51:18.466Z"
       },
       {
-        "id": 2,
+        "id": "2",
         "title": "Implement JWT authentication endpoints",
         "description": "Create authentication endpoints with JWT token generation, password verification using existing auth logic, and brute-force protection.",
         "details": "Create `api/auth.py`:\n- `POST /api/auth/login` endpoint accepting `{\"password\": \"...\"}` JSON body\n- Reuse `verify_password()` from `app/auth.py` for constant-time comparison\n- Generate JWT with 1-hour expiry using python-jose\n- Store failed attempts in memory dict keyed by IP (reset after LOCKOUT_SECONDS)\n- Return `{\"access_token\": \"...\", \"token_type\": \"bearer\"}` on success\n- Return 401 with error message on failure, 429 on lockout\n\nCreate `api/middleware.py`:\n- `get_current_user` dependency that validates Bearer token from Authorization header\n- Raises HTTPException 401 if token invalid/expired\n\nProtect all other endpoints with `Depends(get_current_user)`",
         "testStrategy": "Test login with correct password returns JWT. Test login with wrong password returns 401. Test 5 failed attempts triggers 429 lockout. Test protected endpoint without token returns 401. Test protected endpoint with valid token succeeds.",
         "priority": "high",
         "dependencies": [
-          1
+          "1"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -1666,7 +1670,8 @@
             "dependencies": [],
             "details": "Create `api/auth.py` with FastAPI router. Implement `POST /api/auth/login` endpoint that:\n- Accepts `{\"password\": \"...\"}` JSON body using Pydantic model\n- Imports and reuses `verify_password()` from `app/auth.py` for constant-time comparison\n- Reads expected password from environment variable or config\n- Returns 401 with `{\"detail\": \"Invalid password\"}` on failure\n- Integrates with rate limiting (subtask 3) and JWT generation (subtask 2) once implemented",
             "status": "pending",
-            "testStrategy": "Test login with correct password returns 200. Test login with wrong password returns 401. Test empty password returns 422 validation error. Test missing password field returns 422."
+            "testStrategy": "Test login with correct password returns 200. Test login with wrong password returns 401. Test empty password returns 422 validation error. Test missing password field returns 422.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -1677,7 +1682,8 @@
             ],
             "details": "Extend `api/auth.py` to generate JWT tokens on successful login:\n- Use python-jose (jose.jwt) for token generation\n- Configure JWT_SECRET from environment variable with secure default handling\n- Set token expiry to 1 hour using `exp` claim with datetime.utcnow() + timedelta(hours=1)\n- Include `sub` claim with identifier (e.g., 'admin')\n- Return response: `{\"access_token\": \"...\", \"token_type\": \"bearer\"}`\n- Add JWT_ALGORITHM constant (HS256)",
             "status": "pending",
-            "testStrategy": "Test successful login returns valid JWT structure. Test token contains correct expiry claim (1 hour). Test token can be decoded with correct secret. Test token type is 'bearer' in response."
+            "testStrategy": "Test successful login returns valid JWT structure. Test token contains correct expiry claim (1 hour). Test token can be decoded with correct secret. Test token type is 'bearer' in response.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -1688,7 +1694,8 @@
             ],
             "details": "Add rate limiting to `api/auth.py`:\n- Create in-memory dict: `failed_attempts: dict[str, tuple[int, float]]` mapping IP to (attempt_count, last_attempt_time)\n- Import MAX_ATTEMPTS (5) and LOCKOUT_SECONDS (300) from app/auth.py\n- Extract client IP from request (Request.client.host)\n- Before password check: verify IP not locked out, return 429 if locked\n- On failed login: increment attempts, set lockout_until if >= MAX_ATTEMPTS\n- On successful login: reset attempts for that IP\n- Return 429 with `{\"detail\": \"Too many attempts. Try again in X seconds.\"}` when locked",
             "status": "pending",
-            "testStrategy": "Test 5 failed attempts triggers 429 lockout. Test lockout expires after LOCKOUT_SECONDS. Test successful login resets attempt counter. Test different IPs tracked separately."
+            "testStrategy": "Test 5 failed attempts triggers 429 lockout. Test lockout expires after LOCKOUT_SECONDS. Test successful login resets attempt counter. Test different IPs tracked separately.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -1699,21 +1706,26 @@
             ],
             "details": "Create `api/middleware.py` with `get_current_user` dependency:\n- Use FastAPI OAuth2PasswordBearer scheme pointing to /api/auth/login\n- Extract Bearer token from Authorization header\n- Decode and validate JWT using python-jose with JWT_SECRET\n- Check token expiry, raise HTTPException 401 if expired\n- Raise HTTPException 401 with `{\"detail\": \"Invalid token\"}` if decode fails\n- Return decoded payload (or user identifier) on success\n- Export dependency for use with `Depends(get_current_user)` on protected routes",
             "status": "pending",
-            "testStrategy": "Test request without Authorization header returns 401. Test request with invalid token returns 401. Test request with expired token returns 401. Test request with valid token succeeds and returns user data."
+            "testStrategy": "Test request without Authorization header returns 401. Test request with invalid token returns 401. Test request with expired token returns 401. Test request with valid token succeeds and returns user data.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Create api/auth.py with POST /api/auth/login endpoint, reuse existing verify_password() from app/auth.py 2) Implement JWT generation with python-jose (1-hour expiry) 3) Create rate limiting middleware with in-memory failed attempt tracking by IP 4) Create api/middleware.py with get_current_user dependency for Bearer token validation",
+        "updatedAt": "2026-03-16T17:00:36.259Z"
       },
       {
-        "id": 3,
+        "id": "3",
         "title": "Implement content generation SSE endpoint",
         "description": "Create the POST /api/generate endpoint that streams caption generation progress via Server-Sent Events.",
         "details": "Create `api/routes/generate.py`:\n- `POST /api/generate` accepts JSON body: `{\"raw_text\": str, \"media_url\": str|null, \"platforms\": [\"instagram\", \"facebook\", ...], \"scheduled_date\": \"YYYY-MM-DD\"}`\n- Returns SSE stream using sse-starlette EventSourceResponse\n- Build ContentRow from request, call CaptionGenerator.generate_captions()\n- Stream events: `{\"status\": \"validating\"}`, `{\"status\": \"generating\", \"platform\": \"instagram\"}`, `{\"status\": \"complete\", \"captions\": {\"instagram\": \"...\", ...}}`\n- On error: `{\"status\": \"error\", \"message\": \"...\"}`\n- Use asyncio.to_thread() for blocking Claude CLI calls\n\nCreate `api/routes/reprompt.py`:\n- `POST /api/reprompt` accepts same body plus `feedback: str`\n- Calls generator.generate_captions(row, feedback=feedback)\n- Returns JSON (not SSE) with captions dict",
         "testStrategy": "Mock CaptionGenerator to return test captions. Test SSE stream contains expected events in order. Test error handling returns error event. Test reprompt endpoint returns updated captions with feedback incorporated.",
         "priority": "high",
         "dependencies": [
-          2
+          "2"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -1722,7 +1734,8 @@
             "dependencies": [],
             "details": "Create `api/routes/generate.py` with:\n- Pydantic `GenerateRequest` model: `raw_text: str`, `media_url: str | None`, `platforms: list[str]`, `scheduled_date: str`\n- POST `/api/generate` endpoint that validates the request body\n- Build `ContentRow` from request data, mapping platform strings to Platform enum and setting default status to DRAFT\n- Import `CaptionGenerator` from `content_engine.generator`\n- Include proper error handling for invalid platform names or date formats\n- Return 422 for validation errors with descriptive messages",
             "status": "pending",
-            "testStrategy": "Test valid request parses correctly. Test invalid platform names return 422. Test missing required fields return validation error. Test media_url accepts null and valid URLs."
+            "testStrategy": "Test valid request parses correctly. Test invalid platform names return 422. Test missing required fields return validation error. Test media_url accepts null and valid URLs.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -1733,7 +1746,8 @@
             ],
             "details": "In `api/routes/generate.py`:\n- Add `sse-starlette` to project dependencies in pyproject.toml\n- Import `EventSourceResponse` from `sse_starlette.sse`\n- Create async generator function `generate_events()` that yields JSON-encoded events\n- Stream events in order: `{\"status\": \"validating\"}` → `{\"status\": \"generating\", \"platform\": \"<name>\"}` for each platform → `{\"status\": \"complete\", \"captions\": {...}}`\n- On any exception, yield `{\"status\": \"error\", \"message\": \"...\"}` and terminate stream\n- Return `EventSourceResponse(generate_events(), media_type=\"text/event-stream\")`\n- Ensure proper Content-Type headers for SSE",
             "status": "pending",
-            "testStrategy": "Test SSE stream contains validating event first. Test generating events appear for each platform. Test complete event contains all captions. Test error event returned on failure. Use httpx AsyncClient with stream to test SSE."
+            "testStrategy": "Test SSE stream contains validating event first. Test generating events appear for each platform. Test complete event contains all captions. Test error event returned on failure. Use httpx AsyncClient with stream to test SSE.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -1745,7 +1759,8 @@
             ],
             "details": "In `api/routes/generate.py`:\n- Import `asyncio` for `to_thread()` function\n- Instantiate `CaptionGenerator` (consider making it a dependency or singleton)\n- Within the SSE generator, call `await asyncio.to_thread(generator.generate_captions, row, feedback)` instead of calling synchronously\n- This moves the blocking `subprocess.run()` call inside `_call_claude()` to a thread pool\n- Ensure exceptions from the thread are properly caught and converted to error events\n- Add timeout handling at the async level (separate from CLI_TIMEOUT in generator.py)",
             "status": "pending",
-            "testStrategy": "Test that the event loop is not blocked during generation (verify other requests can be served). Test asyncio.to_thread properly invokes generator. Test RuntimeError from generator is caught and streamed as error event. Mock CaptionGenerator to verify thread execution."
+            "testStrategy": "Test that the event loop is not blocked during generation (verify other requests can be served). Test asyncio.to_thread properly invokes generator. Test RuntimeError from generator is caught and streamed as error event. Mock CaptionGenerator to verify thread execution.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -1757,48 +1772,61 @@
             ],
             "details": "Create `api/routes/reprompt.py`:\n- Pydantic `RepromptRequest` model extending GenerateRequest with `feedback: str` field\n- POST `/api/reprompt` endpoint accepting JSON body\n- Build `ContentRow` from request (same as generate endpoint)\n- Call `await asyncio.to_thread(generator.generate_captions, row, feedback=request.feedback)`\n- Return JSON response: `{\"captions\": {\"instagram\": \"...\", ...}}`\n- Return 500 with `{\"error\": \"message\"}` on failure\n- Register route in main FastAPI app router\n- Reuse ContentRow building logic from generate.py (extract to shared helper if needed)",
             "status": "pending",
-            "testStrategy": "Test reprompt accepts valid request with feedback. Test captions returned as JSON dict. Test feedback is passed to generator. Test error response on generator failure. Test feedback field is required."
+            "testStrategy": "Test reprompt accepts valid request with feedback. Test captions returned as JSON dict. Test feedback is passed to generator. Test error response on generator failure. Test feedback field is required.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Create api/routes/generate.py with POST /api/generate accepting JSON body 2) Implement SSE streaming using sse-starlette EventSourceResponse 3) Wrap existing CaptionGenerator.generate_captions() with asyncio.to_thread() for non-blocking 4) Create POST /api/reprompt endpoint for feedback-based regeneration",
+        "updatedAt": "2026-03-16T17:27:27.943Z"
       },
       {
-        "id": 4,
+        "id": "4",
         "title": "Implement Postiz integration endpoints",
         "description": "Create endpoints for sending drafts to Postiz and listing connected integrations.",
         "details": "Create `api/routes/postiz.py`:\n- `POST /api/send-to-postiz` accepts `{\"captions\": {\"instagram\": \"...\"}, \"media_url\": str|null, \"scheduled_at\": str|null}`\n- Maps platform names to integration IDs via postiz.list_integrations()\n- Calls postiz.create_draft_post() for each platform\n- Returns `{\"draft_ids\": [\"id1\", \"id2\", ...], \"platforms\": [\"instagram\", \"facebook\"]}`\n\n- `GET /api/integrations`\n- Returns list of connected platforms from postiz.list_integrations()\n- Format: `[{\"id\": \"...\", \"platform\": \"instagram\", \"name\": \"...\"}, ...]`\n\nHandle PostizAPIError and MediaValidationError with appropriate HTTP status codes (502 for API errors, 400 for validation).",
         "testStrategy": "Mock PostizClient methods. Test send-to-postiz creates drafts for each platform. Test missing integration skips that platform. Test integrations endpoint returns platform list. Test API error returns 502.",
         "priority": "high",
         "dependencies": [
-          2
+          "2"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down into: 1) Create api/routes/postiz.py with POST /api/send-to-postiz endpoint 2) Map platform names to integration IDs using existing postiz.list_integrations() 3) Create GET /api/integrations endpoint and add error handling for PostizAPIError/MediaValidationError",
+        "updatedAt": "2026-03-16T17:27:32.284Z"
       },
       {
-        "id": 5,
+        "id": "5",
         "title": "Implement content reading endpoints",
         "description": "Create endpoints for reading drafts, calendar data, suggestions, and individual content rows from Google Sheets.",
         "details": "Create `api/routes/content.py`:\n- `GET /api/drafts` - Returns pending_approval rows from sheets.get_rows_by_status(ContentStatus.PENDING_APPROVAL)\n- Serialize ContentRow to JSON with camelCase keys\n\n- `GET /api/calendar` - Returns rows with status in [approved, scheduled, posted]\n- Group by date, include pillar distribution stats\n\n- `GET /api/suggestions` - Returns suggestions from sheets.get_suggestions()\n- Include status filter query param: `?status=suggested`\n\n- `GET /api/content/{row_number}` - Returns single content row\n- 404 if row not found\n\nCreate `api/schemas.py` with Pydantic response models:\n- ContentRowResponse, SuggestionResponse, CalendarResponse\n- Use model_config with alias_generator for camelCase output",
         "testStrategy": "Mock SheetsClient. Test drafts endpoint returns pending_approval rows. Test calendar groups by date correctly. Test suggestions filters by status. Test content/{row} returns single row. Test 404 for missing row.",
         "priority": "high",
         "dependencies": [
-          2
+          "2"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down into: 1) Create api/routes/content.py with GET /api/drafts and GET /api/calendar endpoints using existing sheets.get_rows_by_status() 2) Create GET /api/suggestions using sheets.get_suggestions() and GET /api/content/{row_number} 3) Create api/schemas.py with Pydantic response models using camelCase alias_generator",
+        "updatedAt": "2026-03-16T17:27:36.452Z"
       },
       {
-        "id": 6,
+        "id": "6",
         "title": "Implement content action endpoints",
         "description": "Create endpoints for approving drafts, editing captions, and triggering suggestion generation.",
         "details": "Add to `api/routes/content.py`:\n- `POST /api/drafts/{row_number}/approve`\n- Updates status to APPROVED via sheets.update_status()\n- Creates Postiz drafts for all enabled platforms\n- Returns `{\"success\": true, \"postiz_ids\": [...]}`\n\n- `POST /api/drafts/{row_number}/edit` accepts `{\"captions\": {\"instagram\": \"new caption\"}}`\n- Updates captions via sheets.update_captions()\n- Returns updated row\n\nCreate `api/routes/suggestions.py`:\n- `POST /api/suggest` triggers suggest_pipeline()\n- Run in background thread, return immediately with `{\"status\": \"started\"}`\n- Or use SSE to stream progress if pipeline is modified\n\n- `POST /api/suggestions/{id}/accept` - Marks suggestion as accepted, returns data for Create page prefill\n- `POST /api/suggestions/{id}/dismiss` - Marks suggestion as dismissed",
         "testStrategy": "Test approve updates status and creates Postiz drafts. Test edit updates captions in sheets. Test suggest endpoint triggers pipeline. Test accept/dismiss update suggestion status.",
         "priority": "medium",
         "dependencies": [
-          4,
-          5
+          "4",
+          "5"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -1807,7 +1835,8 @@
             "dependencies": [],
             "details": "Add to `api/routes/content.py`:\n- Create `POST /api/drafts/{row_number}/approve` route\n- Call `sheets.update_status(row_number, ContentStatus.APPROVED)` to update the sheet\n- Get enabled platforms from the content row or integrations list\n- Call `postiz.create_draft_post()` for each enabled platform\n- Collect all created Postiz draft IDs\n- Return `{\"success\": true, \"postiz_ids\": [\"id1\", \"id2\", ...]}`\n- Handle errors: return 404 if row not found, 502 if Postiz API fails\n- Wrap Postiz calls in try/except to handle partial failures gracefully",
             "status": "pending",
-            "testStrategy": "Test that approve updates status to APPROVED in sheets. Test that Postiz drafts are created for each enabled platform. Test that postiz_ids are returned correctly. Test 404 for invalid row_number. Test 502 when Postiz API fails. Test partial success when some platforms fail."
+            "testStrategy": "Test that approve updates status to APPROVED in sheets. Test that Postiz drafts are created for each enabled platform. Test that postiz_ids are returned correctly. Test 404 for invalid row_number. Test 502 when Postiz API fails. Test partial success when some platforms fail.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -1816,7 +1845,8 @@
             "dependencies": [],
             "details": "Add to `api/routes/content.py`:\n- Create `POST /api/drafts/{row_number}/edit` route\n- Accept JSON body: `{\"captions\": {\"instagram\": \"new caption\", \"facebook\": \"...\"}}` using Pydantic model\n- Validate that captions dict contains valid platform keys\n- Call `sheets.update_captions(row_number, captions)` to persist changes\n- Fetch and return the updated row as JSON with camelCase keys\n- Return 404 if row_number doesn't exist\n- Return 400 for invalid caption format or unknown platforms",
             "status": "pending",
-            "testStrategy": "Test that edit updates captions in sheets correctly. Test that updated row is returned with new captions. Test 404 for invalid row_number. Test 400 for malformed caption JSON. Test partial caption updates (only some platforms provided)."
+            "testStrategy": "Test that edit updates captions in sheets correctly. Test that updated row is returned with new captions. Test 404 for invalid row_number. Test 400 for malformed caption JSON. Test partial caption updates (only some platforms provided).",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -1825,7 +1855,8 @@
             "dependencies": [],
             "details": "Create `api/routes/suggestions.py`:\n- Create FastAPI router with prefix `/api`\n- Implement `POST /api/suggest` endpoint\n- Import suggest_pipeline from the appropriate module\n- Use `threading.Thread` or `asyncio.create_task` to run suggest_pipeline() in background\n- Return immediately with `{\"status\": \"started\"}` (202 Accepted)\n- Consider adding optional SSE support for progress streaming if pipeline emits progress events\n- Register router in main app\n- Add basic error handling for pipeline startup failures",
             "status": "pending",
-            "testStrategy": "Test that POST /api/suggest returns 202 with status: started immediately. Test that suggest_pipeline is invoked in background. Mock suggest_pipeline to verify it's called. Test error handling if pipeline import fails."
+            "testStrategy": "Test that POST /api/suggest returns 202 with status: started immediately. Test that suggest_pipeline is invoked in background. Mock suggest_pipeline to verify it's called. Test error handling if pipeline import fails.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -1836,34 +1867,43 @@
             ],
             "details": "Add to `api/routes/suggestions.py`:\n- `POST /api/suggestions/{id}/accept`:\n  - Mark suggestion as accepted via sheets update or status change\n  - Return suggestion data formatted for Create page prefill: `{\"title\": \"...\", \"captions\": {...}, \"media_suggestion\": \"...\", \"pillar\": \"...\", \"scheduled_date\": \"...\"}`\n  - Return 404 if suggestion ID not found\n\n- `POST /api/suggestions/{id}/dismiss`:\n  - Mark suggestion as dismissed in storage\n  - Return `{\"success\": true, \"id\": \"...\"}`\n  - Return 404 if suggestion ID not found\n\n- Both endpoints should validate suggestion exists before modifying",
             "status": "pending",
-            "testStrategy": "Test accept marks suggestion as accepted and returns prefill data. Test dismiss marks suggestion as dismissed. Test 404 for invalid suggestion IDs. Test that accepted suggestion data matches Create page expected format. Test idempotency of accept/dismiss operations."
+            "testStrategy": "Test accept marks suggestion as accepted and returns prefill data. Test dismiss marks suggestion as dismissed. Test 404 for invalid suggestion IDs. Test that accepted suggestion data matches Create page expected format. Test idempotency of accept/dismiss operations.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Add POST /api/drafts/{row_number}/approve with sheets.update_status() and Postiz draft creation 2) Add POST /api/drafts/{row_number}/edit with sheets.update_captions() 3) Create api/routes/suggestions.py with POST /api/suggest triggering suggest_pipeline in background 4) Add POST /api/suggestions/{id}/accept and /dismiss endpoints",
+        "updatedAt": "2026-03-16T17:32:20.448Z"
       },
       {
-        "id": 7,
+        "id": "7",
         "title": "Implement health check endpoint",
         "description": "Create the system health endpoint that checks all service dependencies.",
         "details": "Create `api/routes/health.py`:\n- `GET /api/health` calls existing health module functions:\n  - check_sheets_health(sheets_client)\n  - check_postiz_health(postiz_client)\n  - check_claude_health()\n  - check_oauth_health()\n\n- Return JSON: `{\"services\": [{\"name\": \"sheets\", \"status\": \"ok\"|\"error\", \"message\": \"...\", \"lastChecked\": \"ISO timestamp\"}, ...], \"errors\": [{\"timestamp\": \"...\", \"source\": \"...\", \"message\": \"...\"}]}`\n\n- Include recent errors from sheets.get_recent_errors(limit=10)\n- Add cache (30 second TTL) to avoid hammering external services",
         "testStrategy": "Mock health check functions. Test returns all services with status. Test caching prevents repeated calls within TTL. Test error list included from sheets.",
         "priority": "medium",
         "dependencies": [
-          2
+          "2"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 3,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Break down into: 1) Create api/routes/health.py calling existing health module functions (check_sheets_health, check_postiz_health, check_claude_health, check_oauth_health) 2) Add caching with 30-second TTL and include sheets.get_recent_errors() in response",
+        "updatedAt": "2026-03-16T17:27:40.688Z"
       },
       {
-        "id": 8,
+        "id": "8",
         "title": "Implement file upload endpoint",
         "description": "Create the media upload endpoint for handling photo/video uploads from the frontend.",
         "details": "Create `api/routes/upload.py`:\n- `POST /api/upload` accepts multipart form data with file field\n- Validate file type (image/jpeg, image/png, image/webp, video/mp4)\n- Validate file size (10MB images, 100MB video) using postiz.validate_media()\n- Save to temp directory with UUID filename\n- Return `{\"url\": \"file:///tmp/postiz_upload_xxx.jpg\", \"contentType\": \"image/jpeg\", \"size\": 12345}`\n\n- Files are passed to PostizClient.upload_media() when sending to Postiz\n- Clean up temp files after 1 hour via background task\n\nAlternative: Accept Google Drive URL directly and validate it can be parsed.",
         "testStrategy": "Test valid image upload succeeds. Test invalid type returns 400. Test oversized file returns 400. Test Google Drive URL validation works. Test temp file cleanup runs.",
         "priority": "medium",
         "dependencies": [
-          2
+          "2"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -1872,7 +1912,8 @@
             "dependencies": [],
             "details": "Create `api/routes/upload.py` with FastAPI router. Define `POST /api/upload` endpoint using `UploadFile` from fastapi for multipart form handling. Register the router in the main app. Return a JSON response with url, contentType, and size fields. Import necessary dependencies including uuid for filename generation.",
             "status": "pending",
-            "testStrategy": "Test that POST /api/upload accepts multipart form data with a file field. Test that the endpoint returns JSON with url, contentType, and size keys. Test 422 response when no file is provided."
+            "testStrategy": "Test that POST /api/upload accepts multipart form data with a file field. Test that the endpoint returns JSON with url, contentType, and size keys. Test 422 response when no file is provided.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -1883,7 +1924,8 @@
             ],
             "details": "Import PostizClient and use its validate_media() method which already defines SUPPORTED_IMAGE_TYPES (image/jpeg, image/png, image/webp) and SUPPORTED_VIDEO_TYPES (video/mp4). Validate file size limits: 10MB for images, 100MB for videos. Return HTTP 400 with descriptive error message for invalid file type or size. Read the file's content_type from the UploadFile object.",
             "status": "pending",
-            "testStrategy": "Test valid image types (jpeg, png, webp) pass validation. Test valid video type (mp4) passes validation. Test invalid type (e.g., text/plain) returns 400. Test image over 10MB returns 400. Test video over 100MB returns 400."
+            "testStrategy": "Test valid image types (jpeg, png, webp) pass validation. Test valid video type (mp4) passes validation. Test invalid type (e.g., text/plain) returns 400. Test image over 10MB returns 400. Test video over 100MB returns 400.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -1894,7 +1936,8 @@
             ],
             "details": "Use Python's uuid module to generate unique filenames preserving the original file extension. Save files to /tmp/postiz_upload_{uuid}.{ext} directory. Use aiofiles for async file writing. Return response format: {\"url\": \"file:///tmp/postiz_upload_xxx.jpg\", \"contentType\": \"image/jpeg\", \"size\": 12345}. Ensure temp directory exists before writing.",
             "status": "pending",
-            "testStrategy": "Test that uploaded files are saved with UUID filenames. Test that original file extension is preserved. Test that returned URL matches the saved file path. Test that file size in response matches actual file size."
+            "testStrategy": "Test that uploaded files are saved with UUID filenames. Test that original file extension is preserved. Test that returned URL matches the saved file path. Test that file size in response matches actual file size.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -1905,45 +1948,58 @@
             ],
             "details": "Create a background task using FastAPI's BackgroundTasks or an async scheduler (asyncio.create_task). Track file creation times using file metadata (os.path.getmtime) or an in-memory dict. Run cleanup every 15 minutes to delete files older than 1 hour from /tmp/postiz_upload_*. Use glob to find matching files. Log cleanup actions for debugging. Handle file-not-found gracefully if files were already deleted.",
             "status": "pending",
-            "testStrategy": "Test that files older than 1 hour are deleted by cleanup task. Test that files younger than 1 hour are preserved. Test cleanup handles missing files gracefully. Test cleanup runs on the expected schedule."
+            "testStrategy": "Test that files older than 1 hour are deleted by cleanup task. Test that files younger than 1 hour are preserved. Test cleanup handles missing files gracefully. Test cleanup runs on the expected schedule.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Create api/routes/upload.py with POST /api/upload for multipart form data 2) Implement file type and size validation using existing postiz.validate_media() 3) Add temp file handling with UUID filenames 4) Create background task for temp file cleanup after 1 hour",
+        "updatedAt": "2026-03-16T17:27:44.849Z"
       },
       {
-        "id": 9,
+        "id": "9",
         "title": "Set up React frontend with Vite and Tailwind",
         "description": "Initialize the React SPA with Vite, Tailwind CSS, and essential dependencies for the frontend build.",
         "details": "Create `frontend/` directory:\n```bash\nnpm create vite@latest frontend -- --template react-ts\ncd frontend\nnpm install\nnpm install -D tailwindcss postcss autoprefixer\nnpx tailwindcss init -p\n```\n\nInstall dependencies:\n- react-router-dom@6\n- @tanstack/react-query\n- react-hook-form\n- zod\n- @hookform/resolvers\n- lucide-react (icons)\n- clsx, tailwind-merge (for cn() utility)\n- date-fns\n\nConfigure:\n- `tailwind.config.js` with Gita Valley brand colors (terracotta #C4A484, sage #4A7C59, cream #FFF8E7)\n- `src/lib/utils.ts` with cn() helper\n- `src/index.css` with Tailwind directives and CSS variables\n- `vite.config.ts` with proxy to backend API at localhost:8000",
         "testStrategy": "Verify npm run dev starts successfully. Verify Tailwind classes apply. Verify proxy routes /api/* to backend. Run npm run build to ensure production build works.",
         "priority": "high",
         "dependencies": [],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down into: 1) Initialize Vite React TypeScript project with npm create vite@latest 2) Install and configure Tailwind CSS with Gita Valley brand colors (terracotta #C4A484, sage #4A7C59, cream #FFF8E7) 3) Install core dependencies (react-router-dom, @tanstack/react-query, react-hook-form, zod, lucide-react, date-fns) and configure vite proxy to backend",
+        "updatedAt": "2026-03-16T17:48:59.538Z"
       },
       {
-        "id": 10,
+        "id": "10",
         "title": "Install and configure shadcn/ui components",
         "description": "Set up shadcn/ui component library with base components needed for the application.",
         "details": "Run shadcn/ui init:\n```bash\nnpx shadcn@latest init\n```\n\nInstall required components:\n```bash\nnpx shadcn@latest add button card input textarea label checkbox\nnpx shadcn@latest add form select tabs toast dialog\nnpx shadcn@latest add calendar dropdown-menu avatar badge\nnpx shadcn@latest add progress skeleton alert\n```\n\nConfigure `components.json` with:\n- Style: default\n- CSS variables: yes\n- Tailwind config path\n- Components alias: @/components\n\nCreate `src/components/ui/` with all shadcn components.",
         "testStrategy": "Import and render each component to verify no build errors. Test Button, Card, Input render correctly. Verify toast notifications work with Toaster provider.",
         "priority": "high",
         "dependencies": [
-          9
+          "9"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 2,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "Single task: Run shadcn init and add all required components (button, card, input, textarea, label, checkbox, form, select, tabs, toast, dialog, calendar, dropdown-menu, avatar, badge, progress, skeleton, alert) in one installation session",
+        "updatedAt": "2026-03-16T18:03:44.581Z"
       },
       {
-        "id": 11,
+        "id": "11",
         "title": "Implement API client and auth context",
         "description": "Create the API client layer with authentication handling and React context for auth state.",
         "details": "Create `src/lib/api.ts`:\n- Axios or fetch wrapper with base URL from env\n- Interceptor to add Authorization header from localStorage\n- Interceptor to catch 401 and redirect to login\n- Typed API functions: login(), generate(), getDrafts(), etc.\n\nCreate `src/contexts/AuthContext.tsx`:\n- AuthProvider with state: isAuthenticated, login(), logout()\n- Store JWT in localStorage on login\n- Check token expiry on mount, clear if expired\n- ProtectedRoute component that redirects to /login if not authenticated\n\nCreate `src/hooks/useAuth.ts` for consuming auth context.\n\nSet up TanStack Query:\n- Create `src/lib/queryClient.ts` with default options\n- Wrap app in QueryClientProvider",
         "testStrategy": "Test login stores token in localStorage. Test logout clears token. Test API calls include Authorization header. Test 401 response triggers logout. Test ProtectedRoute redirects when not authenticated.",
         "priority": "high",
         "dependencies": [
-          10
+          "10"
         ],
-        "status": "pending",
+        "status": "in-progress",
         "subtasks": [
           {
             "id": 1,
@@ -1952,7 +2008,8 @@
             "dependencies": [],
             "details": "Create `src/lib/api.ts` with:\n- Fetch wrapper function that reads base URL from `VITE_API_URL` environment variable\n- Request interceptor that reads JWT from localStorage and adds `Authorization: Bearer <token>` header to all requests\n- Response interceptor that catches 401 status codes and redirects to /login (clearing the token)\n- Typed API functions: `login(password: string)`, `generate(data: GenerateRequest)`, `getDrafts()`, `getCalendar()`, `getSuggestions(status?: string)`, `getContent(rowNumber: number)`, `sendToPostiz(data: PostizRequest)`, `getIntegrations()`\n- Proper TypeScript types for all request/response payloads\n- Error handling with typed ApiError class",
             "status": "pending",
-            "testStrategy": "Test that API calls include Authorization header when token exists in localStorage. Test that 401 response clears token and triggers redirect. Test that base URL is read from environment. Test each typed function makes correct HTTP request."
+            "testStrategy": "Test that API calls include Authorization header when token exists in localStorage. Test that 401 response clears token and triggers redirect. Test that base URL is read from environment. Test each typed function makes correct HTTP request.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -1963,7 +2020,8 @@
             ],
             "details": "Create `src/contexts/AuthContext.tsx` with:\n- AuthContext with type: `{ isAuthenticated: boolean; isLoading: boolean; login: (token: string) => void; logout: () => void }`\n- AuthProvider component that wraps children and manages auth state\n- On mount: check localStorage for existing token, validate expiry by decoding JWT (use jwt-decode or manual base64), set isAuthenticated accordingly\n- login() function: store token in localStorage, update isAuthenticated to true\n- logout() function: remove token from localStorage, update isAuthenticated to false\n- Create `src/hooks/useAuth.ts` that returns useContext(AuthContext) with proper error if used outside provider\n- Handle token expiry check: decode JWT, compare exp claim to current time, clear if expired",
             "status": "pending",
-            "testStrategy": "Test login stores token in localStorage and sets isAuthenticated true. Test logout clears token and sets isAuthenticated false. Test expired token is cleared on mount. Test useAuth throws if used outside AuthProvider."
+            "testStrategy": "Test login stores token in localStorage and sets isAuthenticated true. Test logout clears token and sets isAuthenticated false. Test expired token is cleared on mount. Test useAuth throws if used outside AuthProvider.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -1974,7 +2032,8 @@
             ],
             "details": "Create `src/components/ProtectedRoute.tsx` with:\n- Props: `{ children: React.ReactNode }`\n- Use useAuth() hook to check isAuthenticated and isLoading states\n- While isLoading is true, render a loading spinner or skeleton\n- If not authenticated after loading completes, use Navigate from react-router-dom to redirect to /login\n- Preserve the attempted URL using `state={{ from: location }}` for post-login redirect\n- If authenticated, render children\n- Export as default for use in route configuration\n- Consider wrapping in React.memo for performance",
             "status": "pending",
-            "testStrategy": "Test ProtectedRoute redirects to /login when not authenticated. Test ProtectedRoute renders children when authenticated. Test loading state shows spinner. Test redirect preserves original URL in state."
+            "testStrategy": "Test ProtectedRoute redirects to /login when not authenticated. Test ProtectedRoute renders children when authenticated. Test loading state shows spinner. Test redirect preserves original URL in state.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -1983,32 +2042,40 @@
             "dependencies": [],
             "details": "Create `src/lib/queryClient.ts` with:\n- Create QueryClient instance with defaultOptions:\n  - queries: { staleTime: 5 * 60 * 1000 (5 minutes), retry: 1, refetchOnWindowFocus: false }\n  - mutations: { retry: 0 }\n- Export queryClient instance\n\nUpdate `src/main.tsx` or `src/App.tsx`:\n- Import QueryClientProvider from @tanstack/react-query\n- Import queryClient from lib/queryClient\n- Wrap app with QueryClientProvider passing the client\n- Optionally add ReactQueryDevtools in development mode\n- Ensure QueryClientProvider wraps AuthProvider so queries can access auth state",
             "status": "pending",
-            "testStrategy": "Test QueryClient is created with correct default options. Test QueryClientProvider wraps the app correctly. Test queries use the configured staleTime. Test devtools appear in development mode."
+            "testStrategy": "Test QueryClient is created with correct default options. Test QueryClientProvider wraps the app correctly. Test queries use the configured staleTime. Test devtools appear in development mode.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Create src/lib/api.ts with fetch wrapper, auth header interceptor, and typed API functions 2) Create src/contexts/AuthContext.tsx with AuthProvider, login/logout state, localStorage JWT handling 3) Create ProtectedRoute component with redirect to /login 4) Set up TanStack Query client with QueryClientProvider",
+        "updatedAt": "2026-03-16T18:11:27.839Z"
       },
       {
-        "id": 12,
+        "id": "12",
         "title": "Implement Login page",
         "description": "Create the login page with password form, error handling, and lockout display.",
         "details": "Create `src/pages/LoginPage.tsx`:\n- Centered card layout with Gita Valley branding\n- Password input field using shadcn Input\n- Login button with loading state\n- Error message display for invalid password\n- Lockout countdown display when locked out (429 response)\n- Redirect to / on successful login\n\nUse react-hook-form with zod validation:\n- password: required, min 1 character\n\nStyle:\n- Warm cream background\n- Card with soft shadow\n- Gita Valley logo/title at top\n- \"Cultivating Soil and Soul\" tagline",
         "testStrategy": "Test form validation shows error for empty password. Test successful login redirects to dashboard. Test wrong password shows error. Test lockout shows countdown timer.",
         "priority": "high",
         "dependencies": [
-          11
+          "11"
         ],
         "status": "pending",
-        "subtasks": []
+        "subtasks": [],
+        "complexity": 3,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Break down into: 1) Create src/pages/LoginPage.tsx with centered card layout, password form using react-hook-form + zod 2) Add error handling for invalid password (401) and lockout countdown display (429)"
       },
       {
-        "id": 13,
+        "id": "13",
         "title": "Implement app shell and navigation",
         "description": "Create the main application layout with responsive navigation (bottom nav on mobile, sidebar on desktop).",
         "details": "Create `src/components/layout/AppShell.tsx`:\n- Responsive layout: sidebar on desktop (>768px), bottom nav on mobile\n- Sidebar: Gita Valley branding, nav links with icons, logout button\n- Bottom nav: Icon buttons for Home, Create, Drafts, Calendar, More (dropdown for Suggestions, Health)\n- Use React Router Outlet for page content\n\nCreate `src/components/layout/Sidebar.tsx`:\n- Logo/brand at top\n- Nav items: Dashboard, Create, Drafts, Calendar, Suggestions, Health\n- Active state styling (sage green background)\n- Logout at bottom\n\nCreate `src/components/layout/BottomNav.tsx`:\n- Fixed bottom bar with 5 nav icons\n- Active indicator\n- Touch-friendly (min 44px targets)\n\nSet up React Router in `src/App.tsx`:\n- Routes: /, /create, /drafts, /calendar, /suggestions, /health, /login",
         "testStrategy": "Test navigation links route correctly. Test responsive layout switches at breakpoint. Test logout clears auth and redirects. Test active state shows on current route.",
         "priority": "high",
         "dependencies": [
-          12
+          "12"
         ],
         "status": "pending",
         "subtasks": [
@@ -2019,7 +2086,8 @@
             "dependencies": [],
             "details": "Create `src/components/layout/AppShell.tsx`:\n- Use a responsive hook (e.g., useMediaQuery) or CSS media queries to detect viewport width\n- Render Sidebar component when viewport >= 768px\n- Render BottomNav component when viewport < 768px\n- Include React Router's Outlet component for nested route content\n- Apply appropriate layout styles: flex-row for desktop (sidebar + content), flex-col for mobile (content + bottom nav)\n- Ensure content area takes remaining space and is scrollable",
             "status": "pending",
-            "testStrategy": "Test that AppShell renders Sidebar on desktop viewports (>=768px). Test that AppShell renders BottomNav on mobile viewports (<768px). Test that Outlet renders child route content correctly. Test layout switches when resizing across breakpoint."
+            "testStrategy": "Test that AppShell renders Sidebar on desktop viewports (>=768px). Test that AppShell renders BottomNav on mobile viewports (<768px). Test that Outlet renders child route content correctly. Test layout switches when resizing across breakpoint.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -2030,7 +2098,8 @@
             ],
             "details": "Create `src/components/layout/Sidebar.tsx`:\n- Logo/brand section at top with Gita Valley branding\n- Navigation items using NavLink from React Router: Dashboard (/), Create (/create), Drafts (/drafts), Calendar (/calendar), Suggestions (/suggestions), Health (/health)\n- Add appropriate icons for each nav item (lucide-react icons)\n- Style active NavLink with sage green background using NavLink's isActive prop\n- Fixed width sidebar (e.g., 240px or 16rem)\n- Logout button positioned at bottom that clears auth state and redirects to /login\n- Use the project's design tokens for colors (sage green for active state)",
             "status": "pending",
-            "testStrategy": "Test that all navigation links render with correct hrefs. Test that clicking nav links navigates to correct routes. Test that active route shows sage green background styling. Test that logout button clears authentication and redirects to /login."
+            "testStrategy": "Test that all navigation links render with correct hrefs. Test that clicking nav links navigates to correct routes. Test that active route shows sage green background styling. Test that logout button clears authentication and redirects to /login.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -2041,7 +2110,8 @@
             ],
             "details": "Create `src/components/layout/BottomNav.tsx`:\n- Fixed position at bottom of viewport\n- 5 navigation items: Home (/), Create (/create), Drafts (/drafts), Calendar (/calendar), More (dropdown)\n- Each button minimum 44px x 44px for touch accessibility\n- Icon + label for each item using lucide-react icons\n- Active indicator styling (e.g., filled icon or accent color)\n- More button opens dropdown/popover with: Suggestions (/suggestions), Health (/health)\n- Use NavLink for routing with isActive styling\n- Safe area padding for devices with home indicators",
             "status": "pending",
-            "testStrategy": "Test that all 5 nav buttons render with correct icons. Test that buttons have minimum 44px touch targets. Test that More button opens dropdown with Suggestions and Health links. Test active indicator shows on current route. Test navigation works correctly for all routes."
+            "testStrategy": "Test that all 5 nav buttons render with correct icons. Test that buttons have minimum 44px touch targets. Test that More button opens dropdown with Suggestions and Health links. Test active indicator shows on current route. Test navigation works correctly for all routes.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -2054,19 +2124,23 @@
             ],
             "details": "Update `src/App.tsx` with React Router configuration:\n- Import BrowserRouter, Routes, Route from react-router-dom\n- Define routes: / (Dashboard), /create (Create), /drafts (Drafts), /calendar (Calendar), /suggestions (Suggestions), /health (Health), /login (Login)\n- Wrap authenticated routes with AppShell as a layout route using Outlet\n- Login route should be outside AppShell layout\n- Add route protection logic (redirect to /login if not authenticated)\n- Handle 404/not found route\n- Lazy load page components with React.lazy and Suspense for code splitting (optional optimization)",
             "status": "pending",
-            "testStrategy": "Test that each route renders the correct page component. Test that unauthenticated users are redirected to /login. Test that authenticated users can access protected routes. Test that login page renders without AppShell wrapper. Test navigation between routes works correctly."
+            "testStrategy": "Test that each route renders the correct page component. Test that unauthenticated users are redirected to /login. Test that authenticated users can access protected routes. Test that login page renders without AppShell wrapper. Test navigation between routes works correctly.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Create src/components/layout/AppShell.tsx with responsive layout switching at 768px breakpoint 2) Create Sidebar.tsx with nav items, active state styling, logout 3) Create BottomNav.tsx with icon buttons and touch-friendly targets 4) Set up React Router in App.tsx with all routes"
       },
       {
-        "id": 14,
+        "id": "14",
         "title": "Implement Dashboard page",
         "description": "Create the main dashboard with overview cards, quick-create shortcut, calendar mini-view, and health status indicators.",
         "details": "Create `src/pages/DashboardPage.tsx`:\n- Stats cards row: Pending Drafts count, Scheduled This Week, Recent Posts\n- Quick-create card: mini upload area + caption input + \"Generate\" button (navigates to /create with prefilled data)\n- Calendar mini-view: current week with dots for scheduled content (use date-fns)\n- Health status: colored dots (green/red/yellow) for Sheets, Postiz, Claude, OAuth\n- Recent activity feed: last 5 content actions\n\nCreate `src/hooks/useDashboardData.ts`:\n- TanStack Query hook to fetch /api/drafts (count), /api/calendar (this week), /api/health\n- Combine into single dashboard state\n\nStyle:\n- 2-column grid on desktop, stack on mobile\n- Cards with rounded corners, subtle shadows\n- Nature-themed icons (cow, leaf, sun)",
         "testStrategy": "Test stats display correct counts from API. Test calendar shows dots on correct days. Test health indicators show correct colors. Test quick-create navigates with data.",
         "priority": "medium",
         "dependencies": [
-          13
+          "13"
         ],
         "status": "pending",
         "subtasks": [
@@ -2077,7 +2151,8 @@
             "dependencies": [],
             "details": "Create the DashboardPage component with a responsive 2-column grid layout (stacking on mobile). Implement three stats cards in a row: (1) Pending Drafts - displays count from drafts API, (2) Scheduled This Week - count from calendar API, (3) Recent Posts - count of recently posted content. Each card should have rounded corners, subtle shadows, and nature-themed icons (cow for farm content, leaf for spiritual, sun for community). Include placeholder props for data that will come from the useDashboardData hook. Add health status indicators section with colored dots (green/red/yellow) for Sheets, Postiz, Claude, and OAuth connection states. Include recent activity feed showing last 5 content actions.",
             "status": "pending",
-            "testStrategy": "Test stats cards render with correct counts when provided mock data. Test responsive layout switches from 2-column to stacked on mobile breakpoint. Test health indicators display correct colors based on status prop values."
+            "testStrategy": "Test stats cards render with correct counts when provided mock data. Test responsive layout switches from 2-column to stacked on mobile breakpoint. Test health indicators display correct colors based on status prop values.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -2088,7 +2163,8 @@
             ],
             "details": "Add a QuickCreateCard component within DashboardPage featuring: (1) Mini drag-and-drop upload area for images/videos using existing upload patterns, (2) Caption textarea input with placeholder text, (3) 'Generate' button styled with nature theme. On Generate click, navigate to /create route using react-router-dom's useNavigate, passing the uploaded file and caption as state or query params. The card should fit the dashboard grid layout and match the visual style of stats cards. Handle the case where no file is uploaded but caption is provided.",
             "status": "pending",
-            "testStrategy": "Test file upload stores file reference correctly. Test caption input updates state. Test Generate button navigates to /create with correct prefilled data in location state. Test navigation works with caption only (no file)."
+            "testStrategy": "Test file upload stores file reference correctly. Test caption input updates state. Test Generate button navigates to /create with correct prefilled data in location state. Test navigation works with caption only (no file).",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -2099,7 +2175,8 @@
             ],
             "details": "Create a CalendarMiniView component using date-fns for date calculations. Display current week (Sunday-Saturday or Monday-Sunday based on locale) with day abbreviations and date numbers. For each day, show colored dots indicating scheduled content - dot color can correspond to content pillar. Use the calendar data from useDashboardData hook to determine which days have content. Clicking a day with content could optionally navigate to /calendar with that date selected. Style with rounded container matching other dashboard cards, subtle grid lines between days.",
             "status": "pending",
-            "testStrategy": "Test week displays correct 7 days starting from current week. Test dots appear on days with scheduled content from mock data. Test no dots on days without content. Test date-fns calculations handle week boundaries correctly."
+            "testStrategy": "Test week displays correct 7 days starting from current week. Test dots appear on days with scheduled content from mock data. Test no dots on days without content. Test date-fns calculations handle week boundaries correctly.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -2108,19 +2185,23 @@
             "dependencies": [],
             "details": "Create useDashboardData hook using TanStack Query's useQueries or multiple useQuery calls. Fetch: (1) /api/drafts - extract pending count, (2) /api/calendar with this week's date range - extract scheduled count and daily breakdown, (3) /api/health - get connection status for Sheets, Postiz, Claude, OAuth. Combine into a single dashboard state object with typed interface: { stats: { pendingDrafts, scheduledThisWeek, recentPosts }, calendar: { days: [...] }, health: { sheets, postiz, claude, oauth }, recentActivity: [...] }. Handle loading and error states. Consider using staleTime/cacheTime for performance since dashboard data doesn't need real-time updates.",
             "status": "pending",
-            "testStrategy": "Test hook returns loading state initially. Test hook combines data from all three endpoints correctly. Test error handling when one endpoint fails. Test data shape matches expected interface. Mock all API endpoints."
+            "testStrategy": "Test hook returns loading state initially. Test hook combines data from all three endpoints correctly. Test error handling when one endpoint fails. Test data shape matches expected interface. Mock all API endpoints.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Create src/pages/DashboardPage.tsx with stats cards layout 2) Create quick-create card with mini upload and caption input 3) Create calendar mini-view showing current week with scheduled content dots 4) Create useDashboardData hook combining drafts, calendar, and health data"
       },
       {
-        "id": 15,
+        "id": "15",
         "title": "Implement Create & Generate page",
         "description": "Create the content creation page with photo upload, caption input, platform selection, and SSE-powered generation.",
         "details": "Create `src/pages/CreatePage.tsx`:\n- Photo upload zone: drag-drop, click to browse, mobile camera capture (accept=\"image/*,video/*\")\n- Google Drive URL input alternative\n- Caption textarea (max 2000 chars) with character count\n- Platform checkboxes with icons (Instagram, Facebook, TikTok, Threads, LinkedIn)\n- Date picker for scheduling\n- \"Generate\" button\n\nCreate `src/components/create/GenerationProgress.tsx`:\n- SSE listener for /api/generate\n- Progress indicator showing current platform\n- Animated status updates\n\nCreate `src/components/create/CaptionCards.tsx`:\n- Platform-specific cards with generated captions\n- Inline editing per platform\n- Re-prompt input with \"Regenerate\" button\n- \"Send to Postiz\" button\n\nUse react-hook-form for the form, useMutation for generation.",
         "testStrategy": "Test file upload updates preview. Test form validation for required fields. Test SSE connection receives events. Test caption cards are editable. Test send to Postiz calls API.",
         "priority": "high",
         "dependencies": [
-          13
+          "13"
         ],
         "status": "pending",
         "subtasks": [
@@ -2131,7 +2212,8 @@
             "dependencies": [],
             "details": "Create `src/pages/CreatePage.tsx` with:\n- React Hook Form setup with zod validation schema\n- Photo upload zone using shadcn/ui primitives with drag-drop handlers (onDragOver, onDrop)\n- File input with accept=\"image/*,video/*\" for mobile camera capture\n- Preview thumbnail showing uploaded image/video\n- Google Drive URL input as alternative to upload\n- Upload state management (idle, uploading, uploaded, error)\n- Use TanStack Query useMutation for upload handling\n- Mobile-first layout with touch-friendly tap targets (min 44px)\n- Brand styling: warm earth tones, rounded corners, soft shadows",
             "status": "pending",
-            "testStrategy": "Test drag-drop updates file state. Test file input accepts image and video types. Test preview renders after file selection. Test Google Drive URL input validation. Test upload mutation triggers on file selection."
+            "testStrategy": "Test drag-drop updates file state. Test file input accepts image and video types. Test preview renders after file selection. Test Google Drive URL input validation. Test upload mutation triggers on file selection.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -2142,7 +2224,8 @@
             ],
             "details": "Extend CreatePage.tsx with:\n- Caption textarea (max 2000 chars) with live character counter using react-hook-form watch()\n- Platform checkboxes for Instagram, Facebook, TikTok, Threads, LinkedIn with platform icons (use lucide-react or custom SVGs)\n- Each checkbox uses shadcn Checkbox component with label showing platform icon + name\n- Date picker using shadcn DatePicker component for scheduled_at\n- Form validation via zod: caption required min 1 char, at least one platform selected\n- \"Generate\" button with loading state that triggers form submit\n- Store selected platforms as dict {platform: boolean} matching ContentRow.platforms schema\n- Mobile responsive: stack fields vertically on small screens",
             "status": "pending",
-            "testStrategy": "Test character count updates on typing. Test form validation shows error for empty caption. Test at least one platform required validation. Test date picker sets scheduled date. Test generate button submits form with correct payload."
+            "testStrategy": "Test character count updates on typing. Test form validation shows error for empty caption. Test at least one platform required validation. Test date picker sets scheduled date. Test generate button submits form with correct payload.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -2153,7 +2236,8 @@
             ],
             "details": "Create `src/components/create/GenerationProgress.tsx` with:\n- SSE connection to /api/generate endpoint using EventSource API\n- Handle SSE events: {status: 'validating'}, {status: 'generating', platform: 'instagram'}, {status: 'complete', captions: {...}}\n- Progress indicator showing current platform being generated (animated)\n- Platform status icons: pending (gray), generating (spinner), complete (checkmark)\n- Animated status updates using CSS transitions or framer-motion\n- Proper cleanup: close EventSource on component unmount or generation complete\n- Error handling for SSE connection failures and timeout (120s max)\n- Store received captions in parent state via callback prop\n- Mobile-friendly progress display with platform icons",
             "status": "pending",
-            "testStrategy": "Test SSE connection opens on component mount. Test status updates render correct platform indicator. Test captions callback fires when complete event received. Test EventSource closes on unmount. Test error state displays on connection failure."
+            "testStrategy": "Test SSE connection opens on component mount. Test status updates render correct platform indicator. Test captions callback fires when complete event received. Test EventSource closes on unmount. Test error state displays on connection failure.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -2164,7 +2248,8 @@
             ],
             "details": "Create `src/components/create/CaptionCards.tsx` with:\n- Grid/list of platform-specific cards (one per enabled platform)\n- Each card shows: platform icon, platform name header, generated caption text\n- Inline editing: click caption to enter edit mode (textarea replaces text)\n- shadcn Card, CardHeader, CardContent components for structure\n- Edit state tracked per platform: {platform: {editing: boolean, value: string}}\n- Save edits on blur or Enter key, cancel on Escape\n- Platform-specific styling hints (character limits, hashtag count)\n- Mobile: cards stack vertically, full-width\n- Desktop: 2-column grid for cards\n- Callback prop to update parent state with edited captions",
             "status": "pending",
-            "testStrategy": "Test caption cards render for each enabled platform. Test click on caption enters edit mode. Test blur saves edited caption. Test Escape cancels edit. Test edited caption updates parent state."
+            "testStrategy": "Test caption cards render for each enabled platform. Test click on caption enters edit mode. Test blur saves edited caption. Test Escape cancels edit. Test edited caption updates parent state.",
+            "parentId": "undefined"
           },
           {
             "id": 5,
@@ -2175,19 +2260,23 @@
             ],
             "details": "Extend CreatePage.tsx with:\n- Re-prompt textarea input below CaptionCards for staff feedback\n- \"Regenerate\" button that calls /api/reprompt with current row + feedback via useMutation\n- Regenerate shows GenerationProgress again with new SSE stream\n- \"Send to Postiz\" primary action button (styled prominently)\n- Send to Postiz calls /api/send-to-postiz with {captions: editedCaptions, media_url, scheduled_at}\n- Success: show toast/alert with draft count and link to Postiz\n- Error handling: show error message, allow retry\n- Disable send button until generation complete\n- Loading states on both buttons during API calls\n- useMutation hooks with TanStack Query for both endpoints",
             "status": "pending",
-            "testStrategy": "Test re-prompt input captures feedback text. Test regenerate button calls reprompt API with feedback. Test regenerate shows progress component. Test send-to-Postiz calls API with captions and media. Test success shows confirmation. Test error displays error message."
+            "testStrategy": "Test re-prompt input captures feedback text. Test regenerate button calls reprompt API with feedback. Test regenerate shows progress component. Test send-to-Postiz calls API with captions and media. Test success shows confirmation. Test error displays error message.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 7,
+        "recommendedSubtasks": 5,
+        "expansionPrompt": "Break down into: 1) Create src/pages/CreatePage.tsx with photo upload zone (drag-drop, file browse, camera capture) 2) Create form with caption textarea, platform checkboxes, date picker 3) Create GenerationProgress.tsx with SSE listener for /api/generate 4) Create CaptionCards.tsx with platform-specific cards, inline editing 5) Add re-prompt input with regenerate functionality and send-to-Postiz action"
       },
       {
-        "id": 16,
+        "id": "16",
         "title": "Implement Review Drafts page",
         "description": "Create the drafts review page with list view, inline editing, re-prompt, and batch approval functionality.",
         "details": "Create `src/pages/DraftsPage.tsx`:\n- List of pending drafts from /api/drafts\n- \"Select All\" checkbox\n- Empty state: \"All caught up!\" message\n\nCreate `src/components/drafts/DraftCard.tsx`:\n- Selection checkbox\n- Raw text preview (truncated)\n- Platform tabs showing captions (using shadcn Tabs)\n- Inline caption editing\n- Re-prompt input + regenerate button per draft\n- Postiz link if postiz_ids exist\n\nCreate `src/components/drafts/BatchActions.tsx`:\n- Fixed bottom bar when items selected\n- \"Approve & Send X to Postiz\" button\n- Selection count display\n\nUse TanStack Query for data fetching, optimistic updates on approval.",
         "testStrategy": "Test drafts list renders from API. Test select all toggles all checkboxes. Test inline edit updates local state. Test batch approve calls API for selected. Test empty state displays correctly.",
         "priority": "high",
         "dependencies": [
-          13
+          "13"
         ],
         "status": "pending",
         "subtasks": [
@@ -2198,7 +2287,8 @@
             "dependencies": [],
             "details": "Create `src/pages/DraftsPage.tsx` with the following:\n- Use TanStack Query to fetch drafts from `/api/drafts` endpoint\n- Implement selection state using `useState<Set<string>>` to track selected draft IDs\n- Add 'Select All' checkbox in the header that toggles all visible drafts\n- Implement empty state with 'All caught up!' message and appropriate illustration when no pending drafts exist\n- Use shadcn Card components for consistent styling\n- Add loading and error states for the query\n- Export the page and add route in App.tsx router configuration",
             "status": "pending",
-            "testStrategy": "Test that drafts list renders correctly from mock API data. Test select-all checkbox toggles all individual checkboxes. Test empty state displays when drafts array is empty. Test loading state shows skeleton/spinner. Test error state displays error message."
+            "testStrategy": "Test that drafts list renders correctly from mock API data. Test select-all checkbox toggles all individual checkboxes. Test empty state displays when drafts array is empty. Test loading state shows skeleton/spinner. Test error state displays error message.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -2209,7 +2299,8 @@
             ],
             "details": "Create `src/components/drafts/DraftCard.tsx` with:\n- Selection checkbox that syncs with parent DraftsPage selection state via props\n- Raw text preview truncated to ~150 characters with ellipsis\n- shadcn Tabs component showing platform-specific captions (Instagram, Facebook, etc.)\n- Inline caption editing using shadcn Textarea with edit/save toggle button\n- Optimistic updates when saving caption edits using TanStack Query's `useMutation`\n- Conditional Postiz link display when `postiz_ids` exist on the draft\n- Props interface: `{ draft: Draft; selected: boolean; onSelect: (id: string) => void; onUpdate: (id: string, updates: Partial<Draft>) => void }`",
             "status": "pending",
-            "testStrategy": "Test checkbox reflects selected prop and calls onSelect on click. Test platform tabs switch caption content correctly. Test inline edit mode toggles on button click. Test save calls onUpdate with edited caption. Test Postiz link only renders when postiz_ids exists."
+            "testStrategy": "Test checkbox reflects selected prop and calls onSelect on click. Test platform tabs switch caption content correctly. Test inline edit mode toggles on button click. Test save calls onUpdate with edited caption. Test Postiz link only renders when postiz_ids exists.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -2220,7 +2311,8 @@
             ],
             "details": "Add to `src/components/drafts/DraftCard.tsx`:\n- Collapsible or always-visible re-prompt section with shadcn Input for entering custom prompt\n- 'Regenerate' button with RefreshCw icon that triggers `/api/generate` or similar endpoint\n- Use TanStack Query `useMutation` with loading state on the button (spinner/disabled)\n- On successful regeneration, update the draft captions via query invalidation or optimistic update\n- Clear the re-prompt input after successful regeneration\n- Handle error state with toast notification using shadcn Toast or Sonner\n- Optional: Show character count or prompt suggestions",
             "status": "pending",
-            "testStrategy": "Test re-prompt input accepts text input. Test regenerate button triggers API call with prompt text. Test loading state disables button and shows spinner. Test successful regeneration updates captions. Test error shows toast notification."
+            "testStrategy": "Test re-prompt input accepts text input. Test regenerate button triggers API call with prompt text. Test loading state disables button and shows spinner. Test successful regeneration updates captions. Test error shows toast notification.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -2231,19 +2323,23 @@
             ],
             "details": "Create `src/components/drafts/BatchActions.tsx` with:\n- Fixed position bottom bar (sticky to viewport) that only renders when `selectedCount > 0`\n- Selection count display: 'X draft(s) selected'\n- 'Approve & Send X to Postiz' primary action button\n- Use TanStack Query `useMutation` for batch approval API call to `/api/send-to-postiz`\n- Handle partial success scenarios (some drafts fail, some succeed)\n- Loading state on approve button during API call\n- Clear selection after successful batch operation\n- Smooth slide-up animation when bar appears using CSS transitions or Framer Motion\n- Props: `{ selectedIds: string[]; onApproveComplete: () => void; onClear: () => void }`",
             "status": "pending",
-            "testStrategy": "Test bar only renders when selectedIds has items. Test selection count displays correct number. Test approve button calls batch API with all selected IDs. Test loading state during API call. Test selection clears after successful approval."
+            "testStrategy": "Test bar only renders when selectedIds has items. Test selection count displays correct number. Test approve button calls batch API with all selected IDs. Test loading state during API call. Test selection clears after successful approval.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Create src/pages/DraftsPage.tsx with list view and select-all functionality 2) Create DraftCard.tsx with selection checkbox, platform tabs, inline caption editing 3) Create re-prompt input per draft with regenerate button 4) Create BatchActions.tsx with fixed bottom bar for batch approval"
       },
       {
-        "id": 17,
+        "id": "17",
         "title": "Implement Content Calendar page",
         "description": "Create the calendar view showing scheduled and posted content with pillar distribution visualization.",
         "details": "Create `src/pages/CalendarPage.tsx`:\n- Month/week view toggle\n- Calendar grid using date-fns for date math\n- Navigation: prev/next month, today button\n\nCreate `src/components/calendar/CalendarDay.tsx`:\n- Day cell with content dots\n- Color-coded by pillar (Cow Life=brown, Farm Ops=green, etc.)\n- Click to expand day details\n- Empty days highlighted in yellow (gaps)\n\nCreate `src/components/calendar/DayModal.tsx`:\n- Dialog showing content for selected day\n- List of posts with pillar, platform badges, status\n- Link to view/edit each post\n\nCreate `src/components/calendar/PillarBalance.tsx`:\n- Horizontal bar chart showing actual vs target distribution\n- Use CSS for simple bar visualization (no chart library needed)\n- Legend with pillar names and percentages",
         "testStrategy": "Test calendar renders current month. Test navigation changes month. Test content dots appear on correct days. Test day click opens modal. Test pillar balance shows correct percentages.",
         "priority": "medium",
         "dependencies": [
-          13
+          "13"
         ],
         "status": "pending",
         "subtasks": [
@@ -2254,7 +2350,8 @@
             "dependencies": [],
             "details": "Create `src/pages/CalendarPage.tsx` with:\n- State for currentDate (Date) and viewMode ('month' | 'week')\n- Month/week toggle buttons using shadcn ToggleGroup or custom buttons\n- Navigation row with prev/next buttons using date-fns addMonths/subMonths or addWeeks/subWeeks\n- Today button that resets to current date\n- Calendar grid container that renders either month grid (6 rows x 7 cols) or week grid (1 row x 7 cols)\n- Use date-fns functions: startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, isSameMonth, isToday\n- Fetch content data using TanStack Query for the visible date range\n- Pass content items to CalendarDay components based on scheduledDate\n- Include PillarBalance component showing distribution for visible range",
             "status": "pending",
-            "testStrategy": "Test calendar renders current month by default. Test clicking prev/next changes the displayed month/week. Test today button returns to current date. Test view toggle switches between month and week layouts. Test correct number of day cells render for each view."
+            "testStrategy": "Test calendar renders current month by default. Test clicking prev/next changes the displayed month/week. Test today button returns to current date. Test view toggle switches between month and week layouts. Test correct number of day cells render for each view.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -2265,7 +2362,8 @@
             ],
             "details": "Create `src/components/calendar/CalendarDay.tsx` with:\n- Props: date (Date), contentItems (ContentRow[]), isCurrentMonth (boolean), onClick handler\n- Day number display with styling for current month vs adjacent months\n- Content dots row showing up to 3-4 dots with overflow indicator (+N)\n- Pillar color mapping: Cow Life=#8B4513 (brown), Farm Ops=#228B22 (green), Spiritual Ed=#9932CC (purple), Events=#FFD700 (gold), Behind Scenes=#4169E1 (royal blue), Seasonal=#FF6347 (tomato)\n- Yellow/amber background highlight for empty days (no content scheduled)\n- isToday styling with ring/border highlight\n- Hover state with slight elevation/shadow\n- Click handler to open DayModal\n- Accessible button role with aria-label including date and content count",
             "status": "pending",
-            "testStrategy": "Test dots render with correct pillar colors. Test empty days show yellow highlight. Test today has special styling. Test click triggers onClick handler. Test overflow indicator shows when >4 items. Test adjacent month days have muted styling."
+            "testStrategy": "Test dots render with correct pillar colors. Test empty days show yellow highlight. Test today has special styling. Test click triggers onClick handler. Test overflow indicator shows when >4 items. Test adjacent month days have muted styling.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -2277,7 +2375,8 @@
             ],
             "details": "Create `src/components/calendar/DayModal.tsx` with:\n- Props: date (Date), contentItems (ContentRow[]), isOpen (boolean), onClose handler\n- Use shadcn Dialog component for accessible modal\n- Header showing formatted date (e.g., 'Monday, March 15, 2026')\n- Scrollable list of content items, each showing:\n  - Pillar badge (colored chip with pillar name)\n  - Platform badges (Instagram, Facebook, etc. icons/chips)\n  - Status badge (pending_approval, approved, scheduled, posted) with appropriate colors\n  - Truncated caption preview (first 100 chars)\n  - 'View/Edit' link navigating to /drafts/{rowNumber} or /content/{rowNumber}\n- Empty state message when no content for the day\n- Close button and click-outside-to-close behavior",
             "status": "pending",
-            "testStrategy": "Test modal opens when isOpen is true. Test content list renders all items for the day. Test pillar and platform badges display correctly. Test status shows appropriate color. Test edit link navigates to correct route. Test empty state displays when no content. Test close button and backdrop click close modal."
+            "testStrategy": "Test modal opens when isOpen is true. Test content list renders all items for the day. Test pillar and platform badges display correctly. Test status shows appropriate color. Test edit link navigates to correct route. Test empty state displays when no content. Test close button and backdrop click close modal.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -2288,50 +2387,60 @@
             ],
             "details": "Create `src/components/calendar/PillarBalance.tsx` with:\n- Props: contentItems (ContentRow[]) for the current calendar view range\n- Calculate actual distribution: count items per pillar, compute percentages\n- Target distribution from CLAUDE.md: Spiritual Ed 40%, Farm/Community 25%, Events 15%, Behind Scenes 10%, Seasonal 5%, Collaborative 5%\n- Two horizontal bar rows using CSS flexbox:\n  - 'Actual' bar: segments sized by actual percentages, colored by pillar\n  - 'Target' bar: segments sized by target percentages\n- Legend below bars showing:\n  - Colored square + pillar name + actual% (target%)\n  - Highlight pillars that are significantly over/under target (>10% deviation)\n- Use CSS custom properties for pillar colors (reuse from CalendarDay)\n- Responsive: stack bars vertically on mobile\n- Accessible: include sr-only text describing the distribution",
             "status": "pending",
-            "testStrategy": "Test bar segments have correct widths based on content distribution. Test legend shows all pillars with correct colors. Test actual vs target comparison is visually clear. Test deviation highlighting works for under/over represented pillars. Test empty state when no content items. Test responsive layout on narrow screens."
+            "testStrategy": "Test bar segments have correct widths based on content distribution. Test legend shows all pillars with correct colors. Test actual vs target comparison is visually clear. Test deviation highlighting works for under/over represented pillars. Test empty state when no content items. Test responsive layout on narrow screens.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Create src/pages/CalendarPage.tsx with month/week view toggle and navigation 2) Create CalendarDay.tsx with content dots color-coded by pillar 3) Create DayModal.tsx dialog showing content for selected day 4) Create PillarBalance.tsx with horizontal bar chart showing distribution"
       },
       {
-        "id": 18,
+        "id": "18",
         "title": "Implement Suggestions page",
         "description": "Create the suggestions page with AI-generated content ideas, filtering, accept/dismiss actions.",
         "details": "Create `src/pages/SuggestionsPage.tsx`:\n- List of suggestions from /api/suggestions\n- Filter dropdown: All, Suggested, Accepted, Dismissed\n- \"Generate New Suggestions\" button triggers /api/suggest\n\nCreate `src/components/suggestions/SuggestionCard.tsx`:\n- Content idea title\n- Pillar badge (color-coded)\n- Rationale text\n- Media suggestion\n- Suggested date\n- Accept button: navigates to /create with prefilled data\n- Dismiss button: marks as dismissed, removes from list\n\nCreate `src/hooks/useSuggestions.ts`:\n- TanStack Query for fetching/filtering suggestions\n- Mutations for accept/dismiss\n\nOptimistic updates: remove dismissed items immediately, refetch on error.",
         "testStrategy": "Test suggestions list renders from API. Test filter changes displayed items. Test accept navigates to create with data. Test dismiss removes card optimistically. Test generate button triggers pipeline.",
         "priority": "medium",
         "dependencies": [
-          13
+          "13"
         ],
         "status": "pending",
-        "subtasks": []
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down into: 1) Create src/pages/SuggestionsPage.tsx with list view and status filter dropdown 2) Create SuggestionCard.tsx with pillar badge, accept/dismiss buttons 3) Create useSuggestions hook with TanStack Query mutations for accept/dismiss with optimistic updates"
       },
       {
-        "id": 19,
+        "id": "19",
         "title": "Implement System Health page",
         "description": "Create the health monitoring page with service status cards and error log table.",
         "details": "Create `src/pages/HealthPage.tsx`:\n- Grid of service status cards\n- Manual refresh button\n- Error log table at bottom\n\nCreate `src/components/health/ServiceCard.tsx`:\n- Service name (Sheets, Postiz, Claude CLI, OAuth)\n- Status icon: green check, red X, yellow warning\n- Status message\n- Last checked timestamp\n- Expandable details section\n\nCreate `src/components/health/ErrorLog.tsx`:\n- Table with columns: Timestamp, Source, Row #, Message\n- Most recent first\n- Empty state if no errors\n\nUse TanStack Query with refetchInterval for auto-refresh (30 seconds). Manual refresh button forces immediate refetch.",
         "testStrategy": "Test service cards show correct status from API. Test refresh button triggers refetch. Test error table renders entries. Test auto-refresh updates data.",
         "priority": "low",
         "dependencies": [
-          13
+          "13"
         ],
         "status": "pending",
-        "subtasks": []
+        "subtasks": [],
+        "complexity": 3,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Break down into: 1) Create src/pages/HealthPage.tsx with service status cards grid and refresh button 2) Create ServiceCard.tsx and ErrorLog.tsx table with auto-refresh via TanStack Query refetchInterval"
       },
       {
-        "id": 20,
+        "id": "20",
         "title": "Add mobile-first responsive styling",
         "description": "Ensure all pages are fully responsive with touch-friendly interactions and mobile-optimized layouts.",
         "details": "Review and update all components for mobile:\n\n- Touch targets: minimum 44px height for all interactive elements\n- Forms: full-width inputs on mobile, stack vertically\n- Cards: single column on mobile, grid on desktop\n- Modals: full-screen on mobile, centered on desktop\n- Tables: horizontal scroll wrapper or card layout on mobile\n- Bottom nav: proper safe-area-inset padding for iPhone notch\n\nCreate `src/components/ui/SwipeableCard.tsx`:\n- Swipe gesture for navigating between draft cards\n- Use touch events (touchstart, touchmove, touchend)\n\nUpdate CreatePage:\n- Camera capture button prominent on mobile\n- Platform checkboxes as toggle buttons for easier tapping\n\nTest on iPhone Safari and Android Chrome viewport sizes.",
         "testStrategy": "Test all pages at 375px width (iPhone SE). Test touch targets are 44px+. Test swipe gestures work on draft cards. Test forms are usable on mobile keyboard.",
         "priority": "medium",
         "dependencies": [
-          14,
-          15,
-          16,
-          17,
-          18,
-          19
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
         ],
         "status": "pending",
         "subtasks": [
@@ -2342,7 +2451,8 @@
             "dependencies": [],
             "details": "Audit the following components for touch target compliance:\n\n- `src/components/ui/Button.tsx` - Ensure min-height: 44px\n- `src/components/drafts/DraftCard.tsx` - Selection checkbox, platform tabs, action buttons\n- `src/components/drafts/BatchActions.tsx` - Bottom bar buttons\n- `src/components/layout/BottomNav.tsx` - Navigation items\n- Any form inputs, radio buttons, toggle switches\n\nUpdate Tailwind classes or add explicit `min-h-[44px]` where needed. For checkbox/radio inputs, ensure the clickable label area is 44px. Add padding to small icons to expand touch area. Document any components that cannot meet 44px without breaking design and propose alternatives.",
             "status": "pending",
-            "testStrategy": "Use browser dev tools to measure touch targets at 375px viewport. Create a visual test checklist of all interactive elements. Verify each meets 44px height minimum using inspector. Test on actual mobile device to confirm tap targets feel comfortable."
+            "testStrategy": "Use browser dev tools to measure touch targets at 375px viewport. Create a visual test checklist of all interactive elements. Verify each meets 44px height minimum using inspector. Test on actual mobile device to confirm tap targets feel comfortable.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -2353,7 +2463,8 @@
             ],
             "details": "Update form layouts in:\n\n- `src/pages/LoginPage.tsx` - Email/password fields full-width on mobile\n- `src/pages/CreatePage.tsx` - Content input, platform selection, all form fields\n- Any modal forms or inline edit forms in DraftCard\n\nImplementation approach:\n- Use Tailwind responsive classes: `w-full md:w-auto` or `flex flex-col md:flex-row`\n- Forms stack vertically by default (mobile-first)\n- Add `md:` or `lg:` breakpoint classes for desktop multi-column\n- Ensure proper spacing between stacked elements (`space-y-4`)\n- Platform checkboxes in CreatePage: convert to toggle button group for easier mobile tapping using shadcn Toggle or custom styled buttons\n- Camera capture button: make prominent with larger touch target and positioned for thumb reach",
             "status": "pending",
-            "testStrategy": "Test forms at 375px width - all inputs should be full width. Test at 768px+ - forms can use horizontal layouts. Test form submission works. Test keyboard doesn't obscure inputs on mobile (consider scroll behavior)."
+            "testStrategy": "Test forms at 375px width - all inputs should be full width. Test at 768px+ - forms can use horizontal layouts. Test form submission works. Test keyboard doesn't obscure inputs on mobile (consider scroll behavior).",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -2364,7 +2475,8 @@
             ],
             "details": "Create `src/components/ui/SwipeableCard.tsx`:\n\n```typescript\ninterface SwipeableCardProps {\n  children: React.ReactNode;\n  onSwipeLeft?: () => void;\n  onSwipeRight?: () => void;\n  threshold?: number; // minimum swipe distance, default 50px\n}\n```\n\nImplementation:\n- Use touch events: `onTouchStart`, `onTouchMove`, `onTouchEnd`\n- Track touch start X position and current X position\n- Calculate swipe distance and direction on touchEnd\n- Apply CSS transform during swipe for visual feedback\n- Animate card back or transition on swipe completion\n- Add visual indicators (arrows or subtle animation) to hint swipe capability\n- Ensure it doesn't interfere with vertical scrolling\n- Consider adding haptic feedback hint via CSS animations\n\nIntegrate with DraftsPage to enable swiping between draft cards for quick review.",
             "status": "pending",
-            "testStrategy": "Test touch events fire correctly on mobile. Test swipe threshold triggers callbacks. Test visual transform follows finger during swipe. Test component works on both iOS Safari and Android Chrome. Test vertical scroll is not blocked."
+            "testStrategy": "Test touch events fire correctly on mobile. Test swipe threshold triggers callbacks. Test visual transform follows finger during swipe. Test component works on both iOS Safari and Android Chrome. Test vertical scroll is not blocked.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -2375,32 +2487,39 @@
             ],
             "details": "Update `src/components/layout/BottomNav.tsx`:\n\n1. Add viewport meta tag support in index.html:\n   `<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">`\n\n2. Apply safe-area padding using CSS env() variables:\n   ```css\n   padding-bottom: env(safe-area-inset-bottom, 0px);\n   /* Or with Tailwind: pb-[env(safe-area-inset-bottom)] */\n   ```\n\n3. Alternative Tailwind approach - add custom utility in tailwind.config.js:\n   ```javascript\n   theme: {\n     extend: {\n       padding: {\n         'safe-bottom': 'env(safe-area-inset-bottom, 0px)',\n       }\n     }\n   }\n   ```\n\n4. Ensure BottomNav has proper background that extends behind the home indicator\n5. Test that content above BottomNav has adequate margin to not be obscured\n6. Apply similar treatment to any fixed/sticky bottom elements (BatchActions bar)",
             "status": "pending",
-            "testStrategy": "Test on iPhone with notch (X and later) in Safari. Verify home indicator area has proper background. Test in landscape orientation. Test on devices without notch to ensure no extra padding applied. Use Safari dev tools iPhone simulator for initial testing."
+            "testStrategy": "Test on iPhone with notch (X and later) in Safari. Verify home indicator area has proper background. Test in landscape orientation. Test on devices without notch to ensure no extra padding applied. Use Safari dev tools iPhone simulator for initial testing.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Audit all components for 44px touch targets and fix spacing 2) Update forms for full-width inputs, vertical stacking on mobile 3) Create SwipeableCard.tsx with touch event handling for draft navigation 4) Add safe-area-inset padding for iPhone notch on BottomNav"
       },
       {
-        "id": 21,
+        "id": "21",
         "title": "Create Dockerfile for React frontend",
         "description": "Create Docker configuration for serving the React build with nginx:alpine.",
         "details": "Create `frontend/Dockerfile`:\n```dockerfile\n# Build stage\nFROM node:20-alpine AS build\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci\nCOPY . .\nRUN npm run build\n\n# Production stage\nFROM nginx:alpine\nCOPY --from=build /app/dist /usr/share/nginx/html\nCOPY nginx.conf /etc/nginx/conf.d/default.conf\nEXPOSE 3000\n```\n\nCreate `frontend/nginx.conf`:\n- Serve static files from /usr/share/nginx/html\n- SPA fallback: try_files $uri $uri/ /index.html\n- Proxy /api/* to host.docker.internal:8000 (FastAPI on host)\n- Gzip compression enabled\n- Cache static assets (js, css, images)\n\nCreate `.dockerignore` to exclude node_modules, .git\n\nUpdate `docker-compose.yaml` to add frontend service on port 3000.",
         "testStrategy": "Build Docker image successfully. Run container and verify static files served. Test /api/* proxies to backend. Test SPA routing works (refresh on /drafts serves index.html).",
         "priority": "medium",
         "dependencies": [
-          20
+          "20"
         ],
         "status": "pending",
-        "subtasks": []
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down into: 1) Create frontend/Dockerfile with multi-stage build (node:20-alpine for build, nginx:alpine for serve) 2) Create nginx.conf with SPA fallback, /api/* proxy to backend, gzip, static caching 3) Update docker-compose.yaml with frontend service on port 3000"
       },
       {
-        "id": 22,
+        "id": "22",
         "title": "Write FastAPI endpoint tests",
         "description": "Create comprehensive pytest tests for all FastAPI endpoints with mocked dependencies.",
         "details": "Create `tests/test_api/` directory:\n\n`test_auth.py`:\n- Test login success returns JWT\n- Test login failure returns 401\n- Test lockout after 5 attempts\n- Test protected endpoint requires auth\n\n`test_generate.py`:\n- Test SSE stream format\n- Test generation with mocked CaptionGenerator\n- Test reprompt endpoint\n\n`test_content.py`:\n- Test GET /api/drafts\n- Test GET /api/calendar\n- Test GET /api/suggestions\n- Test POST /api/drafts/{row}/approve\n- Test POST /api/drafts/{row}/edit\n\n`test_health.py`:\n- Test all services checked\n- Test error log included\n\nUse pytest fixtures for TestClient and mocked dependencies. Target 80%+ coverage.",
         "testStrategy": "Run pytest with coverage report. Verify all endpoints have at least one test. Verify error cases are tested. Verify mocks are properly configured.",
         "priority": "high",
         "dependencies": [
-          7
+          "7"
         ],
         "status": "pending",
         "subtasks": [
@@ -2411,7 +2530,8 @@
             "dependencies": [],
             "details": "Create `tests/test_api/` directory with `__init__.py` and `conftest.py`. In conftest.py, create fixtures: `test_client` using FastAPI TestClient with dependency overrides, `mock_sheets_client` returning a MagicMock with preset return values for common methods, `mock_postiz_client` for Postiz API mocking, `mock_caption_generator` for AI generation mocking, and `auth_headers` fixture that provides valid JWT Bearer token headers for protected endpoint tests. Use pytest-asyncio for async test support. Configure fixture scopes appropriately (function vs module).",
             "status": "pending",
-            "testStrategy": "Verify fixtures can be imported and used in a simple test. Confirm TestClient can make requests to the app. Confirm mocks are properly injected via dependency overrides."
+            "testStrategy": "Verify fixtures can be imported and used in a simple test. Confirm TestClient can make requests to the app. Confirm mocks are properly injected via dependency overrides.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -2422,7 +2542,8 @@
             ],
             "details": "Create `tests/test_api/test_auth.py` with test cases: `test_login_success_returns_jwt` - POST /api/auth/login with valid credentials returns 200 and JWT token in response; `test_login_failure_returns_401` - invalid password returns 401 Unauthorized; `test_login_lockout_after_5_attempts` - simulate 5 failed logins, verify 6th attempt returns 429 Too Many Requests; `test_protected_endpoint_requires_auth` - request without Authorization header returns 401; `test_protected_endpoint_with_valid_token` - request with valid JWT succeeds; `test_expired_token_returns_401` - create expired token and verify rejection. Use time mocking for expiration tests.",
             "status": "pending",
-            "testStrategy": "Run pytest tests/test_api/test_auth.py -v. Verify all 6+ test cases pass. Check coverage of api/routes/auth.py reaches 80%+."
+            "testStrategy": "Run pytest tests/test_api/test_auth.py -v. Verify all 6+ test cases pass. Check coverage of api/routes/auth.py reaches 80%+.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -2433,7 +2554,8 @@
             ],
             "details": "Create `tests/test_api/test_generate.py` with test cases: `test_sse_stream_format` - verify response has correct Content-Type 'text/event-stream', verify event format follows SSE spec with 'data:' prefix and double newlines; `test_generation_with_mocked_caption_generator` - mock CaptionGenerator.generate() to return test captions, verify endpoint streams caption chunks correctly, verify final event contains complete caption data; `test_reprompt_endpoint` - test POST /api/generate/reprompt accepts feedback and row_number, verify it calls generator with updated prompt; `test_generation_error_handling` - mock generator to raise exception, verify error is streamed as SSE event. Use httpx or TestClient streaming support for SSE testing.",
             "status": "pending",
-            "testStrategy": "Run pytest tests/test_api/test_generate.py -v. Verify SSE format is correct by parsing streamed response. Confirm mocked generator is called with expected parameters."
+            "testStrategy": "Run pytest tests/test_api/test_generate.py -v. Verify SSE format is correct by parsing streamed response. Confirm mocked generator is called with expected parameters.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -2444,7 +2566,8 @@
             ],
             "details": "Create `tests/test_api/test_content.py` with test cases: `test_get_drafts_returns_pending_approval` - mock sheets_client.get_rows_by_status() to return test rows, verify response contains correct data with camelCase keys; `test_get_calendar_groups_by_date` - verify calendar endpoint groups rows by date and includes pillar distribution stats; `test_get_suggestions_with_status_filter` - test ?status=suggested query param filtering; `test_post_approve_updates_status` - POST /api/drafts/{row}/approve updates status to APPROVED and creates Postiz drafts, verify postiz_ids in response; `test_post_edit_updates_captions` - POST /api/drafts/{row}/edit with JSON body updates captions via sheets client; `test_get_content_404_for_missing_row` - verify 404 response for non-existent row number. Mock both SheetsClient and PostizClient.",
             "status": "pending",
-            "testStrategy": "Run pytest tests/test_api/test_content.py -v. Verify all CRUD operations are tested. Confirm mocks are called with expected arguments using assert_called_with()."
+            "testStrategy": "Run pytest tests/test_api/test_content.py -v. Verify all CRUD operations are tested. Confirm mocks are called with expected arguments using assert_called_with().",
+            "parentId": "undefined"
           },
           {
             "id": 5,
@@ -2455,19 +2578,23 @@
             ],
             "details": "Create `tests/test_api/test_health.py` with test cases: `test_health_checks_all_services` - verify health endpoint checks SheetsClient, PostizClient, and any other configured services, response includes status for each service; `test_health_includes_error_log` - when a service check fails, verify error details are included in response; `test_health_returns_degraded_on_partial_failure` - mock one service as unhealthy, verify overall status is 'degraded' not 'healthy'; `test_health_returns_unhealthy_on_critical_failure` - mock critical service failure, verify 503 status code and 'unhealthy' status; `test_health_response_format` - verify response includes timestamp, version, and service breakdown. Test both healthy and unhealthy scenarios.",
             "status": "pending",
-            "testStrategy": "Run pytest tests/test_api/test_health.py -v. Verify health endpoint is fully tested for success and failure scenarios. Run coverage report to confirm 80%+ on health route."
+            "testStrategy": "Run pytest tests/test_api/test_health.py -v. Verify health endpoint is fully tested for success and failure scenarios. Run coverage report to confirm 80%+ on health route.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 5,
+        "expansionPrompt": "Break down into: 1) Create tests/test_api/ directory structure with conftest.py fixtures for TestClient and mocked dependencies 2) Write test_auth.py for login, lockout, protected endpoints 3) Write test_generate.py for SSE stream format and mocked CaptionGenerator 4) Write test_content.py for all content CRUD endpoints 5) Write test_health.py for health check aggregation"
       },
       {
-        "id": 23,
+        "id": "23",
         "title": "Write React component tests",
         "description": "Create Vitest + React Testing Library tests for key React components.",
         "details": "Set up testing:\n- `npm install -D vitest @testing-library/react @testing-library/jest-dom @testing-library/user-event msw`\n- Configure vitest.config.ts with jsdom environment\n- Create `src/test/setup.ts` with jest-dom matchers\n\nCreate `src/__tests__/`:\n\n`LoginPage.test.tsx`:\n- Test form renders\n- Test validation errors\n- Test successful login redirect\n\n`CreatePage.test.tsx`:\n- Test form fields render\n- Test platform selection\n- Test caption display after generation\n\n`DraftsPage.test.tsx`:\n- Test draft list renders\n- Test selection works\n- Test batch actions appear\n\n`components/layout/AppShell.test.tsx`:\n- Test navigation renders\n- Test responsive behavior\n\nUse MSW for mocking API responses. Target 70%+ coverage.",
         "testStrategy": "Run vitest with coverage. Verify key user flows are tested. Verify API mocking works correctly. Test error states are handled.",
         "priority": "medium",
         "dependencies": [
-          20
+          "20"
         ],
         "status": "pending",
         "subtasks": [
@@ -2478,7 +2605,8 @@
             "dependencies": [],
             "details": "Install dependencies:\n- `npm install -D vitest @testing-library/react @testing-library/jest-dom @testing-library/user-event msw`\n\nCreate `vitest.config.ts`:\n- Set environment to 'jsdom'\n- Configure test file patterns for `**/*.test.tsx`\n- Set coverage thresholds (target 70%+)\n- Add setupFiles pointing to test setup\n\nCreate `src/test/setup.ts`:\n- Import '@testing-library/jest-dom'\n- Configure MSW server with default handlers\n- Add beforeAll/afterAll/afterEach hooks for MSW\n\nCreate `src/test/mocks/handlers.ts`:\n- Define mock handlers for /api/auth/login, /api/generate, /api/drafts\n- Create SSE mock helper for streaming responses\n\nCreate `src/test/mocks/server.ts`:\n- Export configured MSW setupServer instance\n\nUpdate package.json scripts:\n- Add `\"test\": \"vitest\"`\n- Add `\"test:coverage\": \"vitest run --coverage\"`",
             "status": "pending",
-            "testStrategy": "Run `npm test` and verify vitest starts successfully with jsdom environment. Import a test file that uses @testing-library/react and jest-dom matchers to confirm setup works. Verify MSW server starts without errors in beforeAll hook."
+            "testStrategy": "Run `npm test` and verify vitest starts successfully with jsdom environment. Import a test file that uses @testing-library/react and jest-dom matchers to confirm setup works. Verify MSW server starts without errors in beforeAll hook.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -2489,7 +2617,8 @@
             ],
             "details": "Create `src/__tests__/LoginPage.test.tsx`:\n- Test 'renders login form with email and password fields'\n- Test 'shows validation error for empty email'\n- Test 'shows validation error for invalid email format'\n- Test 'shows validation error for empty password'\n- Test 'calls login API and redirects on success' (use MSW to mock successful response)\n- Test 'displays error message on login failure' (use MSW to mock 401 response)\n- Use userEvent for typing and clicking\n- Use waitFor for async assertions\n\nCreate `src/__tests__/components/layout/AppShell.test.tsx`:\n- Test 'renders navigation links'\n- Test 'highlights active navigation item'\n- Test 'renders mobile menu button on small screens' (mock matchMedia)\n- Test 'toggles mobile menu on click'\n- Test 'renders user avatar when logged in'\n\nAdd MSW handlers for:\n- POST /api/auth/login (success and failure cases)\n- GET /api/auth/me (for AppShell user state)",
             "status": "pending",
-            "testStrategy": "Run tests with `npm test LoginPage AppShell`. Verify all assertions pass. Check that MSW intercepts API calls correctly. Verify no console errors during test runs. Run with coverage to confirm these components are covered."
+            "testStrategy": "Run tests with `npm test LoginPage AppShell`. Verify all assertions pass. Check that MSW intercepts API calls correctly. Verify no console errors during test runs. Run with coverage to confirm these components are covered.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -2500,7 +2629,8 @@
             ],
             "details": "Create `src/__tests__/CreatePage.test.tsx`:\n- Test 'renders caption input textarea'\n- Test 'renders platform selection checkboxes (Instagram, Facebook, Twitter, LinkedIn)'\n- Test 'renders date picker for scheduled_date'\n- Test 'enables generate button when text entered and platform selected'\n- Test 'disables generate button when form incomplete'\n- Test 'shows loading state during generation'\n- Test 'displays generated captions for each platform after SSE completes'\n- Test 'handles SSE stream events (validating → generating → complete)'\n- Test 'displays progress indicator during SSE stream'\n- Test 'handles SSE error event gracefully'\n- Test 're-prompt button appears after generation'\n\nCreate SSE mock helper in `src/test/mocks/sse.ts`:\n- Function to emit SSE events in sequence with delays\n- Support for status events: validating, generating, complete, error\n\nAdd MSW handler for POST /api/generate:\n- Return mocked EventSource response\n- Emit proper SSE event sequence",
             "status": "pending",
-            "testStrategy": "Run CreatePage tests and verify SSE event handling works correctly. Use fake timers to control SSE event timing. Verify captions display after complete event. Test error state displays error message. Confirm platform selection state management works."
+            "testStrategy": "Run CreatePage tests and verify SSE event handling works correctly. Use fake timers to control SSE event timing. Verify captions display after complete event. Test error state displays error message. Confirm platform selection state management works.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -2511,20 +2641,24 @@
             ],
             "details": "Create `src/__tests__/DraftsPage.test.tsx`:\n- Test 'renders list of drafts from API'\n- Test 'displays empty state when no drafts'\n- Test 'shows loading skeleton while fetching'\n- Test 'renders draft card with platform, caption preview, and date'\n- Test 'selects single draft on checkbox click'\n- Test 'select all checkbox selects all drafts'\n- Test 'batch action bar appears when drafts selected'\n- Test 'batch approve sends selected drafts to Postiz'\n- Test 'batch delete removes selected drafts'\n- Test 'inline edit saves caption changes'\n- Test 'deselect all clears selection'\n- Test 'individual draft actions (edit, delete, approve)'\n\nAdd MSW handlers:\n- GET /api/drafts (return mock draft list)\n- POST /api/drafts/batch-approve\n- DELETE /api/drafts/:id\n- PATCH /api/drafts/:id\n\nCreate mock draft data factory in `src/test/mocks/data.ts`:\n- Function to generate mock Draft objects with realistic data",
             "status": "pending",
-            "testStrategy": "Run DraftsPage tests and verify list rendering from mocked API. Test selection state updates correctly on checkbox interactions. Verify batch actions call correct API endpoints. Confirm UI updates optimistically or after API response. Check coverage meets 70% threshold for DraftsPage."
+            "testStrategy": "Run DraftsPage tests and verify list rendering from mocked API. Test selection state updates correctly on checkbox interactions. Verify batch actions call correct API endpoints. Confirm UI updates optimistically or after API response. Check coverage meets 70% threshold for DraftsPage.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Set up Vitest + React Testing Library + MSW for API mocking 2) Write LoginPage.test.tsx and AppShell.test.tsx 3) Write CreatePage.test.tsx testing form fields and SSE handling 4) Write DraftsPage.test.tsx testing selection and batch actions"
       },
       {
-        "id": 24,
+        "id": "24",
         "title": "Create Playwright E2E tests",
         "description": "Write end-to-end tests for critical user flows using Playwright.",
         "details": "Set up Playwright:\n- `npm init playwright@latest` in frontend/\n- Configure playwright.config.ts with baseURL and webServer\n\nCreate `e2e/` directory:\n\n`auth.spec.ts`:\n- Test login flow\n- Test logout\n- Test session expiry\n\n`create-post.spec.ts`:\n- Test complete flow: enter caption → select platforms → generate → send to Postiz\n- Test re-prompt flow\n- Test error handling\n\n`drafts.spec.ts`:\n- Test view drafts\n- Test edit caption inline\n- Test batch approve\n\nCreate `e2e/fixtures.ts` for test data and auth helpers.\n\nRun against local dev servers (FastAPI + Vite) or Docker setup.",
         "testStrategy": "Run Playwright tests in headless mode. Verify all specs pass. Test in multiple browsers (Chromium, Firefox). Generate HTML report for review.",
         "priority": "low",
         "dependencies": [
-          22,
-          23
+          "22",
+          "23"
         ],
         "status": "pending",
         "subtasks": [
@@ -2535,7 +2669,8 @@
             "dependencies": [],
             "details": "Run `npm init playwright@latest` in frontend/ directory. Configure playwright.config.ts with:\n- baseURL: 'http://localhost:5173' (Vite dev server)\n- webServer array with two entries: FastAPI on port 8000 and Vite on port 5173\n- Set reuseExistingServer: true for dev convenience\n- Configure projects for Chromium, Firefox, WebKit\n- Set outputDir for test artifacts and reporter to HTML\n- Create e2e/ directory structure\n- Create e2e/fixtures.ts with test data (test user credentials) and auth helper functions (login, getAuthToken, etc.)\n- Add npm scripts: 'test:e2e' and 'test:e2e:ui' to package.json",
             "status": "pending",
-            "testStrategy": "Verify Playwright installs successfully. Run `npx playwright test --list` to confirm configuration loads. Test webServer config starts both servers when running tests."
+            "testStrategy": "Verify Playwright installs successfully. Run `npx playwright test --list` to confirm configuration loads. Test webServer config starts both servers when running tests.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -2546,7 +2681,8 @@
             ],
             "details": "Create e2e/auth.spec.ts with test cases:\n\n1. Login flow:\n- Navigate to /login\n- Fill in credentials from fixtures\n- Submit form\n- Assert redirect to dashboard/home\n- Assert auth token stored (check localStorage/cookie)\n\n2. Logout flow:\n- Login first using auth helper\n- Click logout button\n- Assert redirect to login page\n- Assert auth token cleared\n- Assert protected routes redirect to login\n\n3. Session expiry:\n- Login with mock short-lived token\n- Wait for expiry or manually expire\n- Attempt action requiring auth\n- Assert redirect to login with appropriate message\n\nUse page object pattern or fixtures for reusable selectors. Import auth helpers from fixtures.ts.",
             "status": "pending",
-            "testStrategy": "Run auth.spec.ts in headed mode to verify flows visually. Test all three scenarios pass. Verify proper assertions for auth state changes. Test in multiple browsers."
+            "testStrategy": "Run auth.spec.ts in headed mode to verify flows visually. Test all three scenarios pass. Verify proper assertions for auth state changes. Test in multiple browsers.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -2558,29 +2694,40 @@
             ],
             "details": "Create e2e/create-post.spec.ts:\n1. Complete creation flow:\n- Login via auth helper\n- Navigate to create post page\n- Enter caption text in input\n- Select platforms (Instagram, Facebook checkboxes)\n- Click generate button\n- Assert SSE progress indicators appear\n- Assert generated captions display\n- Click send to Postiz\n- Assert success message and draft IDs returned\n\n2. Re-prompt flow:\n- After initial generation, enter feedback\n- Click re-generate\n- Assert updated captions differ from original\n\n3. Error handling:\n- Test with invalid input, assert validation errors\n- Mock API failure, assert error message displays\n\nCreate e2e/drafts.spec.ts:\n1. View drafts: Navigate to /drafts, assert list renders\n2. Edit caption inline: Click edit, modify text, save, assert persisted\n3. Batch approve: Select multiple drafts, click approve all, assert status changes\n\nUse fixtures for test post data.",
             "status": "pending",
-            "testStrategy": "Run both spec files in headless mode. Verify all test scenarios pass. Mock external Postiz API calls to ensure deterministic results. Generate HTML report and review coverage of critical paths. Test in Chromium, Firefox."
+            "testStrategy": "Run both spec files in headless mode. Verify all test scenarios pass. Mock external Postiz API calls to ensure deterministic results. Generate HTML report and review coverage of critical paths. Test in Chromium, Firefox.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down into: 1) Initialize Playwright with config for baseURL and webServer startup 2) Write auth.spec.ts for login/logout/session flows 3) Write create-post.spec.ts and drafts.spec.ts for critical user journeys"
       },
       {
-        "id": 25,
+        "id": "25",
         "title": "Update docker-compose and deployment configuration",
         "description": "Update docker-compose.yaml to include React frontend and document the full deployment setup.",
         "details": "Update `docker-compose.yaml`:\n- Add `content-hub-frontend` service using frontend Dockerfile\n- Map port 3000:3000\n- Add depends_on for postiz services\n- Keep note that FastAPI runs on host (for Claude CLI OAuth)\n\nUpdate `README.md`:\n- Add frontend section with npm commands\n- Document FastAPI startup: `uvicorn api.main:app --port 8000`\n- Document environment variables needed\n- Add architecture diagram update\n\nCreate `Makefile` targets:\n- `make frontend-dev`: npm run dev\n- `make api-dev`: uvicorn api.main:app --reload\n- `make dev`: start both in parallel\n\nMigration notes:\n- Both Streamlit (8501) and React (3000) can run simultaneously\n- After validation, remove content-hub Streamlit service from docker-compose",
         "testStrategy": "Test docker-compose up builds and runs all services. Test frontend accessible at localhost:3000. Test API accessible at localhost:8000. Test both work together.",
         "priority": "medium",
         "dependencies": [
-          21,
-          22
+          "21",
+          "22"
         ],
         "status": "pending",
-        "subtasks": []
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down into: 1) Add content-hub-frontend service to docker-compose.yaml with depends_on 2) Update README.md with frontend section, FastAPI startup, and architecture diagram 3) Create Makefile with frontend-dev, api-dev, and combined dev targets"
       }
     ],
     "metadata": {
-      "created": "2026-03-10T18:54:29.722Z",
-      "updated": "2026-03-10T19:04:58.332Z",
-      "description": "Tasks for react-frontend context"
+      "version": "1.0.0",
+      "lastModified": "2026-03-16T18:11:27.840Z",
+      "taskCount": 25,
+      "completedCount": 10,
+      "tags": [
+        "react-frontend"
+      ]
     }
   }
 }
