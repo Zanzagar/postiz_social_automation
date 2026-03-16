@@ -46,7 +46,7 @@ async def generate(req: GenerateRequest, generator=Depends(get_caption_generator
 
             yield json.dumps(
                 {
-                    "status": "complete",
+                    "status": "done",
                     "captions": {str(k): v for k, v in captions.items()},
                 }
             )

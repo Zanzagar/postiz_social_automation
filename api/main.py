@@ -17,6 +17,9 @@ from api.routes.upload import router as upload_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load settings and configure app on startup."""
+    settings = get_settings()
+    if settings.demo_mode:
+        print("\n  ** DEMO MODE ACTIVE — using sample Gita Valley data **\n")
     yield
 
 
