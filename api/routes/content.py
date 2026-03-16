@@ -3,8 +3,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.auth import get_current_user
-from api.dependencies import get_sheets_client
+from api.dependencies import get_postiz_client, get_sheets_client
 from api.schemas import (
+    ApproveResponse,
     CalendarEntry,
     CalendarResponse,
     ContentRowResponse,
@@ -12,6 +13,7 @@ from api.schemas import (
     SuggestionResponse,
 )
 from content_engine.models import ContentStatus, Platform
+from content_engine.postiz import PostizAPIError
 
 router = APIRouter(prefix="/api", tags=["content"], dependencies=[Depends(get_current_user)])
 
@@ -101,4 +103,47 @@ async def edit_draft(row_number: int, req: EditCaptionsRequest, sheets=Depends(g
     for row in rows:
         if row.row_number == row_number:
             return _row_to_response(row)
-    raise HTTPException(status_code=404, detail=f"Row {row_number} not found.")
+    raise HTTPException(status_code=404, detail=f"Row {row_number} not found after edit.")
+
+
+@router.post("/drafts/{row_number}/approve", response_model=ApproveResponse)
+async def approve_draft(
+    row_number: int,
+    sheets=Depends(get_sheets_client),
+    postiz=Depends(get_postiz_client),
+):
+    """Approve a draft and create Postiz posts for all enabled platforms."""
+    rows = sheets.get_all_content_rows()
+    row = None
+    for r in rows:
+        if r.row_number == row_number:
+            row = r
+            break
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Row {row_number} not found.")
+
+    sheets.update_status(row_number, ContentStatus.APPROVED)
+
+    # Create Postiz drafts
+    try:
+        integrations = postiz.list_integrations()
+    except PostizAPIError as e:
+        raise HTTPException(status_code=502, detail=f"Postiz error: {e}")
+
+    platform_id_map = {i.get("identifier", "").lower(): i["id"] for i in integrations}
+
+    draft_ids = []
+    enabled = [str(p) for p, on in row.platforms.items() if on]
+    for platform in enabled:
+        caption = row.captions.get(Platform(platform))
+        integration_id = platform_id_map.get(platform)
+        if not caption or not integration_id:
+            continue
+        try:
+            result = postiz.create_draft_post(content=caption, platform_ids=[integration_id])
+            if result and "id" in result:
+                draft_ids.append(result["id"])
+        except PostizAPIError:
+            pass
+
+    return ApproveResponse(success=True, postiz_ids=draft_ids)

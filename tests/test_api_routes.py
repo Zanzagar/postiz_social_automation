@@ -180,6 +180,22 @@ class TestEditDraftEndpoint:
         mock_sheets.update_captions.assert_called_once()
 
 
+class TestApproveDraft:
+    def test_approve_draft(self, client, mock_sheets, mock_postiz):
+        headers = _auth_header(client)
+        response = client.post("/api/drafts/2/approve", headers=headers)
+        assert response.status_code == 200, response.json()
+        data = response.json()
+        assert data["success"] is True
+        assert "postiz_ids" in data
+        mock_sheets.update_status.assert_called_once()
+
+    def test_approve_nonexistent_row(self, client):
+        headers = _auth_header(client)
+        response = client.post("/api/drafts/999/approve", headers=headers)
+        assert response.status_code == 404
+
+
 # --- Generate endpoints ---
 
 
