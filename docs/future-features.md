@@ -100,17 +100,58 @@ A content creation and scheduling pipeline: staff enters raw text + media in Goo
 
 ---
 
+### 16. AI Content Iteration & Editing
+**Refine and iterate on AI-generated content through conversational prompting.**
+
+- **Click-to-edit on Calendar entries**: Click a draft post → opens editor with caption pre-filled + a prompt box ("Make it more casual", "Add a call to action", "Shorten for Twitter") → AI regenerates that platform's caption
+- **Click-to-create from Suggestions**: Click a suggestion card → pre-fills the Create page with that idea as raw text → generate from there
+- **Conversational refinement**: After AI generates captions, add a text input per caption ("Refine: make the Instagram version shorter") → re-generate just that platform while keeping the others
+
+### 17. UI Component Upgrade (Magic MCP + frontend-design)
+**Rebuild all frontend components using the proper design pipeline.**
+
+- v1 components were hand-written JSX — functional but not design-polished
+- Re-run each page through: `frontend-design` skill → Magic MCP `component_inspiration` → `component_builder` → `component_refiner`
+- Pages to upgrade: Login, Dashboard, Create, Review Drafts, Calendar, Suggestions, Health
+- Enforced by `.claude/rules/frontend-workflow.md` for all future component work
+
+### 18. Postiz Analytics Integration
+**Pull engagement metrics from Postiz into our dashboard instead of building analytics from scratch.**
+
+- Use Postiz API to fetch likes, shares, comments, reach per post
+- Display in our Analytics page — correlate with content pillars
+- Avoids duplicating Postiz's existing analytics capabilities
+- Postiz Admin link already in sidebar for direct access
+
+### 19. Postiz Media Library Integration
+**Use Postiz's built-in media management instead of building a separate media library.**
+
+- Pull media assets from Postiz via API
+- Display in our dashboard for content creation
+- Upload media through our UI, store in Postiz
+- Avoids duplicating Postiz's media storage (feature #7 replaced by this)
+
+### 20. Embedded Postiz Admin
+**Deeper integration of Postiz admin features into our dashboard.**
+
+- Currently: external link opens Postiz in new tab
+- Future: embed Postiz views via iframe or replicate key admin UIs (integration setup, account management) using Postiz API
+- Requires Postiz to allow iframe embedding (X-Frame-Options) or full API coverage
+
+---
+
 ## Priority Recommendation
 
 **Near-term (next sprint):**
 1. Website Content Syndication — directly answers temple leadership's request
 2. Auto-Publish Mode — reduces manual work
-3. Content Templates — saves time on recurring content
+3. AI Content Iteration & Editing — click-to-edit, click-to-create from suggestions, conversational refinement
+4. Content Templates — saves time on recurring content
 
 **Medium-term:**
-4. Content Analytics Dashboard
-5. Multi-User Support
-6. Content Calendar AI Planning
+5. Postiz Analytics Integration — pull engagement data instead of building from scratch
+6. Multi-User Support
+7. Content Calendar AI Planning
 
 **Longer-term:**
 7-15 based on team capacity and temple priorities

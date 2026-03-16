@@ -7,7 +7,7 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { Lightbulb, Activity } from "lucide-react";
+import { Lightbulb, Activity, ExternalLink } from "lucide-react";
 
 const mainItems = [
   { to: "/", label: "Home", icon: LayoutDashboard },
@@ -74,6 +74,16 @@ export function BottomNav() {
 
           {moreOpen && (
             <div className="absolute bottom-full right-0 mb-2 w-40 rounded-lg border border-border bg-background shadow-lg">
+              <a
+                href="https://postiz.sethpc.xyz"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setMoreOpen(false)}
+                className="flex items-center gap-2 px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-muted"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Postiz Admin
+              </a>
               {moreItems.map(({ to, label, icon: Icon }) => (
                 <NavLink
                   key={to}
