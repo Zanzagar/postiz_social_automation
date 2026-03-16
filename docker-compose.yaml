@@ -144,9 +144,22 @@ services:
     networks:
       - postiz-network
 
-  # NOTE: content-engine runs on the HOST (not in Docker) because it requires
-  # Claude CLI with OAuth authentication ($0/call via Max subscription).
-  # Start it with: python -m content_engine.scheduler
+  content-frontend:
+    build: ./frontend
+    container_name: gita-valley-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - postiz-network
+
+  # NOTE: content-engine and FastAPI backend run on the HOST (not in Docker)
+  # because they require Claude CLI with OAuth authentication ($0/call via Max).
+  #
+  # Start FastAPI: uvicorn api.main:app --host 0.0.0.0 --port 8000
+  # Start content-engine: python -m content_engine.scheduler
   # Or run pipelines individually:
   #   python -m content_engine.scripts.run_enhance
   #   python -m content_engine.scripts.run_suggest
