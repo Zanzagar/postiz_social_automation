@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { CaptionCards } from "@/components/create/CaptionCards";
-import { api, fetchGenerateStream, type GenerateRequest } from "@/lib/api";
+import { api, request, type GenerateRequest } from "@/lib/api";
 import { Upload, Loader2, X } from "lucide-react";
 import { format } from "date-fns";
 
@@ -75,12 +75,12 @@ export function CreatePage() {
     };
 
     try {
-      for await (const event of fetchGenerateStream(data)) {
-        if (event.message) setStatusMessage(event.message);
-        if (event.status === "done" && event.captions) {
-          setCaptions(event.captions);
-        }
-      }
+      setStatusMessage("Generating captions...");
+      const result = await request<{ captions: Record<string, string> }>(
+        "/api/generate-sync",
+        { method: "POST", body: JSON.stringify(data) },
+      );
+      setCaptions(result.captions);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generation failed");
     } finally {

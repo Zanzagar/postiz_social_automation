@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends
 
 from api.auth import get_current_user
-from api.dependencies import get_postiz_client, get_sheets_client
+from api.dependencies import get_postiz_client, get_settings, get_sheets_client
 from api.schemas import HealthResponse, ServiceHealth
 from content_engine.health import (
     check_claude_health,
@@ -33,23 +33,35 @@ async def system_health(
         return _health_cache["data"]
 
     checked_at = datetime.now(UTC)
+    settings = get_settings()
     services = []
 
-    for name, check_fn, args in [
-        ("sheets", check_sheets_health, (sheets,)),
-        ("postiz", check_postiz_health, (postiz,)),
-        ("claude", check_claude_health, ()),
-        ("oauth", check_oauth_health, ()),
-    ]:
-        ok, msg = check_fn(*args)
-        services.append(
-            ServiceHealth(
-                name=name,
-                status="ok" if ok else "error",
-                message=msg,
-                last_checked=checked_at,
+    if settings.demo_mode:
+        for name, msg in [
+            ("sheets", "Demo mode — Google Sheets connected"),
+            ("postiz", "Demo mode — 2 integrations (IG, FB)"),
+            ("claude", "Demo mode — Claude AI ready"),
+            ("oauth", "Demo mode — OAuth token valid"),
+        ]:
+            services.append(
+                ServiceHealth(name=name, status="ok", message=msg, last_checked=checked_at)
             )
-        )
+    else:
+        for name, check_fn, args in [
+            ("sheets", check_sheets_health, (sheets,)),
+            ("postiz", check_postiz_health, (postiz,)),
+            ("claude", check_claude_health, ()),
+            ("oauth", check_oauth_health, ()),
+        ]:
+            ok, msg = check_fn(*args)
+            services.append(
+                ServiceHealth(
+                    name=name,
+                    status="ok" if ok else "error",
+                    message=msg,
+                    last_checked=checked_at,
+                )
+            )
 
     # Fetch recent errors
     errors = []

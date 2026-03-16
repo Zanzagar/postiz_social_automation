@@ -19,11 +19,15 @@ def _build_content_row(req: GenerateRequest | RepromptRequest) -> ContentRow:
     from datetime import datetime
 
     platforms = {Platform(p): True for p in req.platforms}
+    media = req.media_url
+    if media and not media.startswith(("http://", "https://")):
+        media = None
+
     return ContentRow(
         row_number=0,
         date=datetime.fromisoformat(req.scheduled_date),
         raw_text=req.raw_text,
-        media_url=req.media_url,
+        media_url=media,
         platforms=platforms,
         status=ContentStatus.DRAFT,
         captions={Platform(p): None for p in req.platforms},
@@ -34,13 +38,19 @@ def _build_content_row(req: GenerateRequest | RepromptRequest) -> ContentRow:
 async def generate(req: GenerateRequest, generator=Depends(get_caption_generator)):
     """Stream caption generation progress via SSE."""
 
+    is_demo = hasattr(generator, "__class__") and "Demo" in generator.__class__.__name__
+
     async def event_stream():
         try:
             yield json.dumps({"status": "validating"})
+            if is_demo:
+                await asyncio.sleep(0.5)
 
             row = _build_content_row(req)
 
             yield json.dumps({"status": "generating"})
+            if is_demo:
+                await asyncio.sleep(1.5)
 
             captions = await asyncio.to_thread(generator.generate_captions, row)
 
@@ -54,6 +64,17 @@ async def generate(req: GenerateRequest, generator=Depends(get_caption_generator
             yield json.dumps({"status": "error", "message": str(e)})
 
     return EventSourceResponse(event_stream())
+
+
+@router.post("/generate-sync")
+async def generate_sync(req: GenerateRequest, generator=Depends(get_caption_generator)):
+    """Non-streaming caption generation (works through proxies)."""
+    row = _build_content_row(req)
+    try:
+        captions = await asyncio.to_thread(generator.generate_captions, row)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"captions": {str(k): v for k, v in captions.items()}}
 
 
 @router.post("/reprompt")
