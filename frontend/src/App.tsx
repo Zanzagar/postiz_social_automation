@@ -1,13 +1,15 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { LoginPage } from "@/pages/LoginPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AppShell } from "@/components/layout/AppShell";
 
-function DashboardPlaceholder() {
+// Placeholder pages — will be replaced by real implementations (Tasks 14-19)
+function Placeholder({ title }: { title: string }) {
   return (
-    <div className="flex min-h-svh items-center justify-center bg-cream-50">
+    <div className="flex h-full items-center justify-center p-8">
       <div className="text-center">
-        <h1 className="text-4xl font-bold text-sage-700">Gita Valley</h1>
-        <p className="mt-2 text-terracotta-500">Content Management System</p>
+        <h1 className="text-2xl font-bold text-sage-700">{title}</h1>
+        <p className="mt-2 text-muted-foreground">Coming soon</p>
       </div>
     </div>
   );
@@ -18,13 +20,19 @@ function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route
-        path="/"
         element={
           <ProtectedRoute>
-            <DashboardPlaceholder />
+            <AppShell />
           </ProtectedRoute>
         }
-      />
+      >
+        <Route index element={<Placeholder title="Dashboard" />} />
+        <Route path="create" element={<Placeholder title="Create & Generate" />} />
+        <Route path="drafts" element={<Placeholder title="Review Drafts" />} />
+        <Route path="calendar" element={<Placeholder title="Content Calendar" />} />
+        <Route path="suggestions" element={<Placeholder title="Suggestions" />} />
+        <Route path="health" element={<Placeholder title="System Health" />} />
+      </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
