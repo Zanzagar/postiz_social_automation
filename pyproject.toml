@@ -17,6 +17,12 @@ dependencies = [
     "schedule>=1.2.0",
     "streamlit>=1.30.0",
     "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "python-jose[cryptography]>=3.3.0",
+    "python-multipart>=0.0.6",
+    "sse-starlette>=1.8.0",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +31,7 @@ dev = [
     "pytest-cov>=4.1.0",
     "ruff>=0.1.0",
     "mypy>=1.7.0",
+    "httpx>=0.26.0",
 ]
 
 [project.scripts]
@@ -33,7 +40,8 @@ suggest = "content_engine.scripts.run_suggest:main"
 learn = "content_engine.scripts.run_learn:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["content_engine*", "api*"]
 
 [tool.ruff]
 target-version = "py311"
