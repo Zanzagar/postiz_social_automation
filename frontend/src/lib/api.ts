@@ -30,7 +30,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(
+export async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
@@ -293,11 +293,12 @@ export async function* fetchGenerateStream(
 
   while (true) {
     const { done, value } = await reader.read();
-    if (done) break;
+    if (!done) {
+      buffer += decoder.decode(value, { stream: true });
+    }
 
-    buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
+    buffer = done ? "" : (lines.pop() ?? "");
 
     for (const line of lines) {
       const trimmed = line.trim();
@@ -310,5 +311,7 @@ export async function* fetchGenerateStream(
         }
       }
     }
+
+    if (done) break;
   }
 }
