@@ -216,7 +216,7 @@ class TestGenerateEndpoint:
         )
         assert response.status_code == 200
         # SSE responses contain data: lines
-        assert "complete" in response.text
+        assert "done" in response.text
 
 
 class TestRepromptEndpoint:

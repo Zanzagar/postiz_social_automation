@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     spreadsheet_id: str
     google_sheets_credentials: str = "credentials.json"
 
+    # Demo
+    demo_mode: bool = False
+
     # CORS
     cors_origins: list[str] = [
         "http://localhost:3000",
