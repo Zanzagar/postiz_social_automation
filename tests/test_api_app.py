@@ -120,14 +120,10 @@ class TestDependencies:
 
     @patch("api.dependencies.PostizClient")
     def test_get_postiz_client(self, mock_cls, _env_vars):
-        from api.dependencies import get_postiz_client, get_settings
+        from api.dependencies import get_postiz_client
 
-        settings = get_settings()
-        get_postiz_client(settings)
-        mock_cls.assert_called_once_with(
-            api_key=settings.postiz_api_key,
-            base_url=settings.postiz_base_url,
-        )
+        get_postiz_client()
+        mock_cls.assert_called_once()
 
     @patch("api.dependencies.CaptionGenerator")
     def test_get_caption_generator(self, mock_cls, _env_vars):

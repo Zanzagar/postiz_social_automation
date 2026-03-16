@@ -51,15 +51,13 @@ def verify_token(token: str, settings: Settings) -> dict:
     return jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
 
 
-def get_current_user(
-    request: Request,
-    settings: Settings = Depends(get_settings),
-) -> dict:
+def get_current_user(request: Request) -> dict:
     """FastAPI dependency that extracts and validates the JWT from the Authorization header."""
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid authorization header.")
     token = auth_header.split(" ", 1)[1]
+    settings = get_settings()
     try:
         payload = verify_token(token, settings)
     except JWTError:

@@ -7,6 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.auth import router as auth_router
 from api.dependencies import get_settings
+from api.routes.content import router as content_router
+from api.routes.generate import router as generate_router
+from api.routes.health import router as health_router
+from api.routes.postiz import router as postiz_router
+from api.routes.upload import router as upload_router
 
 
 @asynccontextmanager
@@ -38,6 +43,11 @@ def _configure_cors() -> None:
 _configure_cors()
 
 app.include_router(auth_router)
+app.include_router(content_router)
+app.include_router(generate_router)
+app.include_router(postiz_router)
+app.include_router(health_router)
+app.include_router(upload_router)
 
 
 @app.get("/")
