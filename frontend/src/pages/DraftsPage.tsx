@@ -137,7 +137,7 @@ export function DraftsPage() {
 
       {/* Batch actions bar */}
       {selected.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background p-3 shadow-lg md:left-60">
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-lg md:bottom-0 md:left-60 md:pb-3">
           <div className="mx-auto flex max-w-2xl items-center justify-between">
             <span className="text-sm font-medium">
               {selected.size} selected

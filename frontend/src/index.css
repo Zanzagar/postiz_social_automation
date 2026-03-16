@@ -161,8 +161,26 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-tap-highlight-color: transparent;
   }
   html {
     @apply font-sans;
+  }
+  /* Prevent iOS zoom on input focus */
+  input[type="text"],
+  input[type="password"],
+  input[type="date"],
+  textarea,
+  select {
+    font-size: 16px;
+  }
+  @media (min-width: 768px) {
+    input[type="text"],
+    input[type="password"],
+    input[type="date"],
+    textarea,
+    select {
+      font-size: 14px;
+    }
   }
 }
