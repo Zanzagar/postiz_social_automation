@@ -35,8 +35,8 @@ Content Engine (host)
 Claude CLI (OAuth)  +  Google Sheets  +  Postiz API (sethpc.xyz)
 ```
 
-- 5 React pages: Login, Dashboard, Create, Drafts/Calendar, Suggestions, Health
-- 10 FastAPI endpoints
+- 7 React pages: Login, Dashboard, Create, Drafts, Calendar, Suggestions, Health
+- 13 FastAPI endpoints
 - 3 pipeline modes: Enhance, Suggest, Learn
 - 111 tests (49 backend, 62 frontend Playwright E2E)
 - Docker Compose: Postiz, PostgreSQL, Redis, Temporal, Streamlit, React frontend
@@ -198,8 +198,8 @@ CREATE TABLE content_rows (
     source TEXT,              -- "manual", "template", "suggestion", "import"
     template_id INTEGER REFERENCES templates(id),
     created_by INTEGER REFERENCES users(id),
-    media_catalog_ids JSON,   -- [media_id_1, media_id_2, ...]
-    audience_segment_id INTEGER, -- Phase 4
+    media_catalog_ids JSON,   -- nullable, unused until Phase 3 (no FK constraint)
+    audience_segment_id INTEGER, -- nullable, unused until Phase 4 (no FK constraint)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -226,7 +226,7 @@ CREATE TABLE templates (
     raw_text_template TEXT,      -- "Join us for {{event_name}} on {{date}}"
     variables JSON,              -- [{"name": "event_name", "type": "text"}, ...]
     schedule_pattern TEXT,       -- "weekly:sunday", "monthly:1", null for manual
-    default_segment_id INTEGER,  -- Phase 4
+    default_segment_id INTEGER,  -- nullable, unused until Phase 4 (no FK constraint)
     created_by INTEGER REFERENCES users(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -267,6 +267,8 @@ Three intelligence sources crawled into a unified knowledge base:
 2. **Extract and classify** — AI categorizes each piece by content pillar, extracts facts/quotes/programs/events/links
 3. **Store in SQLite** — `web_pages` (raw content) and `web_knowledge` (extracted facts)
 4. **Periodic re-crawl** — weekly for websites, daily for social media (new posts)
+
+**Error handling:** Each source is crawled independently. If one source fails (e.g., iskcongitanagari.org is down), the others still complete. Partial failures within a source (e.g., Meta Graph API rate-limits mid-import) save what was fetched and resume from the last checkpoint on the next run. AI classification failures for individual pages are logged and the page is stored without classification for manual review. The `/api/knowledge/status` endpoint reports per-source success/failure/partial status.
 
 **How the AI uses the knowledge base:**
 - **Brand voice calibration:** "Based on gitavalley.com's tone and past Instagram captions, this temple describes itself as..."
@@ -446,6 +448,8 @@ Source → local media/ directory → upload to Postiz (POST /upload)
        → AI classify tags/pillar (Claude CLI)
        → insert into media_catalog table
 ```
+
+**Error handling:** Media is always cataloged locally first, regardless of Postiz upload status. If Postiz upload fails (network error, rate limit), the media is stored locally with `postiz_media_id = null` and flagged for retry. A background job retries failed uploads periodically. Media with failed uploads can still be used in content creation — the Postiz upload happens before the post is sent to Postiz for scheduling, not at import time.
 
 **Dashboard media browser:**
 - Grid view with thumbnails
@@ -677,15 +681,14 @@ Optional MCP path for Claude CLI conversational scheduling. HTTP remains primary
 
 Deeper Postiz admin integration in the dashboard.
 
-**Approach (phased):**
-1. Test if sethpc.xyz allows iframe embedding (`X-Frame-Options` header)
-2. If allowed: embed in iframe on "Postiz Admin" dashboard page
-3. If blocked: build lightweight replicas using Postiz API:
-   - Connected accounts list (`GET /integrations`)
-   - Account connection flow (`GET /social/:integration`)
-   - Post queue view (`GET /posts`)
+**Default approach: API replicas** (assume iframe is blocked). Build lightweight admin screens using Postiz API:
+- Connected accounts list (`GET /integrations`) — show platform, name, status
+- Account connection flow (`GET /social/:integration`) — link to connect new platform
+- Post queue view (`GET /posts`) — upcoming scheduled posts
 
-**API endpoints (if building replicas):**
+If iframe embedding is later confirmed to work (test `X-Frame-Options` on sethpc.xyz), an iframe-based approach can replace the replicas — but the API replicas are the planning assumption for PRD and task decomposition.
+
+**API endpoints:**
 - `GET /api/postiz/integrations` — proxy to Postiz integrations list
 - `GET /api/postiz/connect/:platform` — get OAuth URL for connecting
 - `GET /api/postiz/queue` — upcoming scheduled posts
@@ -861,19 +864,43 @@ All tables across all phases, in dependency order:
 
 **Total: 17 tables across 5 phases.**
 
+### Migration Strategy
+
+Forward-reference columns (`media_catalog_ids`, `audience_segment_id`, `default_segment_id`) are added as nullable columns without FOREIGN KEY constraints in Phase 1. They remain unused until their target tables are created in later phases. When the target tables arrive, an Alembic migration adds the FK constraints. This avoids schema changes to existing tables in later phases while keeping the schema extensible.
+
+Each phase gets its own Alembic migration script. Deployment: `alembic upgrade head`. Rollback: `alembic downgrade -1` per phase.
+
+### Scheduling & Background Jobs
+
+Features requiring periodic execution (analytics daily pull, website re-crawl, email digest, Google Drive scan) use the existing `scheduler.py` module in the content engine, extended with new job definitions. Jobs are registered with configurable intervals and run as part of the content engine process on the host. No new infrastructure (e.g., Celery, cron) is introduced.
+
+### ISKCON Calendar Maintenance
+
+The `data/iskcon_calendar.json` file contains ISKCON festival dates based on the lunar calendar. Dates change annually. The file is manually updated once per year when ISKCON publishes the Vaishnava calendar (typically available months in advance). A dashboard settings section shows the current calendar year and a reminder when an update is needed.
+
+### SMTP Configuration
+
+Email digest (Phase 5) uses Python `smtplib`. SMTP settings are stored as environment variables: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`. These are configured in `.env` alongside existing service credentials.
+
 ---
 
 ## API Endpoints (Complete)
 
-### Existing (kept)
+### Existing (kept, actual endpoint paths)
+- `POST /api/auth/login` — JWT authentication
+- `GET /api/auth/me` — current user info
 - `POST /api/generate` — SSE streaming caption generation
 - `POST /api/generate-sync` — non-streaming generation
 - `POST /api/reprompt` — regenerate captions
 - `GET /api/drafts` — pending approval content
+- `POST /api/drafts/{row_number}/approve` — approve a draft
+- `POST /api/drafts/{row_number}/edit` — edit a draft
 - `GET /api/calendar` — calendar content
 - `GET /api/suggestions` — AI content ideas
-- `POST /api/approve` — approve a draft
-- `POST /api/publish` — send to Postiz
+- `POST /api/send-to-postiz` — send to Postiz scheduler
+- `POST /api/upload` — file upload
+- `GET /api/content/{row_number}` — get specific content row
+- `GET /api/integrations` — connected Postiz integrations
 - `GET /api/health` — service health
 
 ### Phase 1 (new)
@@ -946,6 +973,8 @@ All tables across all phases, in dependency order:
 | UI upgrade | Distributed across phases | Pages rebuilt when modified for new features; avoids double-touching |
 | Calendar views | Monthly + weekly + list | Monthly for big picture, weekly for detail, list for bulk actions |
 | Feature phasing | Value-first (Approach B) | Phase 1 delivers immediate workflow improvement; infra introduced when needed |
+| JSON columns in SQLite | Intentional denormalization | `platforms`, `captions`, `postiz_ids`, `media_catalog_ids` are stored as JSON for simplicity; not queried with SQL JSON operators in performance-sensitive paths |
+| Embedded Postiz Admin | API replicas (default) | Assume iframe blocked; build API proxy screens. Simpler than testing X-Frame-Options and maintaining two code paths |
 
 ---
 
