@@ -862,7 +862,7 @@ All tables across all phases, in dependency order:
 - `notification_prefs` — per-user notification settings
 - `email_digest_log` — digest send history
 
-**Total: 17 tables across 5 phases.**
+**Total: 19 tables across 5 phases.**
 
 ### Migration Strategy
 
