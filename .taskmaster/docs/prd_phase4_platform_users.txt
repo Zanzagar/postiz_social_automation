@@ -1,0 +1,118 @@
+# PRD: Phase 4 — Platform & Users
+
+## Overview
+Add lightweight multi-user support with audit trails, audience segmentation for targeted messaging, optional Postiz MCP integration for conversational scheduling, and embedded Postiz admin features in the dashboard.
+
+## Background
+Phases 1-3 established SQLite content management, AI iteration, templates, auto-publish, web intelligence, analytics, media catalog, and calendar planning. The system currently uses a single shared password with no user identity. Content is generated with a universal voice — no audience targeting. Postiz admin requires opening a separate tab.
+
+## Prerequisites
+- Phase 1-3 complete: SQLite database with all Phase 1-3 tables, ContentEditor, analytics, media catalog
+- Postiz API access configured
+- Postiz MCP server available at sethpc.xyz/mcp (for feature 3)
+
+## Features
+
+### 1. Multi-User — Named Accounts
+Replace single shared password with individual user accounts.
+
+**Requirements:**
+- `users` table already exists from Phase 1 (id, username, display_name, password_hash, created_at)
+- Upgrade Login page: username + password form (rebuild through Magic MCP pipeline — this was deferred to Phase 5 originally but makes sense here since we're changing auth)
+- Update JWT auth to include user_id in token claims
+- Update `POST /api/auth/login` to authenticate against users table
+- Seed initial admin user during migration (username from env var or interactive setup)
+- `POST /api/users` endpoint: create new user (any authenticated user can create — no admin role)
+- `GET /api/users` endpoint: list all users
+- `PUT /api/users/{id}` endpoint: update own profile (display_name, password)
+- All content_rows, content_iterations, templates, calendar_plans get created_by populated from JWT user_id
+
+### 2. Multi-User — Audit Trail & Optional Approval
+Track user actions and optionally require approval from a different user.
+
+**Requirements:**
+- `audit_log` table: id, user_id, action (create/update/delete/approve/publish/iterate), entity_type (content_row/template/media/settings), entity_id, details (JSON), created_at
+- Log all significant actions automatically via middleware or service layer
+- `GET /api/audit?from=&to=&user=&action=&entity_type=` endpoint: query audit log with filters
+- Settings toggle: "Require approval from another user before publishing" (stored in a settings table or publish_config)
+- When enabled: creator cannot approve their own content. Any other authenticated user can approve.
+- When disabled (default): same behavior as today, just with user identity attached
+- Drafts page shows "Created by: [name]" and "Approved by: [name]" badges
+
+### 3. Audience Segmentation
+Different messaging for different audience segments, integrated into AI generation prompts.
+
+**Requirements:**
+- `audience_segments` table: id, name, description, tone_instructions, vocabulary (JSON array), avoid_terms (JSON array), platform_affinity (JSON object), created_at, updated_at
+- Seed three built-in segments:
+  - Devotee community: warm/familial tone, Sanskrit terms welcome (prasadam, darshan, Srila Prabhupada), platform affinity Instagram/Facebook
+  - Local community: friendly/accessible/farm-focused, farm visit/CSA share/family program vocabulary, platform affinity Facebook/Instagram
+  - General public: professional/wellness-oriented, sustainable living/animal welfare/mindfulness vocabulary, platform affinity LinkedIn/TikTok
+- CRUD endpoints: GET/POST/PUT/DELETE `/api/segments`
+- Each content_row has optional audience_segment_id (nullable column exists from Phase 1)
+- ContentEditor and Create page: audience segment dropdown
+- Templates: default_segment_id field (nullable column exists from Phase 1)
+- When generating/iterating captions: if segment is set, inject segment's tone_instructions, vocabulary, and avoid_terms into Claude prompt alongside brand rules and platform instructions
+- If no segment set: default behavior based on platform's natural audience (e.g., LinkedIn → general public tone)
+- Calendar AI planning (Phase 3): consider audience mix balance when suggesting content ("this week is heavy on devotee content, suggest a general public post")
+- Settings page: manage audience segments (create, edit, delete)
+
+### 4. Postiz MCP Integration (Optional)
+Add optional MCP path for Claude CLI conversational scheduling.
+
+**Requirements:**
+- Feature flag: `POSTIZ_MCP_ENABLED=true` environment variable (default: false)
+- When enabled: configure Postiz MCP server (sethpc.xyz/mcp) as a tool in Claude CLI's MCP settings
+- Update content generation prompt to optionally include scheduling instructions: "After generating captions, schedule this post for [date] at [time] on [platforms] via the Postiz MCP tool"
+- HTTP client (postiz.py) remains primary for all programmatic operations (pipeline, auto-publish, analytics)
+- MCP is used only during Claude CLI content generation where conversational scheduling is natural
+- No new API endpoints — this is a configuration + prompt change
+- Document setup in README: how to enable, what it does, when to use it
+
+### 5. Embedded Postiz Admin — Connected Accounts
+Show Postiz-connected social accounts in our dashboard.
+
+**Requirements:**
+- `GET /api/postiz/integrations` endpoint: proxy to Postiz `GET /integrations`, return list of connected accounts with id, name, platform, picture, profile URL
+- Dashboard page or section: "Connected Accounts" showing each platform with icon, name, status (connected/disconnected)
+- Refresh button to re-fetch from Postiz
+
+### 6. Embedded Postiz Admin — Connect New Platform
+Initiate platform connection from our dashboard.
+
+**Requirements:**
+- `GET /api/postiz/connect/:platform` endpoint: proxy to Postiz `GET /social/:integration`, return OAuth URL
+- Dashboard integration: "Connect Platform" button per platform type → opens Postiz OAuth flow in new tab
+- After connection, refresh connected accounts list
+- Supported platforms: Facebook, Instagram, TikTok, LinkedIn, Threads (matching Postiz capabilities)
+
+### 7. Embedded Postiz Admin — Post Queue
+Show upcoming scheduled posts from Postiz in our dashboard.
+
+**Requirements:**
+- `GET /api/postiz/queue` endpoint: proxy to Postiz `GET /posts` filtered by scheduled/pending status, return upcoming posts with date, platform, content preview, status
+- Dashboard section: "Upcoming Posts" showing scheduled posts timeline
+- Link each post back to our content_row if postiz_id matches
+- Show posts that were scheduled outside our system (directly in Postiz) as "External" entries
+
+## SQLite Schema (Phase 4 additions)
+- `audience_segments`: id, name, description, tone_instructions, vocabulary (JSON), avoid_terms (JSON), platform_affinity (JSON), created_at, updated_at
+- `audit_log`: id, user_id, action, entity_type, entity_id, details (JSON), created_at
+
+(Add FK constraint from content_rows.audience_segment_id → audience_segments.id via Alembic migration)
+(Add FK constraint from templates.default_segment_id → audience_segments.id via Alembic migration)
+
+## Success Criteria
+- Multiple named users can log in with individual credentials
+- All actions are tracked in audit log with user attribution
+- Optional approval workflow prevents self-approval when enabled
+- Audience segments change AI generation tone and vocabulary
+- Postiz connected accounts, connection flow, and post queue visible in dashboard
+- Postiz MCP integration works when enabled (opt-in)
+- Existing Phase 1-3 features continue to work
+
+## Out of Scope
+- Full RBAC / permission tiers (not needed for small team)
+- Dark mode (Phase 5)
+- Notifications / email digest (Phase 5)
+- PWA (Phase 5)

@@ -1,0 +1,145 @@
+# PRD: Phase 3 — Media & Planning
+
+## Overview
+Add a media intelligence system with catalog, tagging, and performance tracking, plus AI-powered calendar planning and platform-specific media adaptation. This phase enables staff to manage visual assets, plan content calendars with AI assistance, and automatically adapt images for each platform's dimensions.
+
+## Background
+Phase 1 established SQLite and content iteration. Phase 2 added web intelligence, analytics, and hashtag tracking. Media is currently handled as simple URL strings — no catalog, no tagging, no performance correlation. Calendar planning is manual. This phase adds visual asset management and AI-assisted content planning.
+
+## Prerequisites
+- Phase 1 complete: SQLite database, ContentEditor, templates
+- Phase 2 complete: analytics pipeline, knowledge base, social history (media URLs from social imports available)
+- Google Drive API access via existing service account
+- Postiz upload API available (POST /upload, POST /upload-from-url)
+
+## Features
+
+### 1. Media Catalog — Core Schema & Upload
+Central media catalog with metadata, stored locally with Postiz as storage backend.
+
+**Requirements:**
+- `media_catalog` table: id, filename, original_url, local_path, postiz_media_id, thumbnail_path, mime_type, width, height, file_size, tags (JSON), pillar, source (upload/drive/social_import), usage_count, avg_engagement, created_by, created_at
+- `media_tags` table: id, media_id, tag, confidence, source (ai/manual). UNIQUE(media_id, tag)
+- `media_performance` table: id, media_id, content_row_id, platform, engagement_score, fetched_at
+- `POST /api/media/upload` endpoint: accept file upload, store locally in media/ directory, generate thumbnail via Pillow, upload to Postiz via POST /upload, AI-classify tags and pillar via Claude CLI, insert into media_catalog
+- `POST /api/media/import-url` endpoint: download from URL, then same flow as upload
+- Thumbnail generation: 200x200px, maintain aspect ratio, stored alongside original
+- AI auto-tagging categories: farm, cows, kitchen, outdoor, people, event, food, landscape, building, deity, garden, seasonal
+- Error handling: media is cataloged locally even if Postiz upload fails. Failed uploads flagged for background retry.
+
+### 2. Media Catalog — Browse & Search
+Dashboard media browser for exploring and managing the catalog.
+
+**Requirements:**
+- `GET /api/media?tag=&pillar=&sort=&page=` endpoint: paginated browse with filters (tag, pillar, source, date range) and sort (date, engagement, usage_count)
+- `GET /api/media/{id}` endpoint: full metadata, usage history (which content_rows used this media), performance data
+- `PUT /api/media/{id}/tags` endpoint: add or remove tags (manual tagging)
+- Dashboard media browser page: grid view with thumbnails, filter sidebar, sort controls
+- Click media: full-size lightbox view with metadata panel showing tags, pillar, usage history, performance
+- Support for searching by tag or pillar text
+
+### 3. Media Catalog — Google Drive Integration
+Browse and import media from a linked Google Drive folder.
+
+**Requirements:**
+- Settings: configure Google Drive folder ID
+- `POST /api/media/import-drive` endpoint: list files in configured Drive folder, import selected files into catalog
+- Dashboard integration: "Import from Drive" button in media browser opens a Drive folder browser
+- Use Google Drive API (same service account as Sheets) to list files, download selected
+- Imported files go through normal catalog flow (local storage, thumbnail, AI tagging, Postiz upload)
+- Periodic scan option: configurable interval to check for new files in Drive folder
+
+### 4. Media Catalog — Social History Import
+Import media from Phase 2 social history into the catalog.
+
+**Requirements:**
+- Process media_urls from `social_history` table entries
+- Download images/videos from Facebook and Instagram via their CDN URLs
+- Catalog each piece with source="social_import", linked to the social_history entry
+- Carry over engagement data from the social_history entry as initial performance data
+- Run as a one-time migration after Phase 2 social history is populated
+- Background job: can run incrementally as new social posts are imported
+
+### 5. AI Media Suggestions
+AI recommends media from catalog for content rows.
+
+**Requirements:**
+- `GET /api/media/suggest?content_row_id=` endpoint: given a content row (with pillar, raw_text, platforms), search media catalog for best matches
+- Matching criteria: pillar match, tag relevance to content text, past engagement performance, recency (prefer fresh media, penalize recently-used)
+- Return top 5 suggestions with relevance scores
+- ContentEditor integration: "Suggested Media" panel shows recommended images, click to attach
+- Attach media to content row: updates content_rows.media_catalog_ids
+
+### 6. Content Calendar AI Planning
+AI generates content calendars based on multiple signals.
+
+**Requirements:**
+- `POST /api/calendar/plan` endpoint: accepts date_range (start, end), platforms, and optional constraints
+- AI planner considers: pillar distribution targets (Cow Life 40%, Farm Ops 25%, Community 15%, Kitchen 10%, Spiritual 5%, CTA 5%), upcoming ISKCON festivals, engagement patterns from analytics, posting history gaps, template schedules, web knowledge (new programs/events), seasonal context, available high-performing media
+- Returns a proposed calendar: array of slots, each with date, time, pillar, topic idea, recommended media_id, target platforms
+- `GET /api/calendar/plan/{id}` endpoint: view a generated plan
+- `POST /api/calendar/plan/{id}/approve` endpoint: approve all or selected slots → creates content_rows in DRAFT status with source="plan"
+- Calendar page integration: "Plan Week" and "Plan Month" buttons, plan review in calendar view, click any slot to edit via ContentEditor
+- `calendar_plans` table: id, date_range_start, date_range_end, platforms (JSON), plan_data (JSON), status (draft/approved/partial), created_by, created_at
+
+### 7. ISKCON Festival Calendar
+Festival data source for calendar AI planning.
+
+**Requirements:**
+- `data/iskcon_calendar.json` file: array of festivals with name, date, significance, suggested_content_angles (array of strings), content_pillar
+- Key festivals: Janmashtami, Ratha Yatra, Gaura Purnima, Rama Navami, Govardhan Puja, Diwali, Nrsimha Chaturdashi, Radhastami, Appearance/Disappearance days of major acharyas
+- `GET /api/festivals?from=&to=` endpoint: return festivals within date range
+- AI planner uses festival data: "Janmashtami is in 3 weeks — schedule a 5-post series leading up to it"
+- Dashboard calendar views show festival markers on relevant dates
+- File manually updated annually when ISKCON publishes the Vaishnava calendar
+
+### 8. Calendar Views Enhancement
+Monthly and weekly calendar views in addition to existing list view.
+
+**Requirements:**
+- Monthly view: CSS grid (7 columns × 5-6 rows), day cells show content dots or small thumbnails color-coded by pillar. Click a day to expand and show all content for that day. Empty days visually distinct (lighter background). Festival markers shown as icons/badges.
+- Weekly view: day columns with time slots, content cards per day showing platform icons, pillar badge, thumbnail, status (draft/scheduled/posted). "Plan Week" button in this view.
+- List view: existing view, kept for quick scanning and bulk actions
+- Tab toggle at top of Calendar page to switch between Monthly/Weekly/List
+- All three views support click-to-edit via ContentEditor modal
+- Rebuild Calendar page through Magic MCP + frontend-design pipeline
+
+### 9. Media Adaptation
+Resize and crop media for platform-specific dimensions with optional text overlay.
+
+**Requirements:**
+- `POST /api/media/{id}/adapt` endpoint: generate platform-specific versions for specified platforms
+- `GET /api/media/{id}/adapted?platform=&format=` endpoint: retrieve adapted version
+- `media_adapted` table: id, media_id, platform, format (post/story/carousel), adapted_path, width, height, has_text_overlay, created_at
+- Platform dimensions: Instagram post 1080x1080 or 1080x1350, story 1080x1920; Facebook post 1200x630, story 1080x1920; TikTok story 1080x1920; LinkedIn post 1200x627
+- Smart crop: detect subject area using Pillow (center-of-mass or face detection), crop preserving subject
+- Optional text overlay: caption text or CTA at bottom with semi-transparent background
+- Auto-adapt when media is attached to a content row (generate versions for all target platforms)
+- Implementation: Pillow (PIL) only — no ffmpeg, no video processing
+
+### 10. Suggestions Page Rebuild (Magic MCP)
+Rebuild Suggestions page with media suggestions and calendar planning entry point.
+
+**Requirements:**
+- Rebuild through Magic MCP + frontend-design pipeline
+- Suggestion cards show: idea text, pillar badge, rationale, suggested media thumbnail (from AI media suggestions)
+- Click suggestion → opens ContentEditor in `create` mode (in-place, no navigation)
+- "Plan Content Calendar" button linking to calendar planning flow
+- Knowledge-based suggestions: ideas reference web knowledge entries (programs, events from crawled sites)
+
+## Success Criteria
+- Staff can browse, search, and manage a media catalog with AI-generated tags
+- Google Drive integration allows importing media from shared folder
+- Social history media is imported and cataloged with engagement data
+- AI suggests relevant media during content creation
+- Calendar planning generates a full week/month of content ideas with proper pillar distribution
+- ISKCON festivals appear on calendar and influence AI planning
+- Monthly and weekly calendar views work with click-to-edit
+- Media is auto-adapted to platform dimensions when attached to content
+- All new components built through Magic MCP pipeline
+
+## Out of Scope
+- Video processing / ffmpeg (media adaptation is image-only)
+- Multi-user (Phase 4)
+- Audience segmentation (Phase 4)
+- Dark mode, notifications, PWA (Phase 5)

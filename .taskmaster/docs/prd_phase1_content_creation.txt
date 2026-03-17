@@ -1,0 +1,153 @@
+# PRD: Phase 1 — Content Creation Power
+
+## Overview
+Enhance the Gita Valley social media automation dashboard with AI content iteration, reusable templates, and configurable auto-publish. This phase delivers the highest-value workflow improvements: staff can refine AI-generated captions interactively, use templates for recurring content, and optionally skip manual approval for trusted content types.
+
+## Background
+The current system generates platform-specific captions from raw text via Claude CLI, displays them in the React dashboard, and requires manual approval before scheduling via Postiz. There is no way to iterate on generated captions, no template system for recurring content, and every post requires manual approval. Google Sheets is currently the source of truth — this phase migrates to SQLite.
+
+## Architecture Changes
+- **SQLite database** (`data/gvsa.db`) replaces Google Sheets as the source of truth for all content
+- **Alembic migrations** for schema management
+- **Google Sheets adapter** becomes an import/export layer (poll for new rows, push status updates back)
+- **Unified ContentEditor** React component shared across Drafts, Calendar, Suggestions, and Create pages
+
+## Technical Stack
+- Backend: FastAPI + SQLAlchemy + Alembic + aiosqlite
+- Frontend: React 18 + Vite + shadcn/ui + TanStack Query
+- AI: Claude CLI (existing, no changes to generation pipeline structure)
+- All new/modified React pages go through Magic MCP + frontend-design pipeline
+
+## Features
+
+### 1. SQLite Migration & Sheets Adapter
+Migrate from Google Sheets to SQLite as the content source of truth.
+
+**Requirements:**
+- Create SQLite database at `data/gvsa.db` with Alembic migration framework
+- Create `content_rows` table absorbing all Google Sheets columns: date, pillar, raw_text, media_url, platforms (JSON), status, captions (JSON), postiz_ids (JSON), posted_at, feedback, source, plus new fields: template_id, created_by, media_catalog_ids (nullable, unused until Phase 3), audience_segment_id (nullable, unused until Phase 4)
+- Create `users` table: id, username, display_name, password_hash, created_at
+- Build Sheets import adapter: poll Sheet for new rows with status "READY", insert into SQLite, mark as imported in Sheet
+- Build Sheets export adapter: push status updates back to Sheet for any row that originated from Sheet import
+- Update all existing FastAPI endpoints to read/write SQLite instead of Sheets
+- Maintain backward compatibility: existing API response shapes don't change
+- Forward-reference columns (media_catalog_ids, audience_segment_id) are nullable with no FK constraints until their target tables exist in later phases
+
+### 2. Unified ContentEditor Component
+A shared React modal component for viewing and iterating on content across all pages.
+
+**Requirements:**
+- Three modes: `create` (from suggestion or template), `refine` (iterate on draft/scheduled content), `repurpose` (create new content inspired by posted content)
+- Displays per-platform caption cards (Instagram, Facebook, TikTok, Threads, LinkedIn)
+- Each caption card has a refinement text input: user types instruction like "Make it more casual" or "Add a call to action"
+- Submits to `POST /api/iterate` endpoint with content_row_id, platform, instruction, and mode
+- Shows full iteration history with rollback capability (click any previous version to restore)
+- In `create` mode: shows generate button, creates new content_row
+- In `refine` mode: shows iterate button, updates existing captions
+- In `repurpose` mode: creates a new content_row linked to the original
+- Built through Magic MCP + frontend-design pipeline (per .claude/rules/frontend-workflow.md)
+
+**Pages that use ContentEditor:**
+- Drafts page: click any draft → opens in `refine` mode
+- Calendar page: click scheduled → `refine` mode; click posted → `repurpose` mode
+- Suggestions page: click suggestion → `create` mode (generates captions in-place, no navigation to Create page)
+- Create page: after initial generation, refinement inputs appear per caption (uses ContentEditor inline, not as modal)
+
+### 3. AI Content Iteration Backend
+Backend support for iterating on individual platform captions.
+
+**Requirements:**
+- `POST /api/iterate` endpoint: accepts content_row_id, platform, instruction, mode (create/refine/repurpose)
+- Calls Claude CLI with: original caption + refinement instruction + brand rules + platform instructions
+- Returns only the regenerated caption for the specified platform (not all platforms)
+- Saves iteration to `content_iterations` table: content_row_id, platform, old_caption, new_caption, refinement_instruction, mode, created_by, created_at
+- `GET /api/iterations/{content_id}` endpoint: returns full iteration history for a content row, ordered by created_at
+- Content iteration respects the knowledge base context (brand rules, platform instructions, learning context) — same prompt injection as initial generation
+
+### 4. Content Templates
+Reusable templates for recurring content types with variable substitution.
+
+**Requirements:**
+- `templates` table: id, name, pillar, platform_instructions (JSON), raw_text_template (with {{variables}}), variables (JSON array of {name, type}), schedule_pattern, default_segment_id (nullable), created_by, created_at, updated_at
+- CRUD endpoints: GET/POST/PUT/DELETE `/api/templates`
+- `POST /api/templates/{id}/generate` endpoint: accepts variable values, fills template, generates captions via Claude CLI, creates content_row with source="template" and template_id set
+- Built-in starter templates (seeded on first migration):
+  - Sunday Feast Announcement: pillar=Community, schedule=weekly:sunday, variables=[{name: "menu_highlight", type: "text"}, {name: "special_guest", type: "text"}]
+  - Weekly Bhagavad Gita Verse: pillar=Spiritual, schedule=weekly:wednesday, variables=[{name: "verse_reference", type: "text"}, {name: "verse_text", type: "text"}]
+  - Farm Update: pillar=Farm Ops, schedule=weekly:friday, variables=[{name: "update_topic", type: "text"}, {name: "season_context", type: "text"}]
+  - Event Promotion: pillar=varies, schedule=manual, variables=[{name: "event_name", type: "text"}, {name: "date", type: "date"}, {name: "description", type: "text"}]
+- Template manager page in dashboard: list, create, edit, delete, preview
+- Create page: "Use Template" dropdown at top → selecting a template pre-fills the form with template text, shows variable inputs for user to fill
+- ContentEditor: shows template badge if content was generated from a template
+
+### 5. Auto-Publish Configuration
+Configurable per-platform auto-publish with delay window.
+
+**Requirements:**
+- `publish_config` table: id, platform, enabled (boolean), delay_hours (integer, default 2), pillar_overrides (JSON), updated_by, updated_at
+- `GET /api/settings/publish` endpoint: returns current auto-publish config for all platforms
+- `PUT /api/settings/publish` endpoint: update config (requires authentication)
+- Auto-publish flow: after content is approved (manually or via auto-approve), check publish_config for each target platform. If auto-publish enabled and no pillar override blocks it, schedule with Postiz after delay_hours. If delay_hours > 0, content sits in APPROVED status with a countdown — staff can reject during the window.
+- Per-content override: any content_row can have a `require_manual_approval` flag that overrides auto-publish config
+- Settings page section in dashboard for configuring auto-publish rules per platform and per pillar
+- Dashboard shows countdown timer on auto-publish content in Drafts/Calendar views
+
+### 6. Create Page Rebuild (Magic MCP)
+Rebuild the Create page through the frontend-design + Magic MCP pipeline.
+
+**Requirements:**
+- Run through: frontend-design skill → component_inspiration → component_builder → component_refiner
+- Must include: template selector dropdown, raw text input, media URL input, platform checkboxes, scheduled date picker
+- After generation: show per-platform caption cards with inline refinement inputs (ContentEditor in inline mode)
+- Maintain all existing functionality (generate, reprompt) while adding template and iteration features
+
+### 7. Calendar/Drafts Page Rebuild (Magic MCP)
+Rebuild the Calendar and Drafts pages through the frontend-design + Magic MCP pipeline.
+
+**Requirements:**
+- Calendar page: monthly view (grid, 7x5-6, day cells with pillar-colored content dots/thumbnails), weekly view (day columns with time slots and content cards), list view (existing, kept for bulk actions). Toggle via tabs.
+- Drafts page: card-based layout with status badges, platform icons, creation date, template badge if applicable
+- Both pages: click any content item → opens ContentEditor modal in appropriate mode (refine for drafts/scheduled, repurpose for posted)
+- Calendar shows auto-publish countdown timers where applicable
+- Run through: frontend-design skill → component_inspiration → component_builder → component_refiner
+
+## API Endpoints Summary
+
+### New
+- `POST /api/iterate` — unified caption iteration
+- `GET /api/iterations/{content_id}` — iteration history
+- `GET /api/templates` — list templates
+- `POST /api/templates` — create template
+- `GET /api/templates/{id}` — get template
+- `PUT /api/templates/{id}` — update template
+- `DELETE /api/templates/{id}` — delete template
+- `POST /api/templates/{id}/generate` — generate from template
+- `GET /api/settings/publish` — auto-publish config
+- `PUT /api/settings/publish` — update auto-publish config
+
+### Modified (SQLite migration)
+- All existing endpoints switch from Sheets to SQLite reads/writes
+- Response shapes remain unchanged for backward compatibility
+
+## Success Criteria
+- Staff can click any content item (draft, scheduled, posted, suggestion) and iterate on it with AI
+- Templates pre-fill the Create page and generate captions with variable substitution
+- Auto-publish works with configurable delay window per platform
+- Google Sheets import/export adapter works for staff who prefer Sheets
+- Calendar has monthly, weekly, and list views
+- All new components built through Magic MCP pipeline
+- Existing test suite (111 tests) continues to pass
+- New features have test coverage (backend pytest + frontend Playwright)
+
+## Dependencies
+- Existing React frontend and FastAPI backend (complete, on main branch)
+- Claude CLI with OAuth authentication (configured)
+- Postiz API access (configured at sethpc.xyz)
+- Google Sheets service account (configured)
+
+## Out of Scope
+- Web presence intelligence (Phase 2)
+- Analytics (Phase 2)
+- Media catalog (Phase 3)
+- Multi-user with approval workflows (Phase 4)
+- Dark mode, notifications, PWA (Phase 5)

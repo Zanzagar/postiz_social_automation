@@ -1,0 +1,115 @@
+# PRD: Phase 5 — Polish & Mobile
+
+## Overview
+Add dark mode, in-app notifications with email digest, PWA support for mobile access, and rebuild the remaining untouched pages (Login, Health) through the Magic MCP pipeline.
+
+## Background
+Phases 1-4 delivered content iteration, templates, auto-publish, web intelligence, analytics, media catalog, calendar planning, multi-user, audience segmentation, and Postiz admin integration. This phase focuses on polish and accessibility — making the dashboard pleasant to use, keeping staff informed via email, and enabling mobile access for farm staff away from PCs.
+
+## Prerequisites
+- Phases 1-4 complete: full feature set operational
+- SMTP server available for email digest (Gmail, SendGrid, or temple email server)
+- Users table populated with email addresses (added in this phase to notification_prefs)
+
+## Features
+
+### 1. Dark Mode
+Theme toggle with system preference detection.
+
+**Requirements:**
+- CSS variables for all colors throughout the application (many already defined from shadcn/ui theme)
+- Audit all components for hardcoded colors and replace with CSS variables
+- Theme toggle: sun/moon icon in sidebar header area
+- Store preference in localStorage (key: "gvsa-theme", values: "light"/"dark"/"system")
+- Default: "system" — respect `prefers-color-scheme` media query
+- Toggle cycles: system → light → dark → system
+- All components rebuilt in earlier phases via Magic MCP should already use CSS variables — verify and fix any that don't
+- No new API endpoints — purely frontend
+
+### 2. In-App Toast Notifications
+Real-time feedback for user actions and background events.
+
+**Requirements:**
+- Use shadcn/ui Toast component (already in project dependencies)
+- Notification triggers:
+  - Caption generation complete (success or error)
+  - Post published by Postiz (success or error)
+  - Content approved (when approval workflow is enabled)
+  - Crawl/import complete (knowledge base, social history)
+  - Auto-publish countdown started or completed
+- Implementation: TanStack Query polling on key endpoints (health, drafts count, etc.) at configurable intervals (default: 30 seconds). When state changes detected, show toast.
+- Notification bell icon in AppShell header: badge shows count of unread notifications since last check
+- Click bell: dropdown showing recent notifications (last 20) with timestamps
+- No WebSocket infrastructure — polling only
+- Notifications stored in memory only (not persisted to database)
+
+### 3. Email Digest
+Configurable email summary of dashboard activity.
+
+**Requirements:**
+- `notification_prefs` table: id, user_id, email, digest_frequency (daily/weekly/off, default "off"), enabled_types (JSON array of event types), updated_at
+- `email_digest_log` table: id, user_id, sent_at, content_hash, post_count, draft_count, error_count
+- `GET /api/settings/notifications` endpoint: return current user's notification preferences
+- `PUT /api/settings/notifications` endpoint: update preferences (email, frequency, enabled types)
+- `POST /api/notifications/test-email` endpoint: send a test digest to verify SMTP config
+- Digest content: posts published since last digest, drafts awaiting review, engagement highlights (top post, total reach), errors/failures, upcoming scheduled posts
+- Email format: HTML email with simple, clean layout. Plain text fallback.
+- Sending: Python smtplib with SMTP config from env vars (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM)
+- Scheduler: digest job runs daily at 8am local time (configurable). Weekly digest runs Monday at 8am.
+- content_hash in digest_log prevents sending duplicate digests if job runs twice
+- Settings page section: notification preferences (email, frequency, event types)
+
+### 4. PWA — Progressive Web App
+Enable "Add to Home Screen" and offline capabilities.
+
+**Requirements:**
+- Install vite-plugin-pwa as dev dependency
+- `manifest.json`: name "Gita Valley Social", short_name "GV Social", theme_color matching brand (warm earth tone), background_color, icons (192x192 and 512x512 — create from Gita Valley logo or generate placeholder), display "standalone", start_url "/"
+- Service worker: cache app shell (HTML, CSS, JS bundles) for offline access
+- Offline behavior: when offline, show cached pages with "Offline — changes will sync when connected" banner
+- Offline draft editing: save draft content to IndexedDB when offline, sync to API when connection returns
+- "Add to Home Screen" prompt: show install banner on first mobile visit (standard PWA behavior)
+- No push notifications (using email digest instead)
+- Test on mobile browsers: Chrome Android, Safari iOS
+
+### 5. Login Page Rebuild (Magic MCP)
+Rebuild Login page if not already done in Phase 4 (when multi-user auth was added).
+
+**Requirements:**
+- If Phase 4 already rebuilt Login during multi-user implementation, skip this
+- Otherwise: rebuild through frontend-design → component_inspiration → component_builder → component_refiner
+- Clean, welcoming design with Gita Valley branding
+- Username and password fields (matching Phase 4 multi-user auth)
+- Error states for invalid credentials
+- Remember me option (extend JWT expiry)
+- Responsive: works on mobile (PWA first-screen)
+
+### 6. Health Page Rebuild (Magic MCP)
+Rebuild Health page through Magic MCP pipeline.
+
+**Requirements:**
+- Rebuild through frontend-design → component_inspiration → component_builder → component_refiner
+- Show service status for: SQLite database, Postiz API, Google Sheets adapter, Claude CLI, WordPress MCP, Meta Graph API, SMTP server
+- Each service: name, status (healthy/degraded/down), last checked, response time
+- Auto-refresh every 60 seconds
+- Manual refresh button
+- Health history: simple sparkline or status dots showing last 24 hours (stored in memory, not database)
+- Alert banner if any critical service is down
+
+## SQLite Schema (Phase 5 additions)
+- `notification_prefs`: id, user_id, email, digest_frequency, enabled_types (JSON), updated_at
+- `email_digest_log`: id, user_id, sent_at, content_hash, post_count, draft_count, error_count
+
+## Success Criteria
+- Dark mode works across all pages with smooth toggle and system preference detection
+- Toast notifications appear for key events without page refresh
+- Email digest arrives on schedule with accurate content summary
+- PWA installs on mobile and works offline (cached pages, offline draft editing)
+- Login and Health pages rebuilt with consistent design quality
+- Health page monitors all services including new Phase 1-4 dependencies
+- All features from Phases 1-4 continue to work in both light and dark mode
+
+## Out of Scope
+- WebSocket for real-time updates (using polling instead)
+- Push notifications (using email digest instead)
+- WhatsApp integration (dropped from roadmap)
