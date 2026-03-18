@@ -31,6 +31,7 @@ import {
   RotateCcw,
   Send,
   Save,
+  Sparkles,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -587,41 +588,57 @@ export function CreatePage() {
         </p>
       )}
 
-      {/* Generate */}
-      <Button
-        onClick={handleGenerate}
-        disabled={isGenerating}
-        className="w-full"
-      >
-        {isGenerating ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Generating...
-          </>
-        ) : selectedTemplate ? (
-          "Generate from Template"
-        ) : (
-          "Generate Captions"
-        )}
-      </Button>
-
-      {/* Batch schedule — for templates with a schedule pattern */}
-      {selectedTemplate?.schedule_pattern && !captions && (
+      {/* Action area — unified for both single and batch */}
+      {selectedTemplate?.schedule_pattern && !captions ? (
+        /* Template with schedule: show both options in one card */
         <Card>
-          <CardContent className="space-y-3 pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium">Schedule Ahead</p>
-                <p className="text-xs text-muted-foreground">
-                  Plan {batchWeeks} upcoming{" "}
-                  {selectedTemplate.schedule_pattern.replace(":", " every ")} posts.
-                  {" "}Fill in details and generate captions for each individually.
-                </p>
+          <CardContent className="space-y-4 pt-4">
+            <div className="space-y-3">
+              {/* Option 1: Create one post now */}
+              <Button
+                onClick={handleGenerate}
+                disabled={isGenerating || selectedPlatforms.length === 0}
+                className="w-full"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Create This Post Now
+                  </>
+                )}
+              </Button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">or</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="batch-weeks" className="text-xs text-muted-foreground whitespace-nowrap">
-                  Weeks:
-                </Label>
+
+              {/* Option 2: Schedule multiple slots */}
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleBatchSchedule}
+                  disabled={isBatchGenerating || selectedPlatforms.length === 0}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  {isBatchGenerating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Scheduling...
+                    </>
+                  ) : (
+                    `Schedule ${batchWeeks} Upcoming Slots`
+                  )}
+                </Button>
                 <Input
                   id="batch-weeks"
                   type="number"
@@ -630,24 +647,15 @@ export function CreatePage() {
                   value={batchWeeks}
                   onChange={(e) => setBatchWeeks(parseInt(e.target.value) || 1)}
                   className="w-16"
+                  aria-label="Number of weeks"
                 />
               </div>
+              <p className="text-xs text-muted-foreground">
+                Creates {batchWeeks} draft slots{" "}
+                ({selectedTemplate.schedule_pattern.replace(":", " every ")}).
+                Fill in details for each individually in Drafts.
+              </p>
             </div>
-            <Button
-              onClick={handleBatchSchedule}
-              disabled={isBatchGenerating || selectedPlatforms.length === 0}
-              variant="outline"
-              className="w-full"
-            >
-              {isBatchGenerating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Scheduling...
-                </>
-              ) : (
-                `Schedule ${batchWeeks} Draft Slots`
-              )}
-            </Button>
             {batchResult && (
               <p className="text-sm text-sage-600 rounded-md bg-sage-50 px-3 py-2">
                 {batchResult.created} draft slots created! Open each in Drafts to fill in details and generate captions.
@@ -655,6 +663,25 @@ export function CreatePage() {
             )}
           </CardContent>
         </Card>
+      ) : (
+        /* Freeform or template without schedule: single generate button */
+        <Button
+          onClick={handleGenerate}
+          disabled={isGenerating || selectedPlatforms.length === 0}
+          className="w-full"
+        >
+          {isGenerating ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Generating...
+            </>
+          ) : (
+            <>
+              <Sparkles className="mr-2 h-4 w-4" />
+              {selectedTemplate ? "Create This Post" : "Generate Captions"}
+            </>
+          )}
+        </Button>
       )}
 
       {/* Progress */}

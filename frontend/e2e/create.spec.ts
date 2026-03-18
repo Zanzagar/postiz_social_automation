@@ -37,13 +37,12 @@ test.describe("Create Page", () => {
     await expect(page.getByLabel("LinkedIn")).toBeVisible();
   });
 
-  test("shows validation error without text and platforms", async ({
+  test("generate button disabled without platforms selected", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: /generate captions/i }).click();
-    await expect(page.getByRole("alert")).toContainText(
-      /enter text and select at least one platform/i,
-    );
+    await expect(
+      page.getByRole("button", { name: /generate captions/i }),
+    ).toBeDisabled();
   });
 
   test("shows upload zone and media URL input", async ({ page }) => {
