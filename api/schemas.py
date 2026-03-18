@@ -127,3 +127,30 @@ class ApproveResponse(BaseModel):
 
 class EditCaptionsRequest(BaseModel):
     captions: dict[str, str]
+
+
+# --- Iteration ---
+
+
+class IterateRequest(BaseModel):
+    content_row_id: int
+    platform: str
+    instruction: str
+    mode: str = "refine"
+
+
+class IterateResponse(BaseModel):
+    caption: str
+    iteration_id: int
+
+
+class IterationResponse(BaseModel):
+    id: int
+    content_row_id: int
+    platform: str
+    old_caption: str | None
+    new_caption: str
+    refinement_instruction: str | None
+    mode: str
+    created_by: int | None
+    created_at: datetime

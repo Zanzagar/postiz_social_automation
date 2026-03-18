@@ -209,3 +209,15 @@ class DemoCaptionGenerator:
             for p in captions:
                 captions[p] = f"[Revised per feedback: {feedback}]\n\n{captions[p]}"
         return captions
+
+    def iterate_single_caption(
+        self,
+        original_caption: str | None,
+        platform: str,
+        instruction: str,
+        raw_text: str,
+        pillar: str | None,
+    ) -> str:
+        """Demo iteration — returns a modified caption."""
+        base = original_caption or raw_text
+        return f"[Refined per: {instruction}]\n\n{base}"
