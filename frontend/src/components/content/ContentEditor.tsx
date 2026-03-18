@@ -108,39 +108,38 @@ export function ContentEditor({
   const [repurposeGenerated, setRepurposeGenerated] = useState(false);
   const [repurposeRowId, setRepurposeRowId] = useState<number | null>(null);
 
-  // Parse captions from contentRow
-  const platforms = useMemo(() => {
+  // Stable platform list derived from contentRow only (no captions dependency)
+  const basePlatforms = useMemo(() => {
     if (!contentRow) return [];
-    if (mode === "repurpose" && repurposeGenerated) {
-      // After repurpose generation, show the new platforms
-      return Object.keys(captions);
-    }
     return Object.keys(contentRow.captions).filter(
       (k) => contentRow.captions[k] !== null,
     );
-  }, [contentRow, mode, repurposeGenerated, captions]);
+  }, [contentRow]);
+
+  // Display platforms: after repurpose generation, show generated platforms
+  const platforms =
+    mode === "repurpose" && repurposeGenerated
+      ? Object.keys(captions)
+      : basePlatforms;
 
   // Initialize state when contentRow changes
   useEffect(() => {
-    if (contentRow) {
+    if (contentRow && contentRow.row_number !== prevRowIdRef.current) {
       const parsed: Record<string, string> = {};
       for (const [k, v] of Object.entries(contentRow.captions)) {
         if (v !== null) parsed[k] = v;
       }
       setCaptions(parsed);
       setError("");
-      // Always reset tab when switching to a different row
-      if (contentRow.row_number !== prevRowIdRef.current) {
-        setActiveTab(platforms[0] ?? "");
-        setInstruction("");
-        setExpandedIter(new Set());
-        setRepurposePlatforms([]);
-        setRepurposeGenerated(false);
-        setRepurposeRowId(null);
-        prevRowIdRef.current = contentRow.row_number;
-      }
+      setActiveTab(basePlatforms[0] ?? "");
+      setInstruction("");
+      setExpandedIter(new Set());
+      setRepurposePlatforms([]);
+      setRepurposeGenerated(false);
+      setRepurposeRowId(null);
+      prevRowIdRef.current = contentRow.row_number;
     }
-  }, [contentRow, platforms]);
+  }, [contentRow, basePlatforms]);
 
   // Fetch iteration history
   const { data: iterations = [] } = useQuery({
