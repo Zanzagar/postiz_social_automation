@@ -13,8 +13,16 @@ import {
   api,
   request,
   type GenerateRequest,
+  type Pillar,
   type Template,
 } from "@/lib/api";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Upload,
   Loader2,
@@ -90,6 +98,13 @@ type CreateMode = "template" | "freeform";
 
 export function CreatePage() {
   const [mode, setMode] = useState<CreateMode>("freeform");
+
+  // Pillars
+  const { data: pillars = [] } = useQuery({
+    queryKey: ["pillars", "active"],
+    queryFn: () => api.getPillars(true),
+  });
+  const [selectedPillar, setSelectedPillar] = useState<string>("");
 
   // Template state
   const { data: templates = [] } = useQuery({
@@ -209,6 +224,7 @@ export function CreatePage() {
           media_url: mediaUrl || null,
           platforms: selectedPlatforms,
           scheduled_date: scheduledDate,
+          content_pillar: selectedPillar || null,
         };
         const result = await request<{
           captions: Record<string, string>;
@@ -269,6 +285,7 @@ export function CreatePage() {
     raw_text: rawText,
     media_url: mediaUrl || null,
     platforms: selectedPlatforms,
+    content_pillar: selectedPillar || null,
     scheduled_date: scheduledDate,
   };
 
@@ -485,6 +502,33 @@ export function CreatePage() {
           ))}
         </div>
       </fieldset>
+
+      {/* Content pillar */}
+      {pillars.length > 0 && (
+        <div className="space-y-2">
+          <Label htmlFor="content-pillar">Content Pillar (optional)</Label>
+          <Select value={selectedPillar} onValueChange={setSelectedPillar}>
+            <SelectTrigger id="content-pillar">
+              <SelectValue placeholder="Let AI decide..." />
+            </SelectTrigger>
+            <SelectContent>
+              {pillars.map((p) => (
+                <SelectItem key={p.id} value={p.name}>
+                  <span className="flex items-center gap-2">
+                    {p.color && (
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: p.color }}
+                      />
+                    )}
+                    {p.name.replace(/_/g, " ")}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* Schedule date */}
       <div className="space-y-2">

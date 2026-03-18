@@ -64,6 +64,7 @@ class GenerateRequest(BaseModel):
     media_url: str | None = None
     platforms: list[str]
     scheduled_date: str
+    content_pillar: str | None = None
 
 
 class RepromptRequest(BaseModel):
@@ -129,6 +130,33 @@ class ApproveResponse(BaseModel):
 class EditCaptionsRequest(BaseModel):
     captions: dict[str, str]
     platforms: dict[str, bool] | None = None
+
+
+# --- Pillars ---
+
+
+class PillarResponse(BaseModel):
+    id: int
+    name: str
+    description: str | None = None
+    color: str | None = None
+    is_active: bool = True
+    sort_order: int = 0
+
+
+class PillarCreateRequest(BaseModel):
+    name: str
+    description: str | None = None
+    color: str | None = None
+    sort_order: int = 0
+
+
+class PillarUpdateRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    color: str | None = None
+    is_active: bool | None = None
+    sort_order: int | None = None
 
 
 # --- Publish Config ---

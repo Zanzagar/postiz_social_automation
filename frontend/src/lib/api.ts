@@ -126,6 +126,7 @@ export interface GenerateRequest {
   media_url?: string | null;
   platforms: string[];
   scheduled_date: string;
+  content_pillar?: string | null;
 }
 
 export interface RepromptRequest extends GenerateRequest {
@@ -196,6 +197,17 @@ export interface IterationRecord {
   mode: string;
   created_by: number | null;
   created_at: string;
+}
+
+// --- Pillar Types ---
+
+export interface Pillar {
+  id: number;
+  name: string;
+  description: string | null;
+  color: string | null;
+  is_active: boolean;
+  sort_order: number;
 }
 
 // --- Template Types ---
@@ -379,6 +391,32 @@ export const api = {
     return request<ContentRow>(`/api/templates/${templateId}/generate`, {
       method: "POST",
       body: JSON.stringify(data),
+    });
+  },
+
+  // Pillars
+  getPillars(activeOnly = false) {
+    const params = activeOnly ? "?active_only=true" : "";
+    return request<Pillar[]>(`/api/pillars${params}`);
+  },
+
+  createPillar(data: { name: string; description?: string; color?: string; sort_order?: number }) {
+    return request<Pillar>("/api/pillars", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  updatePillar(id: number, data: { name?: string; description?: string; color?: string; is_active?: boolean; sort_order?: number }) {
+    return request<Pillar>(`/api/pillars/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deletePillar(id: number) {
+    return request<{ detail: string }>(`/api/pillars/${id}`, {
+      method: "DELETE",
     });
   },
 

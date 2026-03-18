@@ -23,6 +23,15 @@ def _build_content_row(req: GenerateRequest | RepromptRequest) -> ContentRow:
     if media and not media.startswith(("http://", "https://")):
         media = None
 
+    pillar = None
+    if hasattr(req, "content_pillar") and req.content_pillar:
+        try:
+            from content_engine.models import ContentPillar
+
+            pillar = ContentPillar(req.content_pillar)
+        except ValueError:
+            pillar = None
+
     return ContentRow(
         row_number=0,
         date=datetime.fromisoformat(req.scheduled_date),
@@ -31,6 +40,7 @@ def _build_content_row(req: GenerateRequest | RepromptRequest) -> ContentRow:
         platforms=platforms,
         status=ContentStatus.DRAFT,
         captions={Platform(p): None for p in req.platforms},
+        content_pillar=pillar,
     )
 
 
@@ -52,6 +62,7 @@ async def _persist_generated(
             "captions": captions_json,
             "status": "draft",
             "source": "generated",
+            "pillar": req.content_pillar if hasattr(req, "content_pillar") else None,
         }
     )
     return row.id
