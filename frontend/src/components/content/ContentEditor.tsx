@@ -368,22 +368,27 @@ export function ContentEditor({
             </DialogTitle>
           </div>
           <DialogDescription className="flex items-center gap-2">
-            <span className="truncate">{contentRow.raw_text}</span>
-            {contentRow.source === "template" && (
-              <Badge variant="secondary" className="shrink-0">
-                Template
-              </Badge>
+            {isTemplateShell ? (
+              <>
+                <span className="text-muted-foreground">
+                  Scheduled for {contentRow.date ? new Date(contentRow.date).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }) : "—"}
+                </span>
+                <Badge variant="secondary" className="shrink-0">Template</Badge>
+              </>
+            ) : (
+              <>
+                <span className="truncate">{contentRow.raw_text}</span>
+                {contentRow.source === "template" && (
+                  <Badge variant="secondary" className="shrink-0">Template</Badge>
+                )}
+              </>
             )}
           </DialogDescription>
         </DialogHeader>
 
         {/* Template shell: variable fill-in + generate */}
         {isTemplateShell && mode !== "repurpose" && (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Fill in the details for this post, then generate captions.
-            </p>
-
+          <div className="space-y-3">
             {/* Template preview with variable highlights */}
             <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm leading-relaxed">
               {contentRow.raw_text.split(/(\{\{.+?\}\})/).map((part, i) => {
