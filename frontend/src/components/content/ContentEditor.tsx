@@ -258,43 +258,60 @@ export function ContentEditor({
           <p className="text-sm text-destructive" role="alert">{error}</p>
         )}
 
-        {/* Iteration history log — always visible, outside the caption area */}
+        {/* Iteration history log — always visible, full content */}
         {iterations.length > 0 && (
-          <div className="rounded-lg border bg-muted/20">
-            <div className="flex items-center gap-1.5 border-b px-3 py-2 text-sm font-medium text-muted-foreground">
-              <History className="h-3.5 w-3.5" />
+          <div className="rounded-lg border">
+            <div className="flex items-center gap-1.5 bg-muted/30 px-4 py-2.5 text-sm font-medium">
+              <History className="h-4 w-4" />
               Iteration Log ({iterations.length})
             </div>
-            <div className="max-h-52 overflow-y-auto divide-y">
+            <div className="max-h-[400px] overflow-y-auto">
               {[...iterations].reverse().map((iter) => (
-                <button
+                <div
                   key={iter.id}
-                  onClick={() => {
-                    setActiveTab(iter.platform);
-                    handleRestoreCaption(iter.new_caption);
-                  }}
-                  className="flex w-full items-start gap-3 px-3 py-2 text-left text-xs hover:bg-muted/50 transition-colors"
+                  className="border-t px-4 py-3 hover:bg-muted/20 transition-colors"
                 >
-                  <div className="shrink-0 space-y-0.5 text-muted-foreground">
-                    <div className="font-medium text-foreground">
-                      {PLATFORM_META[iter.platform]?.label ?? iter.platform}
+                  {/* Header row: platform, instruction, time, restore button */}
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-block h-2 w-2 rounded-full ${
+                          PLATFORM_META[iter.platform]?.accent ?? "bg-gray-400"
+                        }`}
+                      />
+                      <span className="text-xs font-medium">
+                        {PLATFORM_META[iter.platform]?.label ?? iter.platform}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(iter.created_at).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
                     </div>
-                    <div>
-                      {new Date(iter.created_at).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={() => {
+                        setActiveTab(iter.platform);
+                        handleRestoreCaption(iter.new_caption);
+                      }}
+                    >
+                      Restore
+                    </Button>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="italic text-muted-foreground">
-                      &ldquo;{iter.refinement_instruction}&rdquo;
-                    </p>
-                    <p className="mt-0.5 line-clamp-2 text-foreground">
-                      {iter.new_caption}
-                    </p>
+
+                  {/* Instruction */}
+                  <p className="text-xs italic text-muted-foreground mb-1.5">
+                    Instruction: &ldquo;{iter.refinement_instruction}&rdquo;
+                  </p>
+
+                  {/* Full caption result */}
+                  <div className="rounded-md bg-muted/30 px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
+                    {iter.new_caption}
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           </div>
