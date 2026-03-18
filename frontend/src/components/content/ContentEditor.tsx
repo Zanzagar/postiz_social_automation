@@ -84,12 +84,13 @@ const ALL_PLATFORMS = [
 
 export function ContentEditor({
   contentRow,
-  mode,
+  mode: initialMode,
   isOpen,
   onClose,
   onSave,
 }: ContentEditorProps) {
   const queryClient = useQueryClient();
+  const [mode, setMode] = useState<EditorMode>(initialMode);
   const config = MODE_CONFIG[mode];
 
   // Local caption state (editable)
@@ -142,6 +143,7 @@ export function ContentEditor({
       setRepurposeRowId(null);
       setRepurposeTarget(isPosted ? "separate" : "merge");
       setSaveSuccess("");
+      setMode(initialMode);
       prevRowIdRef.current = contentRow.row_number;
     }
   }, [contentRow, basePlatforms]);
@@ -545,7 +547,27 @@ export function ContentEditor({
         )}
 
         {/* Footer actions */}
-        <DialogFooter>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          {/* Repurpose toggle — available in refine mode */}
+          {mode === "refine" && (
+            <Button
+              variant="outline"
+              className="mr-auto gap-1.5"
+              onClick={() => setMode("repurpose")}
+            >
+              <Copy className="h-3.5 w-3.5" />
+              Repurpose
+            </Button>
+          )}
+          {mode === "repurpose" && !repurposeGenerated && (
+            <Button
+              variant="ghost"
+              className="mr-auto gap-1.5 text-muted-foreground"
+              onClick={() => setMode("refine")}
+            >
+              Back to Refine
+            </Button>
+          )}
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>

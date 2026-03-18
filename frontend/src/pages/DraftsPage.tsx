@@ -8,8 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ContentEditor } from "@/components/content/ContentEditor";
 import { AutoPublishCountdown } from "@/components/content/AutoPublishCountdown";
-import { CheckCircle, Copy, Loader2 } from "lucide-react";
-import type { EditorMode } from "@/components/content/ContentEditor";
+import { CheckCircle, Loader2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
 export function DraftsPage() {
@@ -29,7 +28,6 @@ export function DraftsPage() {
   >({});
   const [isApproving, setIsApproving] = useState(false);
   const [selectedDraft, setSelectedDraft] = useState<ContentRow | null>(null);
-  const [editorMode, setEditorMode] = useState<EditorMode>("refine");
 
   function toggleSelect(rowNumber: number) {
     setSelected((prev) => {
@@ -121,21 +119,14 @@ export function DraftsPage() {
           draft={draft}
           isSelected={selected.has(draft.row_number)}
           onToggleSelect={() => toggleSelect(draft.row_number)}
-          onClick={() => {
-            setEditorMode("refine");
-            setSelectedDraft(draft);
-          }}
-          onRepurpose={() => {
-            setEditorMode("repurpose");
-            setSelectedDraft(draft);
-          }}
+          onClick={() => setSelectedDraft(draft)}
         />
       ))}
 
       {/* ContentEditor modal */}
       <ContentEditor
         contentRow={selectedDraft}
-        mode={editorMode}
+        mode="refine"
         isOpen={!!selectedDraft}
         onClose={() => setSelectedDraft(null)}
         onSave={() => {
@@ -184,13 +175,11 @@ function DraftCard({
   isSelected,
   onToggleSelect,
   onClick,
-  onRepurpose,
 }: {
   draft: ContentRow;
   isSelected: boolean;
   onToggleSelect: () => void;
   onClick: () => void;
-  onRepurpose: () => void;
 }) {
   const platforms = Object.entries(draft.platforms)
     .filter(([, v]) => v)
@@ -237,8 +226,8 @@ function DraftCard({
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="flex flex-wrap items-center gap-1.5" onClick={onClick}>
+      <CardContent onClick={onClick}>
+        <div className="flex flex-wrap items-center gap-1.5">
           {platforms.map((p) => (
             <Badge key={p} variant="secondary" className="text-xs">
               {platformLabels[p] ?? p}
@@ -247,19 +236,6 @@ function DraftCard({
           {draft.auto_publish_at && (
             <AutoPublishCountdown publishAt={draft.auto_publish_at} />
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="ml-auto h-7 gap-1 text-xs text-muted-foreground"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRepurpose();
-            }}
-            aria-label={`Repurpose ${draft.raw_text.slice(0, 30)}`}
-          >
-            <Copy className="h-3 w-3" />
-            Repurpose
-          </Button>
         </div>
       </CardContent>
     </Card>
