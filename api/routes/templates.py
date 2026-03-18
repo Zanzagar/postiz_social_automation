@@ -3,7 +3,7 @@
 import asyncio
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -12,6 +12,8 @@ from api.dependencies import get_caption_generator, get_content_repo
 from api.repositories.content import ContentRepository
 from api.routes.content import _row_to_response
 from api.schemas import (
+    BatchGenerateRequest,
+    BatchGenerateResponse,
     GenerateFromTemplateRequest,
     TemplateCreateRequest,
     TemplateResponse,
@@ -175,3 +177,104 @@ async def generate_from_template(
 
     updated = await repo.get_content_row(content_row.id)
     return _row_to_response(updated)
+
+
+DAY_MAP = {
+    "sunday": 6,
+    "monday": 0,
+    "tuesday": 1,
+    "wednesday": 2,
+    "thursday": 3,
+    "friday": 4,
+    "saturday": 5,
+}
+
+
+def _get_scheduled_dates(pattern: str, weeks: int) -> list[datetime]:
+    """Calculate dates from a schedule pattern like 'weekly:sunday' for N weeks."""
+    if not pattern or ":" not in pattern:
+        return []
+    freq, day_name = pattern.split(":", 1)
+    if freq != "weekly" or day_name.lower() not in DAY_MAP:
+        return []
+
+    target_day = DAY_MAP[day_name.lower()]
+    today = datetime.now()
+    # Find the next occurrence of the target day
+    days_ahead = target_day - today.weekday()
+    if days_ahead <= 0:
+        days_ahead += 7
+    next_date = today + timedelta(days=days_ahead)
+    next_date = next_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    return [next_date + timedelta(weeks=i) for i in range(weeks)]
+
+
+@router.post("/{template_id}/generate-batch", response_model=BatchGenerateResponse)
+async def generate_batch_from_template(
+    template_id: int,
+    req: BatchGenerateRequest,
+    repo: ContentRepository = Depends(get_content_repo),
+    generator=Depends(get_caption_generator),
+):
+    """Generate multiple drafts from a template's schedule pattern.
+
+    Uses the template's schedule_pattern (e.g. 'weekly:sunday') to calculate
+    dates for the next N weeks, then generates captions for each date.
+    """
+    template = await repo.get_template(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if not template.schedule_pattern:
+        raise HTTPException(status_code=400, detail="Template has no schedule pattern")
+
+    dates = _get_scheduled_dates(template.schedule_pattern, req.weeks)
+    if not dates:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid schedule pattern: {template.schedule_pattern}"
+        )
+
+    # Variable substitution
+    base_text = template.raw_text_template or ""
+    for var_name, var_value in req.variable_values.items():
+        base_text = base_text.replace(f"{{{{{var_name}}}}}", var_value)
+
+    remaining = re.findall(r"\{\{(\w+)\}\}", base_text)
+    if remaining:
+        raise HTTPException(status_code=400, detail=f"Missing variables: {remaining}")
+
+    platforms_json = json.dumps({p: True for p in req.platforms})
+    drafts = []
+
+    for date in dates:
+        # Create content row
+        content_row = await repo.create_content_row(
+            {
+                "date": date,
+                "pillar": template.pillar,
+                "raw_text": base_text,
+                "platforms": platforms_json,
+                "status": "draft",
+                "captions": "{}",
+                "source": "template",
+                "template_id": template_id,
+            }
+        )
+
+        # Generate captions
+        engine_row = EngineContentRow(
+            row_number=content_row.id,
+            date=date,
+            raw_text=base_text,
+            platforms={Platform(p): True for p in req.platforms},
+            status=ContentStatus.DRAFT,
+            captions={},
+        )
+        captions = await asyncio.to_thread(generator.generate_captions, engine_row)
+        captions_json = json.dumps({str(k): v for k, v in captions.items()})
+        await repo.update_captions(content_row.id, captions_json)
+
+        updated = await repo.get_content_row(content_row.id)
+        drafts.append(_row_to_response(updated))
+
+    return BatchGenerateResponse(created=len(drafts), drafts=drafts)

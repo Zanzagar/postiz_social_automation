@@ -394,6 +394,19 @@ export const api = {
     });
   },
 
+  batchGenerateFromTemplate(
+    templateId: number,
+    data: { variable_values: Record<string, string>; platforms: string[]; weeks: number },
+  ) {
+    return request<{ created: number; drafts: ContentRow[] }>(
+      `/api/templates/${templateId}/generate-batch`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    );
+  },
+
   // Pillars
   getPillars(activeOnly = false) {
     const params = activeOnly ? "?active_only=true" : "";

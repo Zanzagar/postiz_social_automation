@@ -143,6 +143,11 @@ export function CreatePage() {
 
   const [savedMessage, setSavedMessage] = useState("");
 
+  // Batch generation state
+  const [batchWeeks, setBatchWeeks] = useState(4);
+  const [isBatchGenerating, setIsBatchGenerating] = useState(false);
+  const [batchResult, setBatchResult] = useState<{ created: number } | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- Template handling ---
@@ -268,6 +273,25 @@ export function CreatePage() {
     } finally {
       setIsIterating(false);
       setIteratePlatform("");
+    }
+  }
+
+  async function handleBatchGenerate() {
+    if (!selectedTemplate || selectedPlatforms.length === 0) return;
+    setIsBatchGenerating(true);
+    setError("");
+    setBatchResult(null);
+    try {
+      const result = await api.batchGenerateFromTemplate(selectedTemplate.id, {
+        variable_values: variableValues,
+        platforms: selectedPlatforms,
+        weeks: batchWeeks,
+      });
+      setBatchResult({ created: result.created });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Batch generation failed");
+    } finally {
+      setIsBatchGenerating(false);
     }
   }
 
@@ -565,6 +589,64 @@ export function CreatePage() {
           "Generate Captions"
         )}
       </Button>
+
+      {/* Batch generate — for templates with a schedule */}
+      {selectedTemplate?.schedule_pattern && !captions && (
+        <Card>
+          <CardContent className="space-y-3 pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Batch Generate</p>
+                <p className="text-xs text-muted-foreground">
+                  Create {batchWeeks} drafts scheduled{" "}
+                  {selectedTemplate.schedule_pattern.replace(":", " every ")}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="batch-weeks" className="text-xs text-muted-foreground whitespace-nowrap">
+                  Weeks:
+                </Label>
+                <Input
+                  id="batch-weeks"
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={batchWeeks}
+                  onChange={(e) => setBatchWeeks(parseInt(e.target.value) || 1)}
+                  className="w-16"
+                />
+              </div>
+            </div>
+            <Button
+              onClick={handleBatchGenerate}
+              disabled={isBatchGenerating || selectedPlatforms.length === 0}
+              variant="outline"
+              className="w-full"
+            >
+              {isBatchGenerating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating {batchWeeks} drafts...
+                </>
+              ) : (
+                <>
+                  Generate {batchWeeks} Scheduled Drafts
+                </>
+              )}
+            </Button>
+            {isBatchGenerating && (
+              <p className="text-center text-xs text-muted-foreground animate-pulse">
+                Claude is generating {batchWeeks} posts — this may take a few minutes.
+              </p>
+            )}
+            {batchResult && (
+              <p className="text-sm text-sage-600 rounded-md bg-sage-50 px-3 py-2">
+                {batchResult.created} drafts created! Find them in Drafts or Calendar.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Progress */}
       {isGenerating && (

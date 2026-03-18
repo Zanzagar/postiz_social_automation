@@ -214,6 +214,17 @@ class GenerateFromTemplateRequest(BaseModel):
     scheduled_date: str
 
 
+class BatchGenerateRequest(BaseModel):
+    variable_values: dict[str, str]
+    platforms: list[str]
+    weeks: int = 4
+
+
+class BatchGenerateResponse(BaseModel):
+    created: int
+    drafts: list[ContentRowResponse]
+
+
 # --- Iteration ---
 
 
