@@ -129,7 +129,22 @@ class EditCaptionsRequest(BaseModel):
     captions: dict[str, str]
 
 
-# --- Iteration ---
+# --- Publish Config ---
+
+
+class PlatformPublishConfig(BaseModel):
+    platform: str
+    enabled: bool = False
+    delay_hours: int = 2
+    pillar_overrides: dict[str, bool] = {}
+
+
+class PublishConfigResponse(BaseModel):
+    platforms: list[PlatformPublishConfig]
+
+
+class UpdatePublishConfigRequest(BaseModel):
+    platforms: list[PlatformPublishConfig]
 
 
 # --- Templates ---
