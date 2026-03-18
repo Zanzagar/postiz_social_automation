@@ -60,7 +60,7 @@ function entryToContentRow(entry: CalendarEntry): ContentRow {
     postiz_ids: null,
     posted_at: null,
     error_msg: null,
-    source: "manual",
+    source: entry.source ?? "manual",
     auto_publish_at: null,
   };
 }

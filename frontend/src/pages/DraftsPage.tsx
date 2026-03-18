@@ -43,23 +43,35 @@ export function DraftsPage() {
     }
   }
 
+  const [approveError, setApproveError] = useState("");
+
   async function handleBatchApprove() {
     setIsApproving(true);
-    try {
-      // Save any edits first, then approve
-      for (const rowNumber of selected) {
+    setApproveError("");
+    const failed: number[] = [];
+    for (const rowNumber of selected) {
+      try {
         const edits = editedCaptions[rowNumber];
         if (edits) {
           await api.editDraft(rowNumber, edits);
         }
         await api.approveDraft(rowNumber);
+      } catch {
+        failed.push(rowNumber);
       }
-      setSelected(new Set());
-      setEditedCaptions({});
-      queryClient.invalidateQueries({ queryKey: ["drafts"] });
-    } finally {
-      setIsApproving(false);
     }
+    const succeeded = new Set([...selected].filter((r) => !failed.includes(r)));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const r of succeeded) next.delete(r);
+      return next;
+    });
+    setEditedCaptions({});
+    queryClient.invalidateQueries({ queryKey: ["drafts"] });
+    if (failed.length > 0) {
+      setApproveError(`${succeeded.size} approved, ${failed.length} failed`);
+    }
+    setIsApproving(false);
   }
 
   if (isLoading) {
@@ -120,6 +132,11 @@ export function DraftsPage() {
         }}
       />
 
+      {/* Approve error */}
+      {approveError && (
+        <p className="text-sm text-destructive" role="alert">{approveError}</p>
+      )}
+
       {/* Batch actions bar */}
       {selected.size > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-lg md:bottom-0 md:left-60 md:pb-3">
@@ -173,7 +190,13 @@ function DraftCard({
           onCheckedChange={onToggleSelect}
           className="mt-1"
         />
-        <div className="flex-1 space-y-1" onClick={onClick} role="button" tabIndex={0}>
+        <div
+          className="flex-1 space-y-1"
+          onClick={onClick}
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onClick()}
+          role="button"
+          tabIndex={0}
+        >
           <p className="text-sm font-medium leading-tight">
             {draft.raw_text.length > 100
               ? draft.raw_text.slice(0, 100) + "..."

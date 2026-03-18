@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { differenceInSeconds, isPast } from "date-fns";
 import { Clock, AlertCircle } from "lucide-react";
 
@@ -13,6 +13,7 @@ export function AutoPublishCountdown({
 }: AutoPublishCountdownProps) {
   const [timeLeft, setTimeLeft] = useState("");
   const [isExpired, setIsExpired] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval>>();
 
   useEffect(() => {
     if (!publishAt) return;
@@ -22,13 +23,16 @@ export function AutoPublishCountdown({
       if (isPast(target)) {
         setIsExpired(true);
         setTimeLeft("Publishing...");
+        if (intervalRef.current) clearInterval(intervalRef.current);
         onExpired?.();
         return;
       }
 
       const seconds = differenceInSeconds(target, new Date());
-      if (seconds < 3600) {
-        const minutes = Math.ceil(seconds / 60);
+      if (seconds < 60) {
+        setTimeLeft("< 1m");
+      } else if (seconds < 3600) {
+        const minutes = Math.floor(seconds / 60);
         setTimeLeft(`${minutes}m`);
       } else {
         const hours = Math.floor(seconds / 3600);
@@ -38,8 +42,10 @@ export function AutoPublishCountdown({
     }
 
     updateCountdown();
-    const interval = setInterval(updateCountdown, 60000);
-    return () => clearInterval(interval);
+    intervalRef.current = setInterval(updateCountdown, 60000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [publishAt, onExpired]);
 
   if (!publishAt) return null;

@@ -104,6 +104,7 @@ export interface CalendarEntry {
   status: string;
   platforms: Record<string, boolean>;
   captions: Record<string, string | null>;
+  source?: string;
 }
 
 export interface CalendarResponse {

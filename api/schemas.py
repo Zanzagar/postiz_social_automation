@@ -23,6 +23,7 @@ class ContentRowResponse(BaseModel):
     posted_at: datetime | None = None
     error_msg: str | None = None
     source: str = "staff"
+    auto_publish_at: datetime | None = None
 
 
 class SuggestionResponse(BaseModel):

@@ -41,9 +41,17 @@ export function TemplatesPage() {
     setIsEditorOpen(true);
   }
 
+  const [deleteError, setDeleteError] = useState("");
+
   async function handleDelete(templateId: number) {
-    await api.deleteTemplate(templateId);
-    queryClient.invalidateQueries({ queryKey: ["templates"] });
+    if (!window.confirm("Delete this template? This cannot be undone.")) return;
+    setDeleteError("");
+    try {
+      await api.deleteTemplate(templateId);
+      queryClient.invalidateQueries({ queryKey: ["templates"] });
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Delete failed");
+    }
   }
 
   function handleEditorClose() {
@@ -142,8 +150,14 @@ export function TemplatesPage() {
         </div>
       )}
 
-      {/* Template editor dialog */}
+      {/* Delete error */}
+      {deleteError && (
+        <p className="text-sm text-destructive" role="alert">{deleteError}</p>
+      )}
+
+      {/* Template editor dialog — key forces remount on switch */}
       <TemplateEditorDialog
+        key={editingTemplate?.id ?? "new"}
         isOpen={isEditorOpen}
         template={editingTemplate}
         onClose={handleEditorClose}

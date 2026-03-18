@@ -152,10 +152,11 @@ describe("TemplatesPage", () => {
     });
   });
 
-  it("deletes a template when delete button clicked", async () => {
+  it("deletes a template when delete button clicked and confirmed", async () => {
     const user = userEvent.setup();
     mockGetTemplates.mockResolvedValue(sampleTemplates);
     mockDeleteTemplate.mockResolvedValue({ deleted: true });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
     renderTemplates();
 
     await waitFor(() => {
@@ -166,6 +167,7 @@ describe("TemplatesPage", () => {
     await user.click(deleteButtons[0]);
 
     await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalled();
       expect(mockDeleteTemplate).toHaveBeenCalledWith(1);
     });
   });

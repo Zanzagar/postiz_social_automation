@@ -114,8 +114,8 @@ export function CreatePage() {
   );
   const [error, setError] = useState("");
 
-  // Inline iteration state
-  const [iterateInstruction, setIterateInstruction] = useState("");
+  // Inline iteration state (per-platform instructions)
+  const [platformInstructions, setPlatformInstructions] = useState<Record<string, string>>({});
   const [iteratePlatform, setIteratePlatform] = useState("");
   const [isIterating, setIsIterating] = useState(false);
   const [contentRowId, setContentRowId] = useState<number | null>(null);
@@ -159,6 +159,7 @@ export function CreatePage() {
       setMediaUrl(result.url);
     } catch {
       setError("Failed to upload file");
+      setUploadedFile(null);
     }
   }, []);
 
@@ -222,7 +223,8 @@ export function CreatePage() {
   // --- Inline iteration ---
 
   async function handleIterate(platform: string) {
-    if (!iterateInstruction.trim() || !contentRowId) return;
+    const instruction = platformInstructions[platform]?.trim();
+    if (!instruction || !contentRowId) return;
 
     setIsIterating(true);
     setIteratePlatform(platform);
@@ -230,13 +232,15 @@ export function CreatePage() {
       const result = await api.iterate({
         content_row_id: contentRowId,
         platform,
-        instruction: iterateInstruction.trim(),
+        instruction,
         mode: "refine",
       });
       setCaptions((prev) =>
         prev ? { ...prev, [platform]: result.caption } : prev,
       );
-      setIterateInstruction("");
+      setPlatformInstructions((prev) => ({ ...prev, [platform]: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Iteration failed");
     } finally {
       setIsIterating(false);
       setIteratePlatform("");
@@ -494,10 +498,13 @@ export function CreatePage() {
                 {contentRowId && (
                   <div className="flex gap-2">
                     <Input
-                      value={
-                        iteratePlatform === platform ? iterateInstruction : iterateInstruction
+                      value={platformInstructions[platform] ?? ""}
+                      onChange={(e) =>
+                        setPlatformInstructions((prev) => ({
+                          ...prev,
+                          [platform]: e.target.value,
+                        }))
                       }
-                      onChange={(e) => setIterateInstruction(e.target.value)}
                       placeholder="Iteration instruction (e.g. 'Make shorter')"
                       disabled={isIterating}
                       onKeyDown={(e) => {
@@ -512,7 +519,7 @@ export function CreatePage() {
                       size="sm"
                       onClick={() => handleIterate(platform)}
                       disabled={
-                        isIterating || !iterateInstruction.trim()
+                        isIterating || !(platformInstructions[platform]?.trim())
                       }
                       aria-label={`Iterate ${platform}`}
                     >

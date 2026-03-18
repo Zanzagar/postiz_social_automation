@@ -8,8 +8,10 @@ import { ContentEditor } from "@/components/content/ContentEditor";
 import { Lightbulb } from "lucide-react";
 
 function suggestionToContentRow(s: Suggestion): ContentRow {
+  // row_number -1 signals this is a synthetic row (not yet persisted)
+  // ContentEditor in create mode should create a new row, not edit row -1
   return {
-    row_number: 0,
+    row_number: -1,
     date: s.suggested_date,
     content_pillar: s.suggested_pillar,
     raw_text: s.content_idea,
@@ -61,9 +63,9 @@ export function SuggestionsPage() {
     <div className="space-y-4 p-6">
       <h1 className="text-2xl font-bold text-sage-800">Content Suggestions</h1>
 
-      {suggestions.map((s, i) => (
+      {suggestions.map((s) => (
         <Card
-          key={i}
+          key={`${s.suggested_date}-${s.content_idea.slice(0, 30)}`}
           className="cursor-pointer transition-colors hover:bg-muted/30"
           onClick={() => setSelectedSuggestion(suggestionToContentRow(s))}
         >
