@@ -5,14 +5,14 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { CreatePage } from "./CreatePage";
 
-// Mock api + streaming
+// Mock api + request
 vi.mock("@/lib/api", () => ({
   api: {
     uploadFile: vi.fn(),
     reprompt: vi.fn(),
     sendToPostiz: vi.fn(),
   },
-  fetchGenerateStream: vi.fn(),
+  request: vi.fn(),
   ApiError: class extends Error {
     status: number;
     detail: string;
@@ -24,8 +24,8 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 
-import { api, fetchGenerateStream } from "@/lib/api";
-const mockGenerate = vi.mocked(fetchGenerateStream);
+import { api, request } from "@/lib/api";
+const mockRequest = vi.mocked(request);
 const mockSendToPostiz = vi.mocked(api.sendToPostiz);
 
 function renderCreate() {
@@ -55,18 +55,13 @@ describe("CreatePage", () => {
     const user = userEvent.setup();
     renderCreate();
     await user.click(screen.getByRole("button", { name: /generate/i }));
-    // Should show validation - generate should not have been called
-    expect(mockGenerate).not.toHaveBeenCalled();
+    // Should show validation - request should not have been called
+    expect(mockRequest).not.toHaveBeenCalled();
   });
 
-  it("calls generate stream when form is valid", async () => {
+  it("calls generate-sync endpoint when form is valid", async () => {
     const user = userEvent.setup();
-    // Mock the async generator
-    async function* fakeStream() {
-      yield { status: "generating", message: "Working on Instagram..." };
-      yield { status: "done", captions: { instagram: "Test caption" } };
-    }
-    mockGenerate.mockReturnValue(fakeStream());
+    mockRequest.mockResolvedValue({ captions: { instagram: "Test caption" } });
 
     renderCreate();
 
@@ -75,21 +70,18 @@ describe("CreatePage", () => {
     await user.click(screen.getByRole("button", { name: /generate/i }));
 
     await waitFor(() => {
-      expect(mockGenerate).toHaveBeenCalledWith(
+      expect(mockRequest).toHaveBeenCalledWith(
+        "/api/generate-sync",
         expect.objectContaining({
-          raw_text: "Post about the farm",
-          platforms: ["instagram"],
+          method: "POST",
         }),
       );
     });
   });
 
-  it("shows generated captions after stream completes", async () => {
+  it("shows generated captions after request completes", async () => {
     const user = userEvent.setup();
-    async function* fakeStream() {
-      yield { status: "done", captions: { instagram: "Generated IG caption" } };
-    }
-    mockGenerate.mockReturnValue(fakeStream());
+    mockRequest.mockResolvedValue({ captions: { instagram: "Generated IG caption" } });
 
     renderCreate();
 
@@ -104,10 +96,7 @@ describe("CreatePage", () => {
 
   it("shows send to postiz button after generation", async () => {
     const user = userEvent.setup();
-    async function* fakeStream() {
-      yield { status: "done", captions: { instagram: "Caption" } };
-    }
-    mockGenerate.mockReturnValue(fakeStream());
+    mockRequest.mockResolvedValue({ captions: { instagram: "Caption" } });
     mockSendToPostiz.mockResolvedValue({ draft_ids: ["d1"], platforms: ["instagram"] });
 
     renderCreate();
