@@ -17,7 +17,7 @@ export function DraftsPage() {
     queryFn: () => api.getDrafts(),
   });
 
-  const drafts = allDrafts?.filter((d) => d.status === "draft") ?? [];
+  const drafts = allDrafts ?? [];
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [editedCaptions, setEditedCaptions] = useState<
@@ -203,7 +203,13 @@ function DraftCard({
               : draft.raw_text}
           </p>
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <span>{draft.date}</span>
+            <span>{typeof draft.date === 'string' ? draft.date.split('T')[0] : draft.date}</span>
+            <Badge
+              variant={draft.status === "approved" ? "default" : draft.status === "pending_approval" ? "secondary" : "outline"}
+              className="text-xs px-1.5 py-0"
+            >
+              {draft.status.replace("_", " ")}
+            </Badge>
             {draft.content_pillar && (
               <Badge variant="secondary" className="text-xs px-1.5 py-0">
                 {draft.content_pillar}

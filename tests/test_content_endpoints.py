@@ -128,13 +128,15 @@ def seeded_client(client, db_session):
 
 
 class TestGetDrafts:
-    def test_returns_pending_approval_rows(self, seeded_client):
+    def test_returns_pre_published_rows(self, seeded_client):
         resp = seeded_client.get("/api/drafts")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) == 1
-        assert data[0]["raw_text"] == "Draft content about cows"
-        assert data[0]["status"] == "pending_approval"
+        # Returns draft + pending_approval + approved (not posted)
+        assert len(data) == 2
+        statuses = {d["status"] for d in data}
+        assert "pending_approval" in statuses
+        assert "approved" in statuses
 
     def test_response_shape_matches_schema(self, seeded_client):
         resp = seeded_client.get("/api/drafts")
@@ -159,12 +161,13 @@ class TestGetDrafts:
 
 
 class TestGetCalendar:
-    def test_returns_approved_scheduled_posted(self, seeded_client):
+    def test_returns_all_content_entries(self, seeded_client):
         resp = seeded_client.get("/api/calendar")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["total"] == 2  # approved + posted (no scheduled in seed)
-        assert len(data["entries"]) == 2
+        # Returns all statuses: pending_approval + approved + posted
+        assert data["total"] == 3
+        assert len(data["entries"]) == 3
 
     def test_calendar_entries_sorted_by_date(self, seeded_client):
         resp = seeded_client.get("/api/calendar")

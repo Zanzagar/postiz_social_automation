@@ -70,16 +70,18 @@ def _row_to_calendar_entry(row) -> CalendarEntry:
 
 @router.get("/drafts", response_model=list[ContentRowResponse])
 async def get_drafts(repo: ContentRepository = Depends(get_content_repo)):
-    """Return rows pending approval."""
-    rows = await repo.get_rows_by_status("pending_approval")
+    """Return all pre-published rows (draft, pending_approval, approved)."""
+    rows = []
+    for status in ["draft", "pending_approval", "approved"]:
+        rows.extend(await repo.get_rows_by_status(status))
     return [_row_to_response(r) for r in rows]
 
 
 @router.get("/calendar", response_model=CalendarResponse)
 async def get_calendar(repo: ContentRepository = Depends(get_content_repo)):
-    """Return calendar entries (approved, scheduled, posted)."""
+    """Return all content as calendar entries."""
     entries = []
-    for status in ["approved", "scheduled", "posted"]:
+    for status in ["draft", "pending_approval", "approved", "scheduled", "posted"]:
         rows = await repo.get_rows_by_status(status)
         entries.extend([_row_to_calendar_entry(r) for r in rows])
     entries.sort(key=lambda e: e.date)

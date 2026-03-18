@@ -216,8 +216,9 @@ function MonthlyGrid({
   const entriesByDate = useMemo(() => {
     const map: Record<string, CalendarEntry[]> = {};
     for (const e of entries) {
-      if (!map[e.date]) map[e.date] = [];
-      map[e.date].push(e);
+      const key = format(parseISO(e.date), "yyyy-MM-dd");
+      if (!map[key]) map[key] = [];
+      map[key].push(e);
     }
     return map;
   }, [entries]);
@@ -306,8 +307,9 @@ function WeeklyView({
   const entriesByDate = useMemo(() => {
     const map: Record<string, CalendarEntry[]> = {};
     for (const e of entries) {
-      if (!map[e.date]) map[e.date] = [];
-      map[e.date].push(e);
+      const key = format(parseISO(e.date), "yyyy-MM-dd");
+      if (!map[key]) map[key] = [];
+      map[key].push(e);
     }
     return map;
   }, [entries]);
