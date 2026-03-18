@@ -13,8 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ContentEditor } from "@/components/content/ContentEditor";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
 import {
   format,
   parseISO,
@@ -261,6 +267,15 @@ export function CalendarPage() {
   );
 }
 
+// --- Status dot colors ---
+const STATUS_COLORS: Record<string, string> = {
+  draft: "#9ca3af",
+  pending_approval: "#f59e0b",
+  approved: "#22c55e",
+  scheduled: "#3b82f6",
+  posted: "#8b5cf6",
+};
+
 // --- Monthly Grid ---
 
 function MonthlyGrid({
@@ -274,6 +289,12 @@ function MonthlyGrid({
   pillarColors: Record<string, string>;
   onEntryClick: (entry: CalendarEntry) => void;
 }) {
+  const [expandedDay, setExpandedDay] = useState<{
+    date: string;
+    label: string;
+    entries: CalendarEntry[];
+  } | null>(null);
+
   const days = useMemo(() => {
     const monthStart = startOfMonth(currentDate);
     const monthEnd = endOfMonth(currentDate);
@@ -292,69 +313,167 @@ function MonthlyGrid({
     return map;
   }, [entries]);
 
+  function openDay(day: Date, dayEntries: CalendarEntry[]) {
+    setExpandedDay({
+      date: format(day, "yyyy-MM-dd"),
+      label: format(day, "EEEE, MMMM d"),
+      entries: dayEntries,
+    });
+  }
+
+  const MAX_VISIBLE = 3;
+
   return (
-    <div>
-      {/* Day headers */}
-      <div className="grid grid-cols-7 gap-px text-center text-xs font-medium text-muted-foreground">
-        {DAY_HEADERS.map((d) => (
-          <div key={d} className="py-2">
-            {d}
-          </div>
-        ))}
-      </div>
-
-      {/* Day cells */}
-      <div className="grid grid-cols-7 gap-px">
-        {days.map((day) => {
-          const dateKey = format(day, "yyyy-MM-dd");
-          const dayEntries = entriesByDate[dateKey] ?? [];
-          const inMonth = isSameMonth(day, currentDate);
-          const isToday = isSameDay(day, new Date());
-
-          return (
-            <div
-              key={dateKey}
-              className={`min-h-[80px] rounded-md border p-1.5 ${
-                inMonth ? "bg-background" : "bg-muted/30"
-              } ${isToday ? "ring-2 ring-sage-400" : ""}`}
-            >
-              <span
-                className={`text-xs ${
-                  inMonth ? "text-foreground" : "text-muted-foreground"
-                } ${isToday ? "font-bold" : ""}`}
-              >
-                {format(day, "d")}
-              </span>
-              <div className="mt-1 space-y-0.5">
-                {dayEntries.slice(0, 3).map((entry) => (
-                  <button
-                    key={entry.row_number}
-                    onClick={() => onEntryClick(entry)}
-                    className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[10px] leading-tight hover:bg-muted transition-colors"
-                  >
-                    <span
-                      className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: pillarColors[entry.content_pillar ?? ""] ?? "#9ca3af" }}
-                    />
-                    <span className="shrink-0 text-muted-foreground">
-                      {format(parseISO(entry.date), "h:mma").toLowerCase()}
-                    </span>
-                    <span className="truncate">
-                      {entry.raw_text.slice(0, 15)}
-                    </span>
-                  </button>
-                ))}
-                {dayEntries.length > 3 && (
-                  <span className="text-[10px] text-muted-foreground pl-1">
-                    +{dayEntries.length - 3} more
-                  </span>
-                )}
-              </div>
+    <>
+      <div>
+        {/* Day headers */}
+        <div className="grid grid-cols-7 text-center text-xs font-medium text-muted-foreground border-b">
+          {DAY_HEADERS.map((d) => (
+            <div key={d} className="py-2.5">
+              {d}
             </div>
-          );
-        })}
+          ))}
+        </div>
+
+        {/* Day cells */}
+        <div className="grid grid-cols-7">
+          {days.map((day) => {
+            const dateKey = format(day, "yyyy-MM-dd");
+            const dayEntries = entriesByDate[dateKey] ?? [];
+            const inMonth = isSameMonth(day, currentDate);
+            const isToday = isSameDay(day, new Date());
+            const hasEntries = dayEntries.length > 0;
+            const overflow = dayEntries.length - MAX_VISIBLE;
+
+            return (
+              <div
+                key={dateKey}
+                className={`min-h-[100px] border-b border-r p-1.5 transition-colors ${
+                  inMonth ? "bg-background" : "bg-muted/20"
+                } ${isToday ? "bg-sage-50/50" : ""} ${
+                  hasEntries ? "cursor-pointer hover:bg-muted/20" : ""
+                }`}
+                onClick={() => hasEntries && openDay(day, dayEntries)}
+              >
+                {/* Day number */}
+                <div className="flex items-center justify-between mb-1">
+                  <span
+                    className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                      isToday
+                        ? "bg-sage-600 text-white font-semibold"
+                        : inMonth
+                          ? "text-foreground"
+                          : "text-muted-foreground/50"
+                    }`}
+                  >
+                    {format(day, "d")}
+                  </span>
+                  {dayEntries.length > 0 && (
+                    <span className="text-[10px] text-muted-foreground">
+                      {dayEntries.length}
+                    </span>
+                  )}
+                </div>
+
+                {/* Entry pills */}
+                <div className="space-y-0.5">
+                  {dayEntries.slice(0, MAX_VISIBLE).map((entry) => (
+                    <button
+                      key={entry.row_number}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEntryClick(entry);
+                      }}
+                      className="flex w-full items-center gap-1.5 rounded-[4px] px-1.5 py-[3px] text-left text-[10px] leading-tight transition-colors hover:brightness-95"
+                      style={{
+                        backgroundColor: `${pillarColors[entry.content_pillar ?? ""] ?? "#e5e7eb"}20`,
+                        borderLeft: `2px solid ${pillarColors[entry.content_pillar ?? ""] ?? "#9ca3af"}`,
+                      }}
+                    >
+                      <span
+                        className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: STATUS_COLORS[entry.status] ?? "#9ca3af" }}
+                      />
+                      <span className="truncate">
+                        {entry.raw_text.slice(0, 20)}
+                      </span>
+                    </button>
+                  ))}
+                  {overflow > 0 && (
+                    <button
+                      onClick={() => openDay(day, dayEntries)}
+                      className="w-full rounded-[4px] px-1.5 py-[2px] text-left text-[10px] font-medium text-sage-600 hover:bg-sage-50 transition-colors"
+                    >
+                      +{overflow} more
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </div>
+
+      {/* Day detail dialog */}
+      <Dialog open={!!expandedDay} onOpenChange={(open) => !open && setExpandedDay(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{expandedDay?.label}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+            {expandedDay?.entries.map((entry) => (
+              <button
+                key={entry.row_number}
+                onClick={() => {
+                  setExpandedDay(null);
+                  onEntryClick(entry);
+                }}
+                className="flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/30"
+              >
+                <div
+                  className="mt-1 h-3 w-1 shrink-0 rounded-full"
+                  style={{ backgroundColor: pillarColors[entry.content_pillar ?? ""] ?? "#9ca3af" }}
+                />
+                <div className="flex-1 min-w-0 space-y-1">
+                  <p className="text-sm font-medium leading-tight">
+                    {entry.raw_text.length > 80
+                      ? entry.raw_text.slice(0, 80) + "..."
+                      : entry.raw_text}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">
+                      {format(parseISO(entry.date), "h:mm a")}
+                    </span>
+                    <Badge
+                      variant={statusVariant[entry.status] ?? "outline"}
+                      className="text-[10px] px-1.5 py-0"
+                    >
+                      {entry.status.replace("_", " ")}
+                    </Badge>
+                    {entry.content_pillar && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-1">
+                        <span
+                          className="inline-block h-1.5 w-1.5 rounded-full"
+                          style={{ backgroundColor: pillarColors[entry.content_pillar] ?? "#9ca3af" }}
+                        />
+                        {entry.content_pillar}
+                      </Badge>
+                    )}
+                    {Object.entries(entry.platforms)
+                      .filter(([, v]) => v)
+                      .map(([p]) => (
+                        <Badge key={p} variant="outline" className="text-[10px] px-1 py-0">
+                          {p}
+                        </Badge>
+                      ))}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
