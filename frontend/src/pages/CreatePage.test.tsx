@@ -11,6 +11,10 @@ vi.mock("@/lib/api", () => ({
     uploadFile: vi.fn(),
     reprompt: vi.fn(),
     sendToPostiz: vi.fn(),
+    getTemplates: vi.fn(),
+    generateFromTemplate: vi.fn(),
+    iterate: vi.fn(),
+    getIterations: vi.fn(),
   },
   request: vi.fn(),
   ApiError: class extends Error {
@@ -27,6 +31,9 @@ vi.mock("@/lib/api", () => ({
 import { api, request } from "@/lib/api";
 const mockRequest = vi.mocked(request);
 const mockSendToPostiz = vi.mocked(api.sendToPostiz);
+const mockGetTemplates = vi.mocked(api.getTemplates);
+const mockGenerateFromTemplate = vi.mocked(api.generateFromTemplate);
+const mockIterate = vi.mocked(api.iterate);
 
 function renderCreate() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -39,9 +46,29 @@ function renderCreate() {
   );
 }
 
+const sampleTemplates = [
+  {
+    id: 1,
+    name: "Weekly Farm Update",
+    pillar: "community",
+    platform_instructions: {},
+    raw_text_template: "This week at {{location}}: {{topic}}",
+    variables: [
+      { name: "location", type: "text" },
+      { name: "topic", type: "text" },
+    ],
+    schedule_pattern: null,
+    default_segment_id: null,
+    created_at: "2026-03-17T12:00:00",
+    updated_at: null,
+  },
+];
+
 describe("CreatePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetTemplates.mockResolvedValue([]);
+    vi.mocked(api.getIterations).mockResolvedValue([]);
   });
 
   it("renders form fields", () => {
@@ -107,6 +134,71 @@ describe("CreatePage", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /send to postiz/i })).toBeInTheDocument();
+    });
+  });
+
+  // --- Template selector ---
+
+  it("shows template selector when templates are available", async () => {
+    mockGetTemplates.mockResolvedValue(sampleTemplates);
+    renderCreate();
+
+    await waitFor(() => {
+      expect(screen.getByText(/template/i)).toBeInTheDocument();
+    });
+  });
+
+  it("shows variable inputs when a template is selected", async () => {
+    const user = userEvent.setup();
+    mockGetTemplates.mockResolvedValue(sampleTemplates);
+    renderCreate();
+
+    await waitFor(() => {
+      expect(screen.getByText("Weekly Farm Update")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Weekly Farm Update"));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/location/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/topic/i)).toBeInTheDocument();
+    });
+  });
+
+  it("pre-fills raw text from template when selected", async () => {
+    const user = userEvent.setup();
+    mockGetTemplates.mockResolvedValue(sampleTemplates);
+    renderCreate();
+
+    await waitFor(() => {
+      expect(screen.getByText("Weekly Farm Update")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Weekly Farm Update"));
+
+    await waitFor(() => {
+      const textarea = screen.getByLabelText(/raw text/i) as HTMLTextAreaElement;
+      expect(textarea.value).toContain("{{location}}");
+    });
+  });
+
+  // --- Inline iteration after generation ---
+
+  it("shows per-platform iterate button after generation", async () => {
+    const user = userEvent.setup();
+    mockRequest.mockResolvedValue({
+      captions: { instagram: "IG caption" },
+      row_id: 42,
+    });
+
+    renderCreate();
+
+    await user.type(screen.getByLabelText(/raw text/i), "Content");
+    await user.click(screen.getByLabelText(/instagram/i));
+    await user.click(screen.getByRole("button", { name: /generate/i }));
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/instruction/i)).toBeInTheDocument();
     });
   });
 });
