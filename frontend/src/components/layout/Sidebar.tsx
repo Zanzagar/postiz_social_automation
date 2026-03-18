@@ -6,6 +6,8 @@ import {
   FileCheck,
   CalendarDays,
   Lightbulb,
+  FileText,
+  Settings,
   Activity,
   LogOut,
   ExternalLink,
@@ -18,6 +20,8 @@ const navItems = [
   { to: "/drafts", label: "Drafts", icon: FileCheck },
   { to: "/calendar", label: "Calendar", icon: CalendarDays },
   { to: "/suggestions", label: "Suggestions", icon: Lightbulb },
+  { to: "/templates", label: "Templates", icon: FileText },
+  { to: "/settings", label: "Settings", icon: Settings },
   { to: "/health", label: "Health", icon: Activity },
 ];
 

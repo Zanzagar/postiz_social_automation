@@ -6,6 +6,8 @@ import { DraftsPage } from "@/pages/DraftsPage";
 import { CalendarPage } from "@/pages/CalendarPage";
 import { SuggestionsPage } from "@/pages/SuggestionsPage";
 import { HealthPage } from "@/pages/HealthPage";
+import { TemplatesPage } from "@/pages/TemplatesPage";
+import { SettingsPage } from "@/pages/SettingsPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppShell } from "@/components/layout/AppShell";
 
@@ -25,6 +27,8 @@ function App() {
         <Route path="drafts" element={<DraftsPage />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="suggestions" element={<SuggestionsPage />} />
+        <Route path="templates" element={<TemplatesPage />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route path="health" element={<HealthPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
