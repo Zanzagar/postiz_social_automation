@@ -559,9 +559,9 @@ export function CreatePage() {
       )}
 
       {/* Schedule date & time */}
-      <div className="flex gap-3">
-        <div className="flex-1 space-y-2">
-          <Label htmlFor="schedule-date">Schedule Date</Label>
+      <div className="flex gap-3 max-w-sm">
+        <div className="space-y-2">
+          <Label htmlFor="schedule-date">Date</Label>
           <Input
             id="schedule-date"
             type="date"
@@ -569,7 +569,7 @@ export function CreatePage() {
             onChange={(e) => setScheduledDate(e.target.value)}
           />
         </div>
-        <div className="w-32 space-y-2">
+        <div className="space-y-2">
           <Label htmlFor="schedule-time">Time</Label>
           <Input
             id="schedule-time"
