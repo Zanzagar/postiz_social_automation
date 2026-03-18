@@ -15,6 +15,7 @@ vi.mock("@/lib/api", () => ({
     generateFromTemplate: vi.fn(),
     iterate: vi.fn(),
     getIterations: vi.fn(),
+    editDraft: vi.fn(),
   },
   request: vi.fn(),
   ApiError: class extends Error {
@@ -73,7 +74,7 @@ describe("CreatePage", () => {
 
   it("renders form fields", () => {
     renderCreate();
-    expect(screen.getByLabelText(/raw text/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/what do you want to post about/i)).toBeInTheDocument();
     expect(screen.getByText(/platforms/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /generate/i })).toBeInTheDocument();
   });
@@ -92,7 +93,7 @@ describe("CreatePage", () => {
 
     renderCreate();
 
-    await user.type(screen.getByLabelText(/raw text/i), "Post about the farm");
+    await user.type(screen.getByLabelText(/what do you want to post about/i), "Post about the farm");
     await user.click(screen.getByLabelText(/instagram/i));
     await user.click(screen.getByRole("button", { name: /generate/i }));
 
@@ -112,7 +113,7 @@ describe("CreatePage", () => {
 
     renderCreate();
 
-    await user.type(screen.getByLabelText(/raw text/i), "Post about cows");
+    await user.type(screen.getByLabelText(/what do you want to post about/i), "Post about cows");
     await user.click(screen.getByLabelText(/instagram/i));
     await user.click(screen.getByRole("button", { name: /generate/i }));
 
@@ -128,7 +129,7 @@ describe("CreatePage", () => {
 
     renderCreate();
 
-    await user.type(screen.getByLabelText(/raw text/i), "Content");
+    await user.type(screen.getByLabelText(/what do you want to post about/i), "Content");
     await user.click(screen.getByLabelText(/instagram/i));
     await user.click(screen.getByRole("button", { name: /generate/i }));
 
@@ -165,7 +166,7 @@ describe("CreatePage", () => {
     });
   });
 
-  it("pre-fills raw text from template when selected", async () => {
+  it("shows template preview when template is selected", async () => {
     const user = userEvent.setup();
     mockGetTemplates.mockResolvedValue(sampleTemplates);
     renderCreate();
@@ -177,8 +178,8 @@ describe("CreatePage", () => {
     await user.click(screen.getByText("Weekly Farm Update"));
 
     await waitFor(() => {
-      const textarea = screen.getByLabelText(/raw text/i) as HTMLTextAreaElement;
-      expect(textarea.value).toContain("{{location}}");
+      // Template preview shown with "Fill in the fields" hint
+      expect(screen.getByText(/fill in the fields/i)).toBeInTheDocument();
     });
   });
 
@@ -193,7 +194,7 @@ describe("CreatePage", () => {
 
     renderCreate();
 
-    await user.type(screen.getByLabelText(/raw text/i), "Content");
+    await user.type(screen.getByLabelText(/what do you want to post about/i), "Content");
     await user.click(screen.getByLabelText(/instagram/i));
     await user.click(screen.getByRole("button", { name: /generate/i }));
 

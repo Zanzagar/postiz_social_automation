@@ -21,6 +21,7 @@ import {
   FileText,
   RotateCcw,
   Send,
+  Save,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -64,8 +65,8 @@ function SendToPostizButton({
   }
 
   return (
-    <div className="space-y-2">
-      <Button onClick={handleSend} disabled={isSending} className="w-full">
+    <>
+      <Button onClick={handleSend} disabled={isSending} className="flex-1">
         {isSending ? (
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         ) : (
@@ -80,7 +81,7 @@ function SendToPostizButton({
           {sendResult}
         </p>
       )}
-    </div>
+    </>
   );
 }
 
@@ -119,6 +120,8 @@ export function CreatePage() {
   const [iteratePlatform, setIteratePlatform] = useState("");
   const [isIterating, setIsIterating] = useState(false);
   const [contentRowId, setContentRowId] = useState<number | null>(null);
+
+  const [savedMessage, setSavedMessage] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -244,6 +247,16 @@ export function CreatePage() {
     } finally {
       setIsIterating(false);
       setIteratePlatform("");
+    }
+  }
+
+  async function handleSaveDraft() {
+    if (!contentRowId || !captions) return;
+    try {
+      await api.editDraft(contentRowId, captions);
+      setSavedMessage("Saved to Drafts — find it under Review Drafts.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
     }
   }
 
@@ -392,21 +405,45 @@ export function CreatePage() {
         </CardContent>
       </Card>
 
-      {/* Caption / text input */}
-      <div className="space-y-2">
-        <Label htmlFor="raw-text">Raw Text</Label>
-        <Textarea
-          id="raw-text"
-          value={rawText}
-          onChange={(e) => setRawText(e.target.value)}
-          placeholder="Describe what you want to post..."
-          rows={4}
-          maxLength={2000}
-        />
-        <p className="text-right text-xs text-muted-foreground">
-          {rawText.length}/2000
-        </p>
-      </div>
+      {/* Post text — hidden when template selected (template + variables determine it) */}
+      {selectedTemplate ? (
+        <div className="space-y-2">
+          <Label>Post Text (from template)</Label>
+          <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm leading-relaxed">
+            {rawText.split(/(\{\{.+?\}\})/).map((part, i) =>
+              part.match(/^\{\{(.+?)\}\}$/) ? (
+                <span
+                  key={i}
+                  className="mx-0.5 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800"
+                >
+                  {variableValues[part.match(/^\{\{(.+?)\}\}$/)![1]] ||
+                    part.match(/^\{\{(.+?)\}\}$/)![1]}
+                </span>
+              ) : (
+                <span key={i}>{part}</span>
+              ),
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Fill in the fields above to complete the template text.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor="raw-text">What do you want to post about?</Label>
+          <Textarea
+            id="raw-text"
+            value={rawText}
+            onChange={(e) => setRawText(e.target.value)}
+            placeholder="Describe what you want to post — the AI will write platform-specific captions from this..."
+            rows={4}
+            maxLength={2000}
+          />
+          <p className="text-right text-xs text-muted-foreground">
+            {rawText.length}/2000
+          </p>
+        </div>
+      )}
 
       {/* Platforms */}
       <fieldset>
@@ -535,8 +572,26 @@ export function CreatePage() {
             </Card>
           ))}
 
-          {/* Send to Postiz */}
-          <SendToPostizButton captions={captions} formData={formData} />
+          {/* Actions: Save Draft + Send to Postiz */}
+          <div className="space-y-2">
+            {savedMessage && (
+              <p className="text-sm text-sage-600 rounded-md bg-sage-50 px-3 py-2">
+                {savedMessage}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={handleSaveDraft}
+                disabled={!contentRowId}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                Save as Draft
+              </Button>
+              <SendToPostizButton captions={captions} formData={formData} />
+            </div>
+          </div>
         </div>
       )}
     </div>
