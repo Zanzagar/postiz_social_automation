@@ -170,6 +170,81 @@ export interface ApproveResponse {
   postiz_ids: string[];
 }
 
+// --- Iteration Types ---
+
+export interface IterateRequest {
+  content_row_id: number;
+  platform: string;
+  instruction: string;
+  mode?: string;
+}
+
+export interface IterateResponse {
+  caption: string;
+  iteration_id: number;
+}
+
+export interface IterationRecord {
+  id: number;
+  content_row_id: number;
+  platform: string;
+  old_caption: string | null;
+  new_caption: string;
+  refinement_instruction: string | null;
+  mode: string;
+  created_by: number | null;
+  created_at: string;
+}
+
+// --- Template Types ---
+
+export interface TemplateVariable {
+  name: string;
+  type: string;
+}
+
+export interface Template {
+  id: number;
+  name: string;
+  pillar: string | null;
+  platform_instructions: Record<string, string>;
+  raw_text_template: string | null;
+  variables: TemplateVariable[];
+  schedule_pattern: string | null;
+  default_segment_id: number | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface CreateTemplateRequest {
+  name: string;
+  pillar?: string;
+  platform_instructions?: Record<string, string>;
+  raw_text_template: string;
+  variables?: TemplateVariable[];
+  schedule_pattern?: string;
+  default_segment_id?: number;
+}
+
+export interface GenerateFromTemplateRequest {
+  variable_values: Record<string, string>;
+  platforms: string[];
+  scheduled_date: string;
+}
+
+// --- Publish Config Types ---
+
+export interface PlatformPublishConfig {
+  platform: string;
+  enabled: boolean;
+  delay_hours: number;
+  pillar_overrides: Record<string, boolean>;
+}
+
+export interface PublishConfigResponse {
+  platforms: PlatformPublishConfig[];
+}
+
 // --- API Functions ---
 
 export const api = {
@@ -248,6 +323,66 @@ export const api = {
     return request<UploadResponse>("/api/upload", {
       method: "POST",
       body: formData,
+    });
+  },
+
+  // Iteration
+  iterate(data: IterateRequest) {
+    return request<IterateResponse>("/api/iterate", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  getIterations(contentId: number) {
+    return request<IterationRecord[]>(`/api/iterations/${contentId}`);
+  },
+
+  // Templates
+  getTemplates() {
+    return request<Template[]>("/api/templates");
+  },
+
+  getTemplate(templateId: number) {
+    return request<Template>(`/api/templates/${templateId}`);
+  },
+
+  createTemplate(data: CreateTemplateRequest) {
+    return request<Template>("/api/templates", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateTemplate(templateId: number, data: CreateTemplateRequest) {
+    return request<Template>(`/api/templates/${templateId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteTemplate(templateId: number) {
+    return request<{ deleted: boolean }>(`/api/templates/${templateId}`, {
+      method: "DELETE",
+    });
+  },
+
+  generateFromTemplate(templateId: number, data: GenerateFromTemplateRequest) {
+    return request<ContentRow>(`/api/templates/${templateId}/generate`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Publish Config
+  getPublishConfig() {
+    return request<PublishConfigResponse>("/api/settings/publish");
+  },
+
+  updatePublishConfig(platforms: PlatformPublishConfig[]) {
+    return request<PublishConfigResponse>("/api/settings/publish", {
+      method: "PUT",
+      body: JSON.stringify({ platforms }),
     });
   },
 };

@@ -5,6 +5,14 @@ import {
   getToken,
   setToken,
   clearToken,
+  type IterateRequest,
+  type IterateResponse,
+  type IterationRecord,
+  type Template,
+  type CreateTemplateRequest,
+  type GenerateFromTemplateRequest,
+  type PlatformPublishConfig,
+  type PublishConfigResponse,
 } from "./api";
 
 // Mock fetch globally
@@ -188,5 +196,229 @@ describe("api endpoints use correct paths", () => {
     expect(opts.body).toBeInstanceOf(FormData);
     // Content-Type should NOT be set for FormData (browser sets boundary)
     expect(opts.headers["Content-Type"]).toBeUndefined();
+  });
+});
+
+// --- Iteration endpoints ---
+
+describe("api.iterate", () => {
+  beforeEach(() => {
+    setToken("jwt");
+  });
+
+  it("POSTs to /api/iterate with correct body", async () => {
+    const mockResponse: IterateResponse = { caption: "New caption", iteration_id: 42 };
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(mockResponse),
+    });
+
+    const req: IterateRequest = {
+      content_row_id: 1,
+      platform: "facebook",
+      instruction: "Make it shorter",
+      mode: "refine",
+    };
+    const result = await api.iterate(req);
+
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/iterate");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual(req);
+    expect(result.caption).toBe("New caption");
+    expect(result.iteration_id).toBe(42);
+  });
+});
+
+describe("api.getIterations", () => {
+  beforeEach(() => {
+    setToken("jwt");
+  });
+
+  it("GETs /api/iterations/{contentId}", async () => {
+    const mockIterations: IterationRecord[] = [
+      {
+        id: 1,
+        content_row_id: 5,
+        platform: "instagram",
+        old_caption: "Old text",
+        new_caption: "New text",
+        refinement_instruction: "Make it fun",
+        mode: "refine",
+        created_by: null,
+        created_at: "2026-03-17T12:00:00",
+      },
+    ];
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(mockIterations),
+    });
+
+    const result = await api.getIterations(5);
+
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/iterations/5");
+    expect(result).toHaveLength(1);
+    expect(result[0].platform).toBe("instagram");
+  });
+});
+
+// --- Template endpoints ---
+
+describe("api templates CRUD", () => {
+  const sampleTemplate: Template = {
+    id: 1,
+    name: "Weekly Update",
+    pillar: "spiritual_education",
+    platform_instructions: { facebook: "Keep formal" },
+    raw_text_template: "This week at {{location}}: {{topic}}",
+    variables: [
+      { name: "location", type: "text" },
+      { name: "topic", type: "text" },
+    ],
+    schedule_pattern: "weekly",
+    default_segment_id: null,
+    created_at: "2026-03-17T12:00:00",
+    updated_at: null,
+  };
+
+  beforeEach(() => {
+    setToken("jwt");
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(sampleTemplate),
+    });
+  });
+
+  it("getTemplates GETs /api/templates", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve([sampleTemplate]),
+    });
+
+    const result = await api.getTemplates();
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/templates");
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("Weekly Update");
+  });
+
+  it("getTemplate GETs /api/templates/{id}", async () => {
+    const result = await api.getTemplate(1);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/templates/1");
+    expect(result.name).toBe("Weekly Update");
+  });
+
+  it("createTemplate POSTs to /api/templates", async () => {
+    const req: CreateTemplateRequest = {
+      name: "Weekly Update",
+      pillar: "spiritual_education",
+      raw_text_template: "This week: {{topic}}",
+      variables: [{ name: "topic", type: "text" }],
+    };
+    await api.createTemplate(req);
+
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/templates");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual(req);
+  });
+
+  it("updateTemplate PUTs to /api/templates/{id}", async () => {
+    const req: CreateTemplateRequest = {
+      name: "Updated",
+      raw_text_template: "New text",
+    };
+    await api.updateTemplate(1, req);
+
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/templates/1");
+    expect(mockFetch.mock.calls[0][1].method).toBe("PUT");
+  });
+
+  it("deleteTemplate DELETEs /api/templates/{id}", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ deleted: true }),
+    });
+
+    const result = await api.deleteTemplate(1);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/templates/1");
+    expect(mockFetch.mock.calls[0][1].method).toBe("DELETE");
+    expect(result.deleted).toBe(true);
+  });
+
+  it("generateFromTemplate POSTs to /api/templates/{id}/generate", async () => {
+    // Returns a ContentRow, not a Template
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          row_number: 10,
+          date: "2026-03-20",
+          raw_text: "Resolved text",
+          status: "draft",
+        }),
+    });
+
+    const req: GenerateFromTemplateRequest = {
+      variable_values: { location: "Gita Valley", topic: "Cow Care" },
+      platforms: ["facebook", "instagram"],
+      scheduled_date: "2026-03-20",
+    };
+    const result = await api.generateFromTemplate(1, req);
+
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/templates/1/generate");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+    expect(result.row_number).toBe(10);
+  });
+});
+
+// --- Publish config endpoints ---
+
+describe("api publish config", () => {
+  const sampleConfig: PublishConfigResponse = {
+    platforms: [
+      {
+        platform: "facebook",
+        enabled: true,
+        delay_hours: 2,
+        pillar_overrides: {},
+      },
+      {
+        platform: "instagram",
+        enabled: false,
+        delay_hours: 4,
+        pillar_overrides: { spiritual_education: true },
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    setToken("jwt");
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(sampleConfig),
+    });
+  });
+
+  it("getPublishConfig GETs /api/settings/publish", async () => {
+    const result = await api.getPublishConfig();
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/settings/publish");
+    expect(result.platforms).toHaveLength(2);
+    expect(result.platforms[0].platform).toBe("facebook");
+  });
+
+  it("updatePublishConfig PUTs to /api/settings/publish", async () => {
+    const configs: PlatformPublishConfig[] = [
+      { platform: "facebook", enabled: true, delay_hours: 1, pillar_overrides: {} },
+    ];
+    await api.updatePublishConfig(configs);
+
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/settings/publish");
+    expect(mockFetch.mock.calls[0][1].method).toBe("PUT");
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ platforms: configs });
   });
 });
