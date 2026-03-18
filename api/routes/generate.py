@@ -111,21 +111,26 @@ async def generate(
 async def generate_sync(
     req: GenerateRequest,
     persist: bool = True,
+    skip_ai: bool = False,
     generator=Depends(get_caption_generator),
     repo: ContentRepository = Depends(get_content_repo),
 ):
     """Non-streaming caption generation (works through proxies).
 
-    Set persist=false to generate captions without creating a new content row
-    (useful for merging into an existing draft).
+    Set persist=false to generate captions without creating a new content row.
+    Set skip_ai=true to save the raw text as-is for all platforms (no AI).
     """
-    row = _build_content_row(req)
-    try:
-        captions = await asyncio.to_thread(generator.generate_captions, row)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    if skip_ai:
+        captions = {p: req.raw_text for p in req.platforms}
+    else:
+        row = _build_content_row(req)
+        try:
+            captions = await asyncio.to_thread(generator.generate_captions, row)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        captions = {str(k): v for k, v in captions.items()}
 
-    result: dict = {"captions": {str(k): v for k, v in captions.items()}}
+    result: dict = {"captions": captions}
     if persist:
         row_id = await _persist_generated(req, captions, repo)
         result["row_id"] = row_id

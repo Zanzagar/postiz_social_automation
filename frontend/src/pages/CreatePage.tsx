@@ -280,6 +280,39 @@ export function CreatePage() {
     }
   }
 
+  async function handleSaveAsIs() {
+    if (!rawText.trim() || selectedPlatforms.length === 0) {
+      setError("Please enter text and select at least one platform.");
+      return;
+    }
+    setError("");
+    setIsGenerating(true);
+    setCaptions(null);
+    setContentRowId(null);
+    try {
+      const data: GenerateRequest = {
+        raw_text: rawText,
+        media_url: mediaUrl || null,
+        platforms: selectedPlatforms,
+        scheduled_date: scheduledDate,
+        content_pillar: selectedPillar || null,
+      };
+      const result = await request<{
+        captions: Record<string, string>;
+        row_id?: number;
+      }>("/api/generate-sync?skip_ai=true", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      setCaptions(result.captions);
+      if (result.row_id) setContentRowId(result.row_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
   async function handleBatchSchedule() {
     if (!selectedTemplate || selectedPlatforms.length === 0) return;
     setIsBatchGenerating(true);
@@ -595,23 +628,32 @@ export function CreatePage() {
           <CardContent className="space-y-4 pt-4">
             <div className="space-y-3">
               {/* Option 1: Create one post now */}
-              <Button
-                onClick={handleGenerate}
-                disabled={isGenerating || selectedPlatforms.length === 0}
-                className="w-full"
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
+              {isGenerating ? (
+                <Button disabled className="w-full">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Working...
+                </Button>
+              ) : (
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleSaveAsIs}
+                    disabled={selectedPlatforms.length === 0}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    <Save className="mr-2 h-4 w-4" />
+                    Save as Draft
+                  </Button>
+                  <Button
+                    onClick={handleGenerate}
+                    disabled={selectedPlatforms.length === 0}
+                    className="flex-1"
+                  >
                     <Sparkles className="mr-2 h-4 w-4" />
-                    Create This Post Now
-                  </>
-                )}
-              </Button>
+                    Generate AI Captions
+                  </Button>
+                </div>
+              )}
 
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
@@ -663,25 +705,32 @@ export function CreatePage() {
             )}
           </CardContent>
         </Card>
-      ) : (
-        /* Freeform or template without schedule: single generate button */
-        <Button
-          onClick={handleGenerate}
-          disabled={isGenerating || selectedPlatforms.length === 0}
-          className="w-full"
-        >
-          {isGenerating ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <Sparkles className="mr-2 h-4 w-4" />
-              {selectedTemplate ? "Create This Post" : "Generate Captions"}
-            </>
-          )}
+      ) : isGenerating ? (
+        <Button disabled className="w-full">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Working...
         </Button>
+      ) : (
+        /* Freeform or template without schedule: two options */
+        <div className="flex gap-2">
+          <Button
+            onClick={handleSaveAsIs}
+            disabled={selectedPlatforms.length === 0}
+            variant="outline"
+            className="flex-1"
+          >
+            <Save className="mr-2 h-4 w-4" />
+            Save as Draft
+          </Button>
+          <Button
+            onClick={handleGenerate}
+            disabled={selectedPlatforms.length === 0}
+            className="flex-1"
+          >
+            <Sparkles className="mr-2 h-4 w-4" />
+            Generate AI Captions
+          </Button>
+        </div>
       )}
 
       {/* Progress */}

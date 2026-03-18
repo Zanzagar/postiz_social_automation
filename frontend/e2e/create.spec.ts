@@ -19,7 +19,7 @@ test.describe("Create Page", () => {
     await expect(page.getByText("Platforms")).toBeVisible();
     await expect(page.getByLabel("Date")).toBeVisible();
     await expect(
-      page.getByRole("button", { name: /generate captions/i }),
+      page.getByRole("button", { name: /generate ai captions/i }),
     ).toBeVisible();
   });
 
@@ -41,7 +41,7 @@ test.describe("Create Page", () => {
     page,
   }) => {
     await expect(
-      page.getByRole("button", { name: /generate captions/i }),
+      page.getByRole("button", { name: /generate ai captions/i }),
     ).toBeDisabled();
   });
 
@@ -71,7 +71,7 @@ test.describe("Create Page", () => {
     await page.getByLabel("Instagram").click();
     await page.getByLabel("Facebook").click();
 
-    await page.getByRole("button", { name: /generate captions/i }).click();
+    await page.getByRole("button", { name: /generate ai captions/i }).click();
 
     await expect(page.getByText("Test IG caption for kirtan")).toBeVisible();
     await expect(page.getByText("Test FB caption for kirtan")).toBeVisible();
@@ -91,7 +91,7 @@ test.describe("Create Page", () => {
 
     await page.getByLabel(/what do you want to post/i).fill("Test content");
     await page.getByLabel("Instagram").click();
-    await page.getByRole("button", { name: /generate captions/i }).click();
+    await page.getByRole("button", { name: /generate ai captions/i }).click();
 
     await expect(page.getByText("Test caption for controls")).toBeVisible();
     await expect(
@@ -126,7 +126,7 @@ test.describe("Create Page", () => {
 
     await page.getByLabel(/what do you want to post/i).fill("Test");
     await page.getByLabel("Instagram").click();
-    await page.getByRole("button", { name: /generate captions/i }).click();
+    await page.getByRole("button", { name: /generate ai captions/i }).click();
     await expect(page.getByText("Caption to send")).toBeVisible();
 
     await page.getByRole("button", { name: /send to postiz/i }).click();
@@ -147,7 +147,7 @@ test.describe("Create Page", () => {
 
     await page.getByLabel(/what do you want to post/i).fill("Test");
     await page.getByLabel("Instagram").click();
-    await page.getByRole("button", { name: /generate captions/i }).click();
+    await page.getByRole("button", { name: /generate ai captions/i }).click();
     await expect(page.getByText("Original caption")).toBeVisible();
 
     // The caption textarea in the result card
