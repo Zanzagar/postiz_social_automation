@@ -126,6 +126,38 @@ class ContentRepository:
         result = await self.session.execute(select(PublishConfig).order_by(PublishConfig.platform))
         return list(result.scalars().all())
 
+    # --- Sheet Sync ---
+
+    async def find_by_sheet_row(self, sheet_row_number: int) -> ContentRow | None:
+        result = await self.session.execute(
+            select(ContentRow).where(ContentRow.sheet_row_number == sheet_row_number)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_rows_needing_sheet_sync(self) -> list[ContentRow]:
+        """Get sheet-originated rows where updated_at > sheet_synced_at (or never synced)."""
+        result = await self.session.execute(
+            select(ContentRow).where(
+                ContentRow.source == "sheet",
+                ContentRow.sheet_row_number.isnot(None),
+                (
+                    (ContentRow.sheet_synced_at.is_(None))
+                    | (ContentRow.updated_at > ContentRow.sheet_synced_at)
+                ),
+            )
+        )
+        return list(result.scalars().all())
+
+    async def mark_sheet_synced(self, row_id: int) -> None:
+        await self.session.execute(
+            update(ContentRow)
+            .where(ContentRow.id == row_id)
+            .values(sheet_synced_at=datetime.now(UTC))
+        )
+        await self.session.commit()
+
+    # --- PublishConfig ---
+
     async def upsert_publish_config(self, platform: str, data: dict) -> PublishConfig:
         result = await self.session.execute(
             select(PublishConfig).where(PublishConfig.platform == platform)
