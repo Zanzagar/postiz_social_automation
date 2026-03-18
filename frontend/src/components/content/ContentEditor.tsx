@@ -329,28 +329,45 @@ export function ContentEditor({
             <div>
               <Label className="text-sm font-medium">Repurpose for these platforms:</Label>
               <div className="flex flex-wrap gap-3 mt-2">
-                {ALL_PLATFORMS.map(({ id, label }) => (
-                  <label key={id} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={repurposePlatforms.includes(id)}
-                      onCheckedChange={() => toggleRepurposePlatform(id)}
-                      aria-label={label}
-                    />
-                    {label}
-                  </label>
-                ))}
+                {ALL_PLATFORMS.map(({ id, label }) => {
+                  const hasExisting = contentRow.captions[id] != null;
+                  const disabledByMerge = hasExisting && repurposeTarget === "merge";
+                  return (
+                    <label
+                      key={id}
+                      className={`flex items-center gap-2 text-sm ${disabledByMerge ? "opacity-50" : ""}`}
+                    >
+                      <Checkbox
+                        checked={repurposePlatforms.includes(id)}
+                        onCheckedChange={() => !disabledByMerge && toggleRepurposePlatform(id)}
+                        disabled={disabledByMerge}
+                        aria-label={label}
+                      />
+                      {label}
+                      {disabledByMerge && (
+                        <span className="text-[10px] text-muted-foreground">(has caption)</span>
+                      )}
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
             {/* Merge vs separate — only for unposted content */}
-            {!isPosted && repurposePlatforms.length > 0 && (
+            {!isPosted && (
               <div className="rounded-md border bg-muted/10 px-3 py-2.5 space-y-1.5">
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                   <input
                     type="radio"
                     name="repurpose-target"
                     checked={repurposeTarget === "merge"}
-                    onChange={() => setRepurposeTarget("merge")}
+                    onChange={() => {
+                      setRepurposeTarget("merge");
+                      // Deselect platforms that already have captions
+                      setRepurposePlatforms((prev) =>
+                        prev.filter((p) => contentRow.captions[p] == null),
+                      );
+                    }}
                     className="accent-sage-600"
                   />
                   <span>
