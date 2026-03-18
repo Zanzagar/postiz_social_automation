@@ -132,6 +132,46 @@ class EditCaptionsRequest(BaseModel):
 # --- Iteration ---
 
 
+# --- Templates ---
+
+
+class TemplateVariable(BaseModel):
+    name: str
+    type: str = "text"
+
+
+class TemplateCreateRequest(BaseModel):
+    name: str
+    pillar: str | None = None
+    platform_instructions: dict[str, str] = {}
+    raw_text_template: str
+    variables: list[TemplateVariable] = []
+    schedule_pattern: str | None = None
+    default_segment_id: int | None = None
+
+
+class TemplateResponse(BaseModel):
+    id: int
+    name: str
+    pillar: str | None
+    platform_instructions: dict[str, str]
+    raw_text_template: str | None
+    variables: list[TemplateVariable]
+    schedule_pattern: str | None
+    default_segment_id: int | None
+    created_at: datetime
+    updated_at: datetime | None
+
+
+class GenerateFromTemplateRequest(BaseModel):
+    variable_values: dict[str, str]
+    platforms: list[str]
+    scheduled_date: str
+
+
+# --- Iteration ---
+
+
 class IterateRequest(BaseModel):
     content_row_id: int
     platform: str
