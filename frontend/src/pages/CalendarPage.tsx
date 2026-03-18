@@ -6,6 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ContentEditor } from "@/components/content/ContentEditor";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import {
@@ -20,9 +27,22 @@ import {
   isSameDay,
   addMonths,
   addWeeks,
+  addDays,
+  isWithinInterval,
 } from "date-fns";
 
 type CalendarView = "monthly" | "weekly" | "list";
+
+type ListRange = "upcoming" | "past_week" | "past_month" | "next_2_weeks" | "next_month" | "all";
+
+const LIST_RANGE_OPTIONS: { value: ListRange; label: string }[] = [
+  { value: "upcoming", label: "2 weeks back + 4 weeks ahead" },
+  { value: "past_week", label: "Past week" },
+  { value: "past_month", label: "Past month" },
+  { value: "next_2_weeks", label: "Next 2 weeks" },
+  { value: "next_month", label: "Next month" },
+  { value: "all", label: "All content" },
+];
 
 const statusVariant: Record<
   string,
@@ -31,17 +51,6 @@ const statusVariant: Record<
   draft: "outline",
   scheduled: "default",
   posted: "secondary",
-};
-
-const PILLAR_COLORS: Record<string, string> = {
-  spiritual_education: "bg-amber-500",
-  spiritual: "bg-amber-500",
-  community: "bg-emerald-500",
-  farm: "bg-lime-500",
-  events: "bg-blue-500",
-  behind_scenes: "bg-purple-500",
-  seasonal: "bg-rose-500",
-  collaborative: "bg-cyan-500",
 };
 
 const DAY_HEADERS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -65,10 +74,29 @@ function entryToContentRow(entry: CalendarEntry): ContentRow {
   };
 }
 
+function getListDateRange(range: ListRange): { start: Date; end: Date } | null {
+  const now = new Date();
+  switch (range) {
+    case "upcoming":
+      return { start: addDays(now, -14), end: addDays(now, 28) };
+    case "past_week":
+      return { start: addDays(now, -7), end: now };
+    case "past_month":
+      return { start: addDays(now, -30), end: now };
+    case "next_2_weeks":
+      return { start: now, end: addDays(now, 14) };
+    case "next_month":
+      return { start: now, end: addDays(now, 30) };
+    case "all":
+      return null;
+  }
+}
+
 export function CalendarPage() {
   const queryClient = useQueryClient();
-  const [view, setView] = useState<CalendarView>("list");
+  const [view, setView] = useState<CalendarView>("weekly");
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [listRange, setListRange] = useState<ListRange>("upcoming");
   const [selectedContent, setSelectedContent] = useState<ContentRow | null>(
     null,
   );
@@ -79,7 +107,20 @@ export function CalendarPage() {
   });
 
   const entries = data?.entries ?? [];
-  const editorMode = selectedContent?.status === "posted" ? "repurpose" : "refine";
+
+  // Fetch pillars for color dots
+  const { data: pillars = [] } = useQuery({
+    queryKey: ["pillars"],
+    queryFn: () => api.getPillars(),
+  });
+
+  const pillarColors = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of pillars) {
+      if (p.color) map[p.name] = p.color;
+    }
+    return map;
+  }, [pillars]);
 
   if (isLoading) {
     return (
@@ -160,11 +201,31 @@ export function CalendarPage() {
         </div>
       )}
 
+      {/* Date range selector for list view */}
+      {view === "list" && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Showing:</span>
+          <Select value={listRange} onValueChange={(v) => setListRange(v as ListRange)}>
+            <SelectTrigger className="w-[260px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LIST_RANGE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Views */}
       {view === "monthly" && (
         <MonthlyGrid
           currentDate={currentDate}
           entries={entries}
+          pillarColors={pillarColors}
           onEntryClick={handleEntryClick}
         />
       )}
@@ -172,17 +233,23 @@ export function CalendarPage() {
         <WeeklyView
           currentDate={currentDate}
           entries={entries}
+          pillarColors={pillarColors}
           onEntryClick={handleEntryClick}
         />
       )}
       {view === "list" && (
-        <ListView entries={entries} onEntryClick={handleEntryClick} />
+        <ListView
+          entries={entries}
+          listRange={listRange}
+          pillarColors={pillarColors}
+          onEntryClick={handleEntryClick}
+        />
       )}
 
       {/* ContentEditor modal */}
       <ContentEditor
         contentRow={selectedContent}
-        mode={editorMode}
+        mode="refine"
         isOpen={!!selectedContent}
         onClose={() => setSelectedContent(null)}
         onSave={() => {
@@ -199,10 +266,12 @@ export function CalendarPage() {
 function MonthlyGrid({
   currentDate,
   entries,
+  pillarColors,
   onEntryClick,
 }: {
   currentDate: Date;
   entries: CalendarEntry[];
+  pillarColors: Record<string, string>;
   onEntryClick: (entry: CalendarEntry) => void;
 }) {
   const days = useMemo(() => {
@@ -264,9 +333,8 @@ function MonthlyGrid({
                     className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[10px] leading-tight hover:bg-muted transition-colors"
                   >
                     <span
-                      className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
-                        PILLAR_COLORS[entry.content_pillar ?? ""] ?? "bg-gray-400"
-                      }`}
+                      className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: pillarColors[entry.content_pillar ?? ""] ?? "#9ca3af" }}
                     />
                     <span className="shrink-0 text-muted-foreground">
                       {format(parseISO(entry.date), "h:mma").toLowerCase()}
@@ -295,10 +363,12 @@ function MonthlyGrid({
 function WeeklyView({
   currentDate,
   entries,
+  pillarColors,
   onEntryClick,
 }: {
   currentDate: Date;
   entries: CalendarEntry[];
+  pillarColors: Record<string, string>;
   onEntryClick: (entry: CalendarEntry) => void;
 }) {
   const weekDays = useMemo(() => {
@@ -349,9 +419,8 @@ function WeeklyView({
                 >
                   <div className="flex items-center gap-1">
                     <span
-                      className={`inline-block h-2 w-2 shrink-0 rounded-full ${
-                        PILLAR_COLORS[entry.content_pillar ?? ""] ?? "bg-gray-400"
-                      }`}
+                      className="inline-block h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: pillarColors[entry.content_pillar ?? ""] ?? "#9ca3af" }}
                     />
                     <span className="text-[9px] text-muted-foreground">
                       {format(parseISO(entry.date), "h:mm a")}
@@ -380,12 +449,25 @@ function WeeklyView({
 
 function ListView({
   entries,
+  listRange,
+  pillarColors,
   onEntryClick,
 }: {
   entries: CalendarEntry[];
+  listRange: ListRange;
+  pillarColors: Record<string, string>;
   onEntryClick: (entry: CalendarEntry) => void;
 }) {
-  const grouped = entries.reduce<Record<string, CalendarEntry[]>>(
+  const filteredEntries = useMemo(() => {
+    const range = getListDateRange(listRange);
+    if (!range) return entries;
+    return entries.filter((e) => {
+      const d = parseISO(e.date);
+      return isWithinInterval(d, { start: range.start, end: range.end });
+    });
+  }, [entries, listRange]);
+
+  const grouped = filteredEntries.reduce<Record<string, CalendarEntry[]>>(
     (acc, entry) => {
       const key = format(parseISO(entry.date), "yyyy-MM-dd");
       if (!acc[key]) acc[key] = [];
@@ -401,6 +483,14 @@ function ListView({
   }
 
   const sortedDates = Object.keys(grouped).sort();
+
+  if (sortedDates.length === 0) {
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        No content in this date range.
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -433,7 +523,14 @@ function ListView({
                 </CardHeader>
                 <CardContent className="flex gap-2 pt-0">
                   {entry.content_pillar && (
-                    <Badge variant="secondary" className="text-xs">
+                    <Badge
+                      variant="secondary"
+                      className="text-xs gap-1"
+                    >
+                      <span
+                        className="inline-block h-2 w-2 rounded-full"
+                        style={{ backgroundColor: pillarColors[entry.content_pillar] ?? "#9ca3af" }}
+                      />
                       {entry.content_pillar}
                     </Badge>
                   )}
