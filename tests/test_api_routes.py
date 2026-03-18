@@ -173,8 +173,11 @@ class TestDraftsEndpoint:
         response = client.get("/api/drafts", headers=headers)
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 1
-        assert data[0]["raw_text"] == "Beautiful morning with the cows"
+        # Returns all pre-published rows (pending_approval + approved)
+        assert len(data) == 2
+        statuses = {d["status"] for d in data}
+        assert "pending_approval" in statuses
+        assert "approved" in statuses
 
 
 class TestCalendarEndpoint:
@@ -185,7 +188,7 @@ class TestCalendarEndpoint:
         data = response.json()
         assert "entries" in data
         assert "total" in data
-        assert data["total"] == 1  # one approved row
+        assert data["total"] == 2  # pending_approval + approved
 
 
 class TestSuggestionsEndpoint:

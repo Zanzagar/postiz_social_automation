@@ -218,6 +218,24 @@ class DemoCaptionGenerator:
         raw_text: str,
         pillar: str | None,
     ) -> str:
-        """Demo iteration — returns a modified caption."""
+        """Demo iteration — simulates AI refinement by transforming the caption."""
         base = original_caption or raw_text
-        return f"[Refined per: {instruction}]\n\n{base}"
+        lowered = instruction.lower()
+
+        if "short" in lowered or "concise" in lowered:
+            # Simulate shortening — take first sentence + instruction note
+            first_sentence = base.split(".")[0].split("!")[0].split("\n")[0]
+            return f"{first_sentence}. ✨\n\n#GitaValley"
+        elif "emoji" in lowered:
+            return f"🙏 {base} 🙏✨🌿"
+        elif "formal" in lowered:
+            return f"We are pleased to share: {base.replace('!', '.').replace('!!', '.')}"
+        elif "question" in lowered:
+            return f"Did you know? {base}\n\nWhat do you think? Let us know below! 👇"
+        elif "hashtag" in lowered:
+            return f"{base}\n\n#GitaValley #ISKCON #SpiritualLife #FarmLife #CowProtection #Bhagavadgita"
+        elif "sentence" in lowered or "add" in lowered:
+            return f"{base}\n\nJoin us at Gita Valley and experience the beauty of simple, spiritual living firsthand."
+        else:
+            # Generic refinement — rephrase slightly
+            return f"{base}\n\n— Refined with love at Gita Valley 🙏"
