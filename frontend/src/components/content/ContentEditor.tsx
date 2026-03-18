@@ -311,21 +311,53 @@ export function ContentEditor({
     }
   }, [isTemplateShell, templateVars.join(",")]);
 
+  function getSubstitutedText(): string {
+    if (!contentRow) return "";
+    let text = contentRow.raw_text;
+    for (const [k, v] of Object.entries(shellVars)) {
+      text = text.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v);
+    }
+    return text;
+  }
+
+  function getEnabledPlatforms(): string[] {
+    if (!contentRow) return [];
+    return Object.entries(contentRow.platforms)
+      .filter(([, v]) => v)
+      .map(([k]) => k);
+  }
+
+  async function handleShellUseAsIs() {
+    if (!contentRow) return;
+    setIsShellGenerating(true);
+    setError("");
+    try {
+      const finalText = getSubstitutedText();
+      const enabledPlatforms = getEnabledPlatforms();
+      const sameCaptions: Record<string, string> = {};
+      for (const p of enabledPlatforms) sameCaptions[p] = finalText;
+
+      await api.editDraft(contentRow.row_number, sameCaptions, contentRow.platforms);
+
+      setCaptions(sameCaptions);
+      setActiveTab(enabledPlatforms[0] ?? "");
+      onSave(contentRow);
+      setSaveSuccess("Saved! You can refine each platform's caption below.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setIsShellGenerating(false);
+    }
+  }
+
   async function handleShellGenerate() {
     if (!contentRow) return;
     setIsShellGenerating(true);
     setError("");
     try {
-      // Substitute variables into raw text
-      let finalText = contentRow.raw_text;
-      for (const [k, v] of Object.entries(shellVars)) {
-        finalText = finalText.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v);
-      }
+      const finalText = getSubstitutedText();
+      const enabledPlatforms = getEnabledPlatforms();
 
-      // Generate captions
-      const enabledPlatforms = Object.entries(contentRow.platforms)
-        .filter(([, v]) => v)
-        .map(([k]) => k);
       const result = await request<{
         captions: Record<string, string>;
         row_id?: number;
@@ -339,14 +371,11 @@ export function ContentEditor({
         }),
       });
 
-      // Update the existing row with substituted text + captions
-      const mergedPlatforms = { ...contentRow.platforms };
-      await api.editDraft(contentRow.row_number, result.captions, mergedPlatforms);
+      await api.editDraft(contentRow.row_number, result.captions, contentRow.platforms);
 
-      // Refresh and switch to refine mode
       setCaptions(result.captions);
       setActiveTab(enabledPlatforms[0] ?? "");
-      onSave(contentRow); // triggers query invalidation
+      onSave(contentRow);
       setSaveSuccess("Captions generated! You can now refine them.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generation failed");
@@ -423,30 +452,36 @@ export function ContentEditor({
               </div>
             ))}
 
-            <Button
-              onClick={handleShellGenerate}
-              disabled={
-                isShellGenerating ||
-                templateVars.some((v) => !shellVars[v]?.trim())
-              }
-              className="w-full"
-            >
-              {isShellGenerating ? (
-                <>
+            {isShellGenerating ? (
+              <div className="space-y-2">
+                <Button disabled className="w-full">
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating with AI...
-                </>
-              ) : (
-                <>
+                  {isShellGenerating ? "Working..." : ""}
+                </Button>
+                <p className="text-center text-xs text-muted-foreground animate-pulse">
+                  Claude is writing platform-specific captions — this usually takes 30-90 seconds.
+                </p>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleShellUseAsIs}
+                  disabled={templateVars.some((v) => !shellVars[v]?.trim())}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  Use Text As-Is
+                </Button>
+                <Button
+                  onClick={handleShellGenerate}
+                  disabled={templateVars.some((v) => !shellVars[v]?.trim())}
+                  className="flex-1"
+                >
                   <Sparkles className="mr-2 h-4 w-4" />
-                  Generate Captions
-                </>
-              )}
-            </Button>
-            {isShellGenerating && (
-              <p className="text-center text-xs text-muted-foreground animate-pulse">
-                Claude is writing platform-specific captions — this usually takes 30-90 seconds.
-              </p>
+                  Generate AI Captions
+                </Button>
+              </div>
             )}
           </div>
         )}
