@@ -126,7 +126,21 @@ export function ContentEditor({
       ? Object.keys(captions)
       : basePlatforms;
 
-  // Initialize state when contentRow changes
+  // Reset mode whenever the modal opens (handles reopening the same row)
+  const prevOpenRef = useRef(false);
+  useEffect(() => {
+    if (isOpen && !prevOpenRef.current) {
+      setMode(initialMode);
+      setRepurposePlatforms([]);
+      setRepurposeGenerated(false);
+      setRepurposeRowId(null);
+      setSaveSuccess("");
+      setError("");
+    }
+    prevOpenRef.current = isOpen;
+  }, [isOpen, initialMode]);
+
+  // Initialize captions/tab when contentRow changes
   useEffect(() => {
     if (contentRow && contentRow.row_number !== prevRowIdRef.current) {
       const parsed: Record<string, string> = {};
@@ -134,16 +148,10 @@ export function ContentEditor({
         if (v !== null) parsed[k] = v;
       }
       setCaptions(parsed);
-      setError("");
       setActiveTab(basePlatforms[0] ?? "");
       setInstruction("");
       setExpandedIter(new Set());
-      setRepurposePlatforms([]);
-      setRepurposeGenerated(false);
-      setRepurposeRowId(null);
       setRepurposeTarget(isPosted ? "separate" : "merge");
-      setSaveSuccess("");
-      setMode(initialMode);
       prevRowIdRef.current = contentRow.row_number;
     }
   }, [contentRow, basePlatforms]);
