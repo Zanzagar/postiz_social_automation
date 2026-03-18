@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -21,8 +21,6 @@ import {
   Loader2,
   RotateCcw,
   History,
-  ChevronDown,
-  ChevronUp,
   Sparkles,
   PenLine,
   Copy,
@@ -88,7 +86,6 @@ export function ContentEditor({
   const [isIterating, setIsIterating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
-  const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const prevRowIdRef = useRef<number | null>(null);
 
   // Parse captions from contentRow
@@ -111,7 +108,6 @@ export function ContentEditor({
       // Always reset tab when switching to a different row
       if (contentRow.row_number !== prevRowIdRef.current) {
         setActiveTab(platforms[0] ?? "");
-        setHistoryOpen({});
         setInstruction("");
         prevRowIdRef.current = contentRow.row_number;
       }
@@ -126,15 +122,9 @@ export function ContentEditor({
     enabled: isOpen && !!contentRow,
   });
 
-  // Filter history for active platform
-  const platformHistory = useMemo(
-    () => iterations.filter((i) => i.platform === activeTab),
-    [iterations, activeTab],
-  );
-
   // --- Handlers ---
 
-  const handleIterate = useCallback(async () => {
+  async function handleIterate() {
     if (!contentRow || !instruction.trim() || !activeTab) return;
 
     setIsIterating(true);
@@ -156,9 +146,9 @@ export function ContentEditor({
     } finally {
       setIsIterating(false);
     }
-  }, [contentRow, instruction, activeTab, mode, queryClient]);
+  }
 
-  const handleSave = useCallback(async () => {
+  async function handleSave() {
     if (!contentRow) return;
     setIsSaving(true);
     setError("");
@@ -171,14 +161,11 @@ export function ContentEditor({
     } finally {
       setIsSaving(false);
     }
-  }, [contentRow, captions, onSave, onClose]);
+  }
 
-  const handleRestoreCaption = useCallback(
-    (caption: string) => {
-      setCaptions((prev) => ({ ...prev, [activeTab]: caption }));
-    },
-    [activeTab],
-  );
+  function handleRestoreCaption(caption: string) {
+    setCaptions((prev) => ({ ...prev, [activeTab]: caption }));
+  }
 
   if (!contentRow) return null;
 
@@ -262,54 +249,6 @@ export function ContentEditor({
                   )}
                 </Button>
               </div>
-
-              {/* Iteration history (collapsible, per-platform) */}
-              {platformHistory.length > 0 && (
-                <div className="rounded-lg border bg-muted/30">
-                  <button
-                    onClick={() => setHistoryOpen((prev) => ({ ...prev, [platform]: !prev[platform] }))}
-                    className="flex w-full items-center justify-between px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
-                    aria-label="Toggle history"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <History className="h-3.5 w-3.5" />
-                      {platformHistory.length} revision{platformHistory.length !== 1 ? "s" : ""}
-                    </span>
-                    {historyOpen[platform] ? (
-                      <ChevronUp className="h-3.5 w-3.5" />
-                    ) : (
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-
-                  {historyOpen[platform] && (
-                    <div className="max-h-48 space-y-1 overflow-y-auto border-t px-3 py-2">
-                      {platformHistory.map((iter) => (
-                        <button
-                          key={iter.id}
-                          onClick={() => handleRestoreCaption(iter.new_caption)}
-                          className="w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted transition-colors"
-                        >
-                          <div className="flex items-center justify-between text-muted-foreground">
-                            <span className="italic">
-                              "{iter.refinement_instruction}"
-                            </span>
-                            <span className="shrink-0">
-                              {new Date(iter.created_at).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </span>
-                          </div>
-                          <p className="mt-0.5 line-clamp-2 text-foreground">
-                            {iter.new_caption}
-                          </p>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
             </TabsContent>
           ))}
         </Tabs>
@@ -317,6 +256,48 @@ export function ContentEditor({
         {/* Error display */}
         {error && (
           <p className="text-sm text-destructive" role="alert">{error}</p>
+        )}
+
+        {/* Iteration history log — always visible, outside the caption area */}
+        {iterations.length > 0 && (
+          <div className="rounded-lg border bg-muted/20">
+            <div className="flex items-center gap-1.5 border-b px-3 py-2 text-sm font-medium text-muted-foreground">
+              <History className="h-3.5 w-3.5" />
+              Iteration Log ({iterations.length})
+            </div>
+            <div className="max-h-52 overflow-y-auto divide-y">
+              {[...iterations].reverse().map((iter) => (
+                <button
+                  key={iter.id}
+                  onClick={() => {
+                    setActiveTab(iter.platform);
+                    handleRestoreCaption(iter.new_caption);
+                  }}
+                  className="flex w-full items-start gap-3 px-3 py-2 text-left text-xs hover:bg-muted/50 transition-colors"
+                >
+                  <div className="shrink-0 space-y-0.5 text-muted-foreground">
+                    <div className="font-medium text-foreground">
+                      {PLATFORM_META[iter.platform]?.label ?? iter.platform}
+                    </div>
+                    <div>
+                      {new Date(iter.created_at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="italic text-muted-foreground">
+                      &ldquo;{iter.refinement_instruction}&rdquo;
+                    </p>
+                    <p className="mt-0.5 line-clamp-2 text-foreground">
+                      {iter.new_caption}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Footer actions */}
