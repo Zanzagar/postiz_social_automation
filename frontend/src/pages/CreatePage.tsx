@@ -521,7 +521,7 @@ export function CreatePage() {
                         style={{ backgroundColor: p.color }}
                       />
                     )}
-                    {p.name.replace(/_/g, " ")}
+                    {p.name}
                   </span>
                 </SelectItem>
               ))}

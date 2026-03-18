@@ -248,9 +248,9 @@ export async function setupApiMocks(page: Page): Promise<void> {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify([
-        { id: 1, name: "spiritual_education", description: null, color: "#7c3aed", is_active: true, sort_order: 1 },
-        { id: 2, name: "farm_community", description: null, color: "#16a34a", is_active: true, sort_order: 2 },
-        { id: 3, name: "events", description: null, color: "#ea580c", is_active: true, sort_order: 3 },
+        { id: 1, name: "Spiritual Education", description: null, color: "#7c3aed", is_active: true, sort_order: 1 },
+        { id: 2, name: "Farm & Community", description: null, color: "#16a34a", is_active: true, sort_order: 2 },
+        { id: 3, name: "Events", description: null, color: "#ea580c", is_active: true, sort_order: 3 },
       ]),
     }),
   );

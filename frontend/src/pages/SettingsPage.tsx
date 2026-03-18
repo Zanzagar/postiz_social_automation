@@ -221,7 +221,7 @@ function PillarManager() {
     }
     try {
       await api.createPillar({
-        name: newForm.name.trim().toLowerCase().replace(/\s+/g, "_"),
+        name: newForm.name.trim(),
         description: newForm.description.trim() || undefined,
         color: newForm.color || undefined,
         sort_order: pillars.length + 1,
@@ -401,7 +401,7 @@ function PillarManager() {
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium">
-                    {pillar.name.replace(/_/g, " ")}
+                    {pillar.name}
                     {!pillar.is_active && (
                       <span className="ml-2 text-xs text-muted-foreground">(inactive)</span>
                     )}
