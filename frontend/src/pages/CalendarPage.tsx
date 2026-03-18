@@ -381,13 +381,18 @@ function ListView({
 }) {
   const grouped = entries.reduce<Record<string, CalendarEntry[]>>(
     (acc, entry) => {
-      const key = entry.date;
+      const key = format(parseISO(entry.date), "yyyy-MM-dd");
       if (!acc[key]) acc[key] = [];
       acc[key].push(entry);
       return acc;
     },
     {},
   );
+
+  // Sort entries within each day by time
+  for (const key of Object.keys(grouped)) {
+    grouped[key].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }
 
   const sortedDates = Object.keys(grouped).sort();
 
@@ -406,13 +411,18 @@ function ListView({
                 onClick={() => onEntryClick(entry)}
               >
                 <CardHeader className="flex flex-row items-center justify-between pb-1">
-                  <CardTitle className="text-sm font-medium">
-                    {entry.raw_text.length > 80
-                      ? entry.raw_text.slice(0, 80) + "..."
-                      : entry.raw_text}
-                  </CardTitle>
-                  <Badge variant={statusVariant[entry.status] ?? "outline"}>
-                    {entry.status}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {format(parseISO(entry.date), "h:mm a")}
+                    </span>
+                    <CardTitle className="truncate text-sm font-medium">
+                      {entry.raw_text.length > 80
+                        ? entry.raw_text.slice(0, 80) + "..."
+                        : entry.raw_text}
+                    </CardTitle>
+                  </div>
+                  <Badge variant={statusVariant[entry.status] ?? "outline"} className="shrink-0 ml-2">
+                    {entry.status.replace("_", " ")}
                   </Badge>
                 </CardHeader>
                 <CardContent className="flex gap-2 pt-0">

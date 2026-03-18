@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ContentEditor } from "@/components/content/ContentEditor";
 import { AutoPublishCountdown } from "@/components/content/AutoPublishCountdown";
 import { CheckCircle, Loader2 } from "lucide-react";
+import { format, parseISO } from "date-fns";
 
 export function DraftsPage() {
   const queryClient = useQueryClient();
@@ -17,7 +18,9 @@ export function DraftsPage() {
     queryFn: () => api.getDrafts(),
   });
 
-  const drafts = allDrafts ?? [];
+  const drafts = [...(allDrafts ?? [])].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+  );
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [editedCaptions, setEditedCaptions] = useState<
@@ -203,7 +206,7 @@ function DraftCard({
               : draft.raw_text}
           </p>
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <span>{typeof draft.date === 'string' ? draft.date.split('T')[0] : draft.date}</span>
+            <span>{format(parseISO(draft.date), "MMM d, h:mm a")}</span>
             <Badge
               variant={draft.status === "approved" ? "default" : draft.status === "pending_approval" ? "secondary" : "outline"}
               className="text-xs px-1.5 py-0"
