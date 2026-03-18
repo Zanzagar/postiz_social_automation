@@ -21,6 +21,7 @@ import {
   Loader2,
   RotateCcw,
   History,
+  ChevronRight,
   Sparkles,
   PenLine,
   Copy,
@@ -86,6 +87,7 @@ export function ContentEditor({
   const [isIterating, setIsIterating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const [expandedIter, setExpandedIter] = useState<Set<number>>(new Set());
   const prevRowIdRef = useRef<number | null>(null);
 
   // Parse captions from contentRow
@@ -109,6 +111,7 @@ export function ContentEditor({
       if (contentRow.row_number !== prevRowIdRef.current) {
         setActiveTab(platforms[0] ?? "");
         setInstruction("");
+        setExpandedIter(new Set());
         prevRowIdRef.current = contentRow.row_number;
       }
     }
@@ -266,53 +269,70 @@ export function ContentEditor({
               Iteration Log ({iterations.length})
             </div>
             <div className="max-h-[400px] overflow-y-auto">
-              {[...iterations].reverse().map((iter) => (
-                <div
-                  key={iter.id}
-                  className="border-t px-4 py-3 hover:bg-muted/20 transition-colors"
-                >
-                  {/* Header row: platform, instruction, time, restore button */}
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2">
+              {[...iterations].reverse().map((iter) => {
+                const isOpen = expandedIter.has(iter.id);
+                return (
+                  <div key={iter.id} className="border-t">
+                    {/* Collapsed row — click to expand */}
+                    <button
+                      onClick={() =>
+                        setExpandedIter((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(iter.id)) next.delete(iter.id);
+                          else next.add(iter.id);
+                          return next;
+                        })
+                      }
+                      className="flex w-full items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/20 transition-colors"
+                    >
+                      <ChevronRight
+                        className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${
+                          isOpen ? "rotate-90" : ""
+                        }`}
+                      />
                       <span
-                        className={`inline-block h-2 w-2 rounded-full ${
+                        className={`inline-block h-2 w-2 shrink-0 rounded-full ${
                           PLATFORM_META[iter.platform]?.accent ?? "bg-gray-400"
                         }`}
                       />
-                      <span className="text-xs font-medium">
+                      <span className="text-xs font-medium shrink-0">
                         {PLATFORM_META[iter.platform]?.label ?? iter.platform}
                       </span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs italic text-muted-foreground truncate flex-1">
+                        &ldquo;{iter.refinement_instruction}&rdquo;
+                      </span>
+                      <span className="text-[10px] text-muted-foreground shrink-0">
                         {new Date(iter.created_at).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
                       </span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-xs"
-                      onClick={() => {
-                        setActiveTab(iter.platform);
-                        handleRestoreCaption(iter.new_caption);
-                      }}
-                    >
-                      Restore
-                    </Button>
-                  </div>
+                    </button>
 
-                  {/* Instruction */}
-                  <p className="text-xs italic text-muted-foreground mb-1.5">
-                    Instruction: &ldquo;{iter.refinement_instruction}&rdquo;
-                  </p>
-
-                  {/* Full caption result */}
-                  <div className="rounded-md bg-muted/30 px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
-                    {iter.new_caption}
+                    {/* Expanded content */}
+                    {isOpen && (
+                      <div className="px-4 pb-3 pt-0">
+                        <div className="rounded-md bg-muted/30 px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
+                          {iter.new_caption}
+                        </div>
+                        <div className="mt-2 flex justify-end">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => {
+                              setActiveTab(iter.platform);
+                              handleRestoreCaption(iter.new_caption);
+                            }}
+                          >
+                            Restore this version
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
