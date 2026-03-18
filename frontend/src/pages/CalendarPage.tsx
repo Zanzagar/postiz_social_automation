@@ -268,8 +268,11 @@ function MonthlyGrid({
                         PILLAR_COLORS[entry.content_pillar ?? ""] ?? "bg-gray-400"
                       }`}
                     />
+                    <span className="shrink-0 text-muted-foreground">
+                      {format(parseISO(entry.date), "h:mma").toLowerCase()}
+                    </span>
                     <span className="truncate">
-                      {entry.raw_text.slice(0, 20)}
+                      {entry.raw_text.slice(0, 15)}
                     </span>
                   </button>
                 ))}
@@ -350,11 +353,14 @@ function WeeklyView({
                         PILLAR_COLORS[entry.content_pillar ?? ""] ?? "bg-gray-400"
                       }`}
                     />
+                    <span className="text-[9px] text-muted-foreground">
+                      {format(parseISO(entry.date), "h:mm a")}
+                    </span>
                     <Badge
                       variant={statusVariant[entry.status] ?? "outline"}
                       className="text-[9px] px-1 py-0"
                     >
-                      {entry.status}
+                      {entry.status.replace("_", " ")}
                     </Badge>
                   </div>
                   <p className="mt-1 line-clamp-2 text-[11px] leading-tight">
