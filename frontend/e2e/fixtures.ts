@@ -242,6 +242,22 @@ export async function setupApiMocks(page: Page): Promise<void> {
       }),
     }),
   );
+
+  await page.route("**/api/iterations/*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "[]",
+    }),
+  );
+
+  await page.route("**/api/iterate", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ caption: "Iterated caption", iteration_id: 1 }),
+    }),
+  );
 }
 
 /**
