@@ -13,9 +13,13 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
   api,
+  request,
   type ContentRow,
+  type GenerateRequest,
 } from "@/lib/api";
 import {
   Loader2,
@@ -68,6 +72,14 @@ const MODE_CONFIG: Record<EditorMode, { title: string; icon: React.ReactNode; ac
   },
 };
 
+const ALL_PLATFORMS = [
+  { id: "instagram", label: "Instagram" },
+  { id: "facebook", label: "Facebook" },
+  { id: "tiktok", label: "TikTok" },
+  { id: "threads", label: "Threads" },
+  { id: "linkedin", label: "LinkedIn" },
+];
+
 // --- Component ---
 
 export function ContentEditor({
@@ -90,13 +102,23 @@ export function ContentEditor({
   const [expandedIter, setExpandedIter] = useState<Set<number>>(new Set());
   const prevRowIdRef = useRef<number | null>(null);
 
+  // Repurpose state
+  const [repurposePlatforms, setRepurposePlatforms] = useState<string[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [repurposeGenerated, setRepurposeGenerated] = useState(false);
+  const [repurposeRowId, setRepurposeRowId] = useState<number | null>(null);
+
   // Parse captions from contentRow
   const platforms = useMemo(() => {
     if (!contentRow) return [];
+    if (mode === "repurpose" && repurposeGenerated) {
+      // After repurpose generation, show the new platforms
+      return Object.keys(captions);
+    }
     return Object.keys(contentRow.captions).filter(
       (k) => contentRow.captions[k] !== null,
     );
-  }, [contentRow]);
+  }, [contentRow, mode, repurposeGenerated, captions]);
 
   // Initialize state when contentRow changes
   useEffect(() => {
@@ -112,6 +134,9 @@ export function ContentEditor({
         setActiveTab(platforms[0] ?? "");
         setInstruction("");
         setExpandedIter(new Set());
+        setRepurposePlatforms([]);
+        setRepurposeGenerated(false);
+        setRepurposeRowId(null);
         prevRowIdRef.current = contentRow.row_number;
       }
     }
@@ -166,6 +191,57 @@ export function ContentEditor({
     }
   }
 
+  async function handleRepurpose() {
+    if (!contentRow || repurposePlatforms.length === 0) return;
+    setIsGenerating(true);
+    setError("");
+    try {
+      const data: GenerateRequest = {
+        raw_text: contentRow.raw_text,
+        platforms: repurposePlatforms,
+        scheduled_date: contentRow.date?.split("T")[0] ?? new Date().toISOString().split("T")[0],
+      };
+      const result = await request<{
+        captions: Record<string, string>;
+        row_id?: number;
+      }>("/api/generate-sync", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      setCaptions(result.captions);
+      if (result.row_id) setRepurposeRowId(result.row_id);
+      setRepurposeGenerated(true);
+      setActiveTab(repurposePlatforms[0]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Generation failed");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  async function handleSaveRepurpose() {
+    if (!repurposeRowId) return;
+    setIsSaving(true);
+    setError("");
+    try {
+      const updated = await api.editDraft(repurposeRowId, captions);
+      onSave(updated);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function toggleRepurposePlatform(platform: string) {
+    setRepurposePlatforms((prev) =>
+      prev.includes(platform)
+        ? prev.filter((p) => p !== platform)
+        : [...prev, platform],
+    );
+  }
+
   function handleRestoreCaption(caption: string) {
     setCaptions((prev) => ({ ...prev, [activeTab]: caption }));
   }
@@ -190,7 +266,64 @@ export function ContentEditor({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Platform tabs */}
+        {/* Repurpose: platform selector + original content reference */}
+        {mode === "repurpose" && !repurposeGenerated && (
+          <div className="space-y-4">
+            {/* Original content reference */}
+            <div className="rounded-md border bg-muted/20 px-3 py-2">
+              <p className="text-[10px] font-medium uppercase text-muted-foreground mb-1">
+                Original Content
+              </p>
+              {Object.entries(contentRow.captions)
+                .filter(([, v]) => v !== null)
+                .map(([platform, caption]) => (
+                  <div key={platform} className="mt-2">
+                    <span className="text-xs font-medium capitalize">{platform}:</span>
+                    <p className="text-sm text-muted-foreground mt-0.5 line-clamp-3">{caption}</p>
+                  </div>
+                ))}
+            </div>
+
+            {/* Platform selector */}
+            <div>
+              <Label className="text-sm font-medium">Repurpose for these platforms:</Label>
+              <div className="flex flex-wrap gap-3 mt-2">
+                {ALL_PLATFORMS.map(({ id, label }) => (
+                  <label key={id} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={repurposePlatforms.includes(id)}
+                      onCheckedChange={() => toggleRepurposePlatform(id)}
+                      aria-label={label}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Generate button */}
+            <Button
+              onClick={handleRepurpose}
+              disabled={isGenerating || repurposePlatforms.length === 0}
+              className="w-full"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Generate Repurposed Captions
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+
+        {/* Platform tabs — shown for refine/create, and repurpose after generation */}
+        {(mode !== "repurpose" || repurposeGenerated) && (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="w-full">
             {platforms.map((platform) => {
@@ -255,6 +388,7 @@ export function ContentEditor({
             </TabsContent>
           ))}
         </Tabs>
+        )}
 
         {/* Error display */}
         {error && (
@@ -342,14 +476,25 @@ export function ContentEditor({
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
-          <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="mr-2 h-4 w-4" />
-            )}
-            {config.action}
-          </Button>
+          {mode === "repurpose" && repurposeGenerated ? (
+            <Button onClick={handleSaveRepurpose} disabled={isSaving}>
+              {isSaving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="mr-2 h-4 w-4" />
+              )}
+              Save as New Draft
+            </Button>
+          ) : mode !== "repurpose" ? (
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="mr-2 h-4 w-4" />
+              )}
+              {config.action}
+            </Button>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>
