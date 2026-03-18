@@ -126,6 +126,7 @@ export function CreatePage() {
   const [scheduledDate, setScheduledDate] = useState(
     format(new Date(), "yyyy-MM-dd"),
   );
+  const [scheduledTime, setScheduledTime] = useState("09:00");
 
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false);
@@ -155,6 +156,7 @@ export function CreatePage() {
   function handleTemplateSelect(template: Template) {
     setSelectedTemplate(template);
     setRawText(template.raw_text_template ?? "");
+    if (template.schedule_time) setScheduledTime(template.schedule_time);
     const defaults: Record<string, string> = {};
     for (const v of template.variables ?? []) {
       defaults[v.name] = "";
@@ -213,6 +215,7 @@ export function CreatePage() {
           variable_values: variableValues,
           platforms: selectedPlatforms,
           scheduled_date: scheduledDate,
+          scheduled_time: scheduledTime,
         });
         // Extract captions from the returned content row
         const resultCaptions: Record<string, string> = {};
@@ -286,6 +289,7 @@ export function CreatePage() {
         variable_values: variableValues,
         platforms: selectedPlatforms,
         weeks: batchWeeks,
+        scheduled_time: scheduledTime,
       });
       setBatchResult({ created: result.created });
     } catch (err) {
@@ -554,15 +558,26 @@ export function CreatePage() {
         </div>
       )}
 
-      {/* Schedule date */}
-      <div className="space-y-2">
-        <Label htmlFor="schedule-date">Schedule Date</Label>
-        <Input
-          id="schedule-date"
-          type="date"
-          value={scheduledDate}
-          onChange={(e) => setScheduledDate(e.target.value)}
-        />
+      {/* Schedule date & time */}
+      <div className="flex gap-3">
+        <div className="flex-1 space-y-2">
+          <Label htmlFor="schedule-date">Schedule Date</Label>
+          <Input
+            id="schedule-date"
+            type="date"
+            value={scheduledDate}
+            onChange={(e) => setScheduledDate(e.target.value)}
+          />
+        </div>
+        <div className="w-32 space-y-2">
+          <Label htmlFor="schedule-time">Time</Label>
+          <Input
+            id="schedule-time"
+            type="time"
+            value={scheduledTime}
+            onChange={(e) => setScheduledTime(e.target.value)}
+          />
+        </div>
       </div>
 
       {/* Error */}

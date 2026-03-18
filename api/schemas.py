@@ -192,6 +192,7 @@ class TemplateCreateRequest(BaseModel):
     raw_text_template: str
     variables: list[TemplateVariable] = []
     schedule_pattern: str | None = None
+    schedule_time: str | None = None
     default_segment_id: int | None = None
 
 
@@ -203,6 +204,7 @@ class TemplateResponse(BaseModel):
     raw_text_template: str | None
     variables: list[TemplateVariable]
     schedule_pattern: str | None
+    schedule_time: str | None
     default_segment_id: int | None
     created_at: datetime
     updated_at: datetime | None
@@ -212,12 +214,14 @@ class GenerateFromTemplateRequest(BaseModel):
     variable_values: dict[str, str]
     platforms: list[str]
     scheduled_date: str
+    scheduled_time: str | None = None
 
 
 class BatchGenerateRequest(BaseModel):
     variable_values: dict[str, str]
     platforms: list[str]
     weeks: int = 4
+    scheduled_time: str | None = None
 
 
 class BatchGenerateResponse(BaseModel):

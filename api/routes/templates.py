@@ -53,6 +53,7 @@ def _template_to_response(t) -> TemplateResponse:
         raw_text_template=t.raw_text_template,
         variables=variables,
         schedule_pattern=t.schedule_pattern,
+        schedule_time=t.schedule_time,
         default_segment_id=t.default_segment_id,
         created_at=t.created_at,
         updated_at=t.updated_at,
@@ -78,6 +79,7 @@ async def create_template(
             "raw_text_template": req.raw_text_template,
             "variables": json.dumps([v.model_dump() for v in req.variables]),
             "schedule_pattern": req.schedule_pattern,
+            "schedule_time": req.schedule_time,
             "default_segment_id": req.default_segment_id,
         }
     )
@@ -108,6 +110,7 @@ async def update_template(
         "raw_text_template": req.raw_text_template,
         "variables": json.dumps([v.model_dump() for v in req.variables]),
         "schedule_pattern": req.schedule_pattern,
+        "schedule_time": req.schedule_time,
         "default_segment_id": req.default_segment_id,
     }
     template = await repo.update_template(template_id, data)
@@ -147,11 +150,20 @@ async def generate_from_template(
     if remaining:
         raise HTTPException(status_code=400, detail=f"Missing variables: {remaining}")
 
-    # Create content row
+    # Create content row with optional time
+    scheduled_dt = datetime.fromisoformat(req.scheduled_date)
+    time_str = req.scheduled_time or template.schedule_time
+    if time_str:
+        try:
+            h, m = time_str.split(":")
+            scheduled_dt = scheduled_dt.replace(hour=int(h), minute=int(m))
+        except (ValueError, AttributeError):
+            pass
+
     platforms_json = json.dumps({p: True for p in req.platforms})
     content_row = await repo.create_content_row(
         {
-            "date": datetime.fromisoformat(req.scheduled_date),
+            "date": scheduled_dt,
             "pillar": template.pillar,
             "raw_text": raw_text,
             "platforms": platforms_json,
@@ -190,7 +202,7 @@ DAY_MAP = {
 }
 
 
-def _get_scheduled_dates(pattern: str, weeks: int) -> list[datetime]:
+def _get_scheduled_dates(pattern: str, weeks: int, time_str: str | None = None) -> list[datetime]:
     """Calculate dates from a schedule pattern like 'weekly:sunday' for N weeks."""
     if not pattern or ":" not in pattern:
         return []
@@ -205,7 +217,15 @@ def _get_scheduled_dates(pattern: str, weeks: int) -> list[datetime]:
     if days_ahead <= 0:
         days_ahead += 7
     next_date = today + timedelta(days=days_ahead)
-    next_date = next_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    hour, minute = 9, 0  # default 9:00 AM
+    if time_str:
+        try:
+            h, m = time_str.split(":")
+            hour, minute = int(h), int(m)
+        except (ValueError, AttributeError):
+            pass
+    next_date = next_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
     return [next_date + timedelta(weeks=i) for i in range(weeks)]
 
@@ -228,7 +248,8 @@ async def generate_batch_from_template(
     if not template.schedule_pattern:
         raise HTTPException(status_code=400, detail="Template has no schedule pattern")
 
-    dates = _get_scheduled_dates(template.schedule_pattern, req.weeks)
+    time_str = req.scheduled_time or template.schedule_time
+    dates = _get_scheduled_dates(template.schedule_pattern, req.weeks, time_str)
     if not dates:
         raise HTTPException(
             status_code=400, detail=f"Invalid schedule pattern: {template.schedule_pattern}"

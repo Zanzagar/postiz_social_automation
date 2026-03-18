@@ -225,6 +225,7 @@ export interface Template {
   raw_text_template: string | null;
   variables: TemplateVariable[];
   schedule_pattern: string | null;
+  schedule_time: string | null;
   default_segment_id: number | null;
   created_at: string;
   updated_at: string | null;
@@ -237,6 +238,7 @@ export interface CreateTemplateRequest {
   raw_text_template: string;
   variables?: TemplateVariable[];
   schedule_pattern?: string;
+  schedule_time?: string;
   default_segment_id?: number;
 }
 
@@ -244,6 +246,7 @@ export interface GenerateFromTemplateRequest {
   variable_values: Record<string, string>;
   platforms: string[];
   scheduled_date: string;
+  scheduled_time?: string;
 }
 
 // --- Publish Config Types ---

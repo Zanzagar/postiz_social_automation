@@ -77,6 +77,7 @@ class Template(Base):
     raw_text_template: Mapped[str | None] = mapped_column(Text, nullable=True)
     variables: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
     schedule_pattern: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    schedule_time: Mapped[str | None] = mapped_column(String(10), nullable=True)  # "HH:MM" format
     default_segment_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Phase 4
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
