@@ -107,6 +107,7 @@ export function ContentEditor({
   const [isGenerating, setIsGenerating] = useState(false);
   const [repurposeGenerated, setRepurposeGenerated] = useState(false);
   const [repurposeRowId, setRepurposeRowId] = useState<number | null>(null);
+  const [repurposeTarget, setRepurposeTarget] = useState<"merge" | "separate">("merge");
 
   // Stable platform list derived from contentRow only (no captions dependency)
   const basePlatforms = useMemo(() => {
@@ -115,6 +116,8 @@ export function ContentEditor({
       (k) => contentRow.captions[k] !== null,
     );
   }, [contentRow]);
+
+  const isPosted = contentRow?.status === "posted";
 
   // Display platforms: after repurpose generation, show generated platforms
   const platforms =
@@ -137,6 +140,7 @@ export function ContentEditor({
       setRepurposePlatforms([]);
       setRepurposeGenerated(false);
       setRepurposeRowId(null);
+      setRepurposeTarget(isPosted ? "separate" : "merge");
       setSaveSuccess("");
       prevRowIdRef.current = contentRow.row_number;
     }
@@ -201,10 +205,11 @@ export function ContentEditor({
         platforms: repurposePlatforms,
         scheduled_date: contentRow.date?.split("T")[0] ?? new Date().toISOString().split("T")[0],
       };
+      const persist = repurposeTarget === "separate";
       const result = await request<{
         captions: Record<string, string>;
         row_id?: number;
-      }>("/api/generate-sync", {
+      }>(`/api/generate-sync?persist=${persist}`, {
         method: "POST",
         body: JSON.stringify(data),
       });
@@ -222,14 +227,37 @@ export function ContentEditor({
   const [saveSuccess, setSaveSuccess] = useState("");
 
   async function handleSaveRepurpose() {
-    if (!repurposeRowId) return;
+    if (!contentRow) return;
     setIsSaving(true);
     setError("");
     setSaveSuccess("");
     try {
-      const updated = await api.editDraft(repurposeRowId, captions);
-      onSave(updated);
-      setSaveSuccess("Draft saved! You'll find it in the Drafts list.");
+      if (repurposeTarget === "merge") {
+        // Merge new platform captions into the original draft
+        const mergedCaptions = { ...contentRow.captions } as Record<string, string>;
+        for (const [k, v] of Object.entries(captions)) {
+          mergedCaptions[k] = v;
+        }
+        const mergedPlatforms = { ...contentRow.platforms };
+        for (const p of repurposePlatforms) {
+          mergedPlatforms[p] = true;
+        }
+        const updated = await api.editDraft(
+          contentRow.row_number,
+          mergedCaptions,
+          mergedPlatforms,
+        );
+        onSave(updated);
+        setSaveSuccess(
+          `Added ${repurposePlatforms.join(", ")} captions to this draft.`,
+        );
+      } else {
+        // Save as separate draft (row already created by generate-sync)
+        if (!repurposeRowId) return;
+        const updated = await api.editDraft(repurposeRowId, captions);
+        onSave(updated);
+        setSaveSuccess("New draft created! You'll find it in the Drafts list.");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -303,6 +331,38 @@ export function ContentEditor({
                 ))}
               </div>
             </div>
+
+            {/* Merge vs separate — only for unposted content */}
+            {!isPosted && repurposePlatforms.length > 0 && (
+              <div className="rounded-md border bg-muted/10 px-3 py-2.5 space-y-1.5">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="repurpose-target"
+                    checked={repurposeTarget === "merge"}
+                    onChange={() => setRepurposeTarget("merge")}
+                    className="accent-sage-600"
+                  />
+                  <span>
+                    <span className="font-medium">Add to this draft</span>
+                    <span className="text-muted-foreground"> — merge new platforms into the existing draft</span>
+                  </span>
+                </label>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="repurpose-target"
+                    checked={repurposeTarget === "separate"}
+                    onChange={() => setRepurposeTarget("separate")}
+                    className="accent-sage-600"
+                  />
+                  <span>
+                    <span className="font-medium">Create separate draft</span>
+                    <span className="text-muted-foreground"> — keep original unchanged</span>
+                  </span>
+                </label>
+              </div>
+            )}
 
             {/* Generate button */}
             <Button
@@ -496,7 +556,7 @@ export function ContentEditor({
               ) : (
                 <Save className="mr-2 h-4 w-4" />
               )}
-              Save as New Draft
+              {repurposeTarget === "merge" ? "Add to Draft" : "Save as New Draft"}
             </Button>
           ) : mode !== "repurpose" ? (
             <Button onClick={handleSave} disabled={isSaving}>

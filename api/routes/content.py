@@ -131,6 +131,10 @@ async def edit_draft(
     captions_json = json.dumps(req.captions)
     await repo.update_captions(row_id, captions_json)
 
+    if req.platforms is not None:
+        platforms_json = json.dumps(req.platforms)
+        await repo.update_platforms(row_id, platforms_json)
+
     updated = await repo.get_content_row(row_id)
     return _row_to_response(updated)
 

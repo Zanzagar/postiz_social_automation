@@ -99,18 +99,26 @@ async def generate(
 @router.post("/generate-sync")
 async def generate_sync(
     req: GenerateRequest,
+    persist: bool = True,
     generator=Depends(get_caption_generator),
     repo: ContentRepository = Depends(get_content_repo),
 ):
-    """Non-streaming caption generation (works through proxies)."""
+    """Non-streaming caption generation (works through proxies).
+
+    Set persist=false to generate captions without creating a new content row
+    (useful for merging into an existing draft).
+    """
     row = _build_content_row(req)
     try:
         captions = await asyncio.to_thread(generator.generate_captions, row)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    row_id = await _persist_generated(req, captions, repo)
-    return {"row_id": row_id, "captions": {str(k): v for k, v in captions.items()}}
+    result: dict = {"captions": {str(k): v for k, v in captions.items()}}
+    if persist:
+        row_id = await _persist_generated(req, captions, repo)
+        result["row_id"] = row_id
+    return result
 
 
 @router.post("/reprompt")

@@ -128,6 +128,7 @@ class ApproveResponse(BaseModel):
 
 class EditCaptionsRequest(BaseModel):
     captions: dict[str, str]
+    platforms: dict[str, bool] | None = None
 
 
 # --- Publish Config ---

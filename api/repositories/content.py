@@ -50,6 +50,14 @@ class ContentRepository:
         )
         await self.session.commit()
 
+    async def update_platforms(self, row_id: int, platforms: str) -> None:
+        await self.session.execute(
+            update(ContentRow)
+            .where(ContentRow.id == row_id)
+            .values(platforms=platforms, updated_at=datetime.now(UTC))
+        )
+        await self.session.commit()
+
     async def update_status(self, row_id: int, status: str) -> None:
         await self.session.execute(
             update(ContentRow)

@@ -280,10 +280,16 @@ export const api = {
     return request<ContentRow>(`/api/content/${rowNumber}`);
   },
 
-  editDraft(rowNumber: number, captions: Record<string, string>) {
+  editDraft(
+    rowNumber: number,
+    captions: Record<string, string>,
+    platforms?: Record<string, boolean>,
+  ) {
+    const body: { captions: Record<string, string>; platforms?: Record<string, boolean> } = { captions };
+    if (platforms) body.platforms = platforms;
     return request<ContentRow>(`/api/drafts/${rowNumber}/edit`, {
       method: "POST",
-      body: JSON.stringify({ captions }),
+      body: JSON.stringify(body),
     });
   },
 

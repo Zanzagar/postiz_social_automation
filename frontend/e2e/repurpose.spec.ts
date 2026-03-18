@@ -100,7 +100,7 @@ test.describe("Repurpose Content", () => {
   });
 
   test("generates repurposed captions and shows tabs", async ({ page }) => {
-    await page.route("**/api/generate-sync", (route) =>
+    await page.route("**/api/generate-sync**", (route) =>
       route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -109,7 +109,6 @@ test.describe("Repurpose Content", () => {
             tiktok: "Quick kitchen vibes at Gita Valley #fyp",
             threads: "Cooking with devotion at Gita Valley",
           },
-          row_id: 99,
         }),
       }),
     );
@@ -133,7 +132,43 @@ test.describe("Repurpose Content", () => {
     // After generation, should show platform tabs with generated captions
     await expect(page.getByText("Quick kitchen vibes")).toBeVisible();
 
-    // Save button should say "Save as New Draft"
+    // Default for drafts is merge — button says "Add to Draft"
+    await expect(
+      page.getByRole("button", { name: /add to draft/i }),
+    ).toBeVisible();
+  });
+
+  test("separate mode shows Save as New Draft button", async ({ page }) => {
+    await page.route("**/api/generate-sync**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          captions: { tiktok: "Separate draft caption" },
+          row_id: 99,
+        }),
+      }),
+    );
+
+    await page.goto("/drafts");
+    await expect(page.getByText("Review Drafts")).toBeVisible();
+
+    await page
+      .getByRole("button", { name: /repurpose/i })
+      .first()
+      .click();
+
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("TikTok").click();
+
+    // Switch to separate mode
+    await dialog.getByText("Create separate draft").click();
+
+    await page
+      .getByRole("button", { name: /generate repurposed captions/i })
+      .click();
+
+    await expect(page.getByText("Separate draft caption")).toBeVisible();
     await expect(
       page.getByRole("button", { name: /save as new draft/i }),
     ).toBeVisible();
