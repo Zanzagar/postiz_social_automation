@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   api,
@@ -13,13 +13,21 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { FileText, Plus, Pencil, Trash2, Loader2 } from "lucide-react";
+import { FileText, Plus, Pencil, Trash2, Loader2, Variable } from "lucide-react";
 
 export function TemplatesPage() {
   const queryClient = useQueryClient();
@@ -108,12 +116,12 @@ export function TemplatesPage() {
                   <div className="flex gap-1.5">
                     {t.pillar && (
                       <Badge variant="secondary" className="text-xs">
-                        {t.pillar}
+                        {PILLARS.find((p) => p.value === t.pillar)?.label ?? t.pillar}
                       </Badge>
                     )}
                     {t.schedule_pattern && (
                       <Badge variant="outline" className="text-xs">
-                        {t.schedule_pattern}
+                        {SCHEDULES.find((s) => s.value === t.schedule_pattern)?.label ?? t.schedule_pattern}
                       </Badge>
                     )}
                   </div>
@@ -167,6 +175,38 @@ export function TemplatesPage() {
   );
 }
 
+// --- Constants ---
+
+const PILLARS = [
+  { value: "spiritual_education", label: "Spiritual Education" },
+  { value: "community", label: "Farm & Community" },
+  { value: "events", label: "Events" },
+  { value: "behind_scenes", label: "Behind the Scenes" },
+  { value: "seasonal", label: "Seasonal" },
+  { value: "collaborative", label: "Collaborative" },
+];
+
+const SCHEDULES = [
+  { value: "manual", label: "Manual (post when ready)" },
+  { value: "weekly:sunday", label: "Weekly — Sunday" },
+  { value: "weekly:monday", label: "Weekly — Monday" },
+  { value: "weekly:wednesday", label: "Weekly — Wednesday" },
+  { value: "weekly:friday", label: "Weekly — Friday" },
+  { value: "weekly:saturday", label: "Weekly — Saturday" },
+  { value: "biweekly", label: "Every 2 Weeks" },
+  { value: "monthly:1", label: "Monthly — 1st" },
+  { value: "monthly:15", label: "Monthly — 15th" },
+];
+
+const COMMON_VARIABLES = [
+  { name: "topic", hint: "What the post is about" },
+  { name: "location", hint: "Where it happened" },
+  { name: "date", hint: "When it happened" },
+  { name: "name", hint: "A person or cow's name" },
+  { name: "event", hint: "Event or festival name" },
+  { name: "quote", hint: "A quote or verse" },
+];
+
 // --- Template Editor Dialog ---
 
 function TemplateEditorDialog({
@@ -183,10 +223,29 @@ function TemplateEditorDialog({
   const [name, setName] = useState(template?.name ?? "");
   const [pillar, setPillar] = useState(template?.pillar ?? "");
   const [rawTextTemplate, setRawTextTemplate] = useState(template?.raw_text_template ?? "");
-  const [schedulePattern, setSchedulePattern] = useState(template?.schedule_pattern ?? "");
+  const [schedulePattern, setSchedulePattern] = useState(template?.schedule_pattern ?? "manual");
   const [isSaving, setIsSaving] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const isEdit = !!template;
+
+  function insertVariable(varName: string) {
+    const ta = textareaRef.current;
+    if (!ta) {
+      setRawTextTemplate((prev) => prev + `{{${varName}}}`);
+      return;
+    }
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const text = rawTextTemplate;
+    const insert = `{{${varName}}}`;
+    setRawTextTemplate(text.slice(0, start) + insert + text.slice(end));
+    // Restore cursor after the inserted variable
+    requestAnimationFrame(() => {
+      ta.selectionStart = ta.selectionEnd = start + insert.length;
+      ta.focus();
+    });
+  }
 
   async function handleSave() {
     if (!name.trim() || !rawTextTemplate.trim()) return;
@@ -197,7 +256,7 @@ function TemplateEditorDialog({
         name: name.trim(),
         pillar: pillar || undefined,
         raw_text_template: rawTextTemplate,
-        schedule_pattern: schedulePattern || undefined,
+        schedule_pattern: schedulePattern === "manual" ? undefined : schedulePattern,
       };
 
       if (isEdit && template) {
@@ -206,11 +265,6 @@ function TemplateEditorDialog({
         await api.createTemplate(data);
       }
       onSave();
-      // Reset form
-      setName("");
-      setPillar("");
-      setRawTextTemplate("");
-      setSchedulePattern("");
     } finally {
       setIsSaving(false);
     }
@@ -223,9 +277,13 @@ function TemplateEditorDialog({
           <DialogTitle>
             {isEdit ? "Edit Template" : "Create Template"}
           </DialogTitle>
+          <DialogDescription>
+            Templates let you reuse post formats. Fill in the blanks each time you use one.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Name */}
           <div>
             <Label htmlFor="template-name">Template Name</Label>
             <Input
@@ -236,38 +294,96 @@ function TemplateEditorDialog({
             />
           </div>
 
+          {/* Pillar dropdown */}
           <div>
-            <Label htmlFor="template-pillar">Pillar (optional)</Label>
-            <Input
-              id="template-pillar"
-              value={pillar}
-              onChange={(e) => setPillar(e.target.value)}
-              placeholder="e.g. farm, spiritual, events"
-            />
+            <Label>Content Pillar</Label>
+            <Select value={pillar} onValueChange={setPillar}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a pillar (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {PILLARS.map((p) => (
+                  <SelectItem key={p.value} value={p.value}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
+          {/* Schedule dropdown */}
           <div>
-            <Label htmlFor="template-raw-text">Raw Text Template</Label>
+            <Label>Posting Schedule</Label>
+            <Select value={schedulePattern} onValueChange={setSchedulePattern}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SCHEDULES.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Template text with variable inserter */}
+          <div>
+            <Label htmlFor="template-raw-text">Post Template</Label>
             <Textarea
+              ref={textareaRef}
               id="template-raw-text"
               value={rawTextTemplate}
               onChange={(e) => setRawTextTemplate(e.target.value)}
-              placeholder="Use {{variable}} for dynamic parts..."
-              rows={4}
+              placeholder="Write your post template here. Use the buttons below to add fill-in-the-blank fields."
+              rows={5}
             />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Use {"{{variable}}"} syntax for dynamic content
-            </p>
-          </div>
 
-          <div>
-            <Label htmlFor="template-schedule">Schedule Pattern (optional)</Label>
-            <Input
-              id="template-schedule"
-              value={schedulePattern}
-              onChange={(e) => setSchedulePattern(e.target.value)}
-              placeholder="e.g. weekly, monthly"
-            />
+            {/* Variable inserter */}
+            <div className="mt-2">
+              <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
+                <Variable className="h-3 w-3" />
+                Insert a fill-in-the-blank field:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {COMMON_VARIABLES.map((v) => (
+                  <Button
+                    key={v.name}
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => insertVariable(v.name)}
+                    title={v.hint}
+                  >
+                    + {v.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Preview */}
+            {rawTextTemplate && (
+              <div className="mt-3 rounded-md border bg-muted/20 px-3 py-2">
+                <p className="text-[10px] font-medium uppercase text-muted-foreground mb-1">
+                  Preview
+                </p>
+                <p className="text-sm leading-relaxed">
+                  {rawTextTemplate.split(/(\{\{.+?\}\})/).map((part, i) =>
+                    part.match(/^\{\{(.+?)\}\}$/) ? (
+                      <span
+                        key={i}
+                        className="mx-0.5 inline-block rounded bg-sage-100 px-1.5 py-0.5 text-xs font-medium text-sage-700"
+                      >
+                        {part.match(/^\{\{(.+?)\}\}$/)![1]}
+                      </span>
+                    ) : (
+                      <span key={i}>{part}</span>
+                    ),
+                  )}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

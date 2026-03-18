@@ -114,7 +114,7 @@ describe("TemplatesPage", () => {
 
     await waitFor(() => {
       expect(screen.getByLabelText(/template name/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/raw text template/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/post template/i)).toBeInTheDocument();
     });
   });
 
@@ -137,7 +137,7 @@ describe("TemplatesPage", () => {
 
     await user.type(screen.getByLabelText(/template name/i), "Weekly Farm Update");
     // Use paste to avoid userEvent interpreting { as special key
-    const textarea = screen.getByLabelText(/raw text template/i);
+    const textarea = screen.getByLabelText(/post template/i);
     await user.click(textarea);
     await user.paste("This week: {{topic}}");
     await user.click(screen.getByRole("button", { name: /^save$/i }));
