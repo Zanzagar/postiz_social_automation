@@ -137,6 +137,7 @@ export function ContentEditor({
       setRepurposePlatforms([]);
       setRepurposeGenerated(false);
       setRepurposeRowId(null);
+      setSaveSuccess("");
       prevRowIdRef.current = contentRow.row_number;
     }
   }, [contentRow, basePlatforms]);
@@ -218,14 +219,17 @@ export function ContentEditor({
     }
   }
 
+  const [saveSuccess, setSaveSuccess] = useState("");
+
   async function handleSaveRepurpose() {
     if (!repurposeRowId) return;
     setIsSaving(true);
     setError("");
+    setSaveSuccess("");
     try {
       const updated = await api.editDraft(repurposeRowId, captions);
       onSave(updated);
-      onClose();
+      setSaveSuccess("Draft saved! You'll find it in the Drafts list.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -309,7 +313,7 @@ export function ContentEditor({
               {isGenerating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
+                  Generating with AI...
                 </>
               ) : (
                 <>
@@ -318,6 +322,11 @@ export function ContentEditor({
                 </>
               )}
             </Button>
+            {isGenerating && (
+              <p className="text-center text-xs text-muted-foreground animate-pulse">
+                Claude is writing platform-specific captions — this usually takes 30-90 seconds.
+              </p>
+            )}
           </div>
         )}
 
@@ -392,6 +401,11 @@ export function ContentEditor({
         {/* Error display */}
         {error && (
           <p className="text-sm text-destructive" role="alert">{error}</p>
+        )}
+
+        {/* Save success message */}
+        {saveSuccess && (
+          <p className="text-sm text-sage-600 rounded-md bg-sage-50 px-3 py-2">{saveSuccess}</p>
         )}
 
         {/* Iteration history log — always visible, full content */}

@@ -523,11 +523,14 @@ export function CreatePage() {
       </Button>
 
       {/* Progress */}
-      {isGenerating && statusMessage && (
+      {isGenerating && (
         <div className="space-y-2">
           <Progress value={undefined} className="h-2" />
           <p className="text-center text-sm text-muted-foreground">
             {statusMessage}
+          </p>
+          <p className="text-center text-xs text-muted-foreground animate-pulse">
+            Claude is writing platform-specific captions — this usually takes 30-90 seconds.
           </p>
         </div>
       )}
