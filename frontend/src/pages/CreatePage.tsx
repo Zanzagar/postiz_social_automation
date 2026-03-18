@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import {
   api,
@@ -85,7 +86,11 @@ function SendToPostizButton({
   );
 }
 
+type CreateMode = "template" | "freeform";
+
 export function CreatePage() {
+  const [mode, setMode] = useState<CreateMode>("freeform");
+
   // Template state
   const { data: templates = [] } = useQuery({
     queryKey: ["templates"],
@@ -271,16 +276,30 @@ export function CreatePage() {
     <div className="mx-auto max-w-2xl space-y-6 p-6">
       <h1 className="text-2xl font-bold text-sage-800">Create & Generate</h1>
 
-      {/* Template selector */}
+      {/* Workflow toggle */}
       {templates.length > 0 && (
+        <Tabs
+          value={mode}
+          onValueChange={(v) => {
+            setMode(v as CreateMode);
+            if (v === "freeform") handleClearTemplate();
+          }}
+        >
+          <TabsList className="w-full">
+            <TabsTrigger value="freeform" className="flex-1">
+              Write from Scratch
+            </TabsTrigger>
+            <TabsTrigger value="template" className="flex-1">
+              Use a Template
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
+      {/* MODE: Template */}
+      {mode === "template" && (
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium">
-              <FileText className="h-4 w-4" />
-              Template
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 pt-4">
             {selectedTemplate ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -291,7 +310,7 @@ export function CreatePage() {
                     onClick={handleClearTemplate}
                   >
                     <X className="mr-1 h-3 w-3" />
-                    Clear
+                    Change
                   </Button>
                 </div>
 
@@ -319,23 +338,67 @@ export function CreatePage() {
                     ))}
                   </div>
                 )}
+
+                {/* Template preview */}
+                <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm leading-relaxed">
+                  {rawText.split(/(\{\{.+?\}\})/).map((part, i) =>
+                    part.match(/^\{\{(.+?)\}\}$/) ? (
+                      <span
+                        key={i}
+                        className="mx-0.5 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800"
+                      >
+                        {variableValues[part.match(/^\{\{(.+?)\}\}$/)![1]] ||
+                          part.match(/^\{\{(.+?)\}\}$/)![1]}
+                      </span>
+                    ) : (
+                      <span key={i}>{part}</span>
+                    ),
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Fill in the fields above to complete the template.
+                </p>
               </div>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {templates.map((t) => (
-                  <Button
-                    key={t.id}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleTemplateSelect(t)}
-                  >
-                    {t.name}
-                  </Button>
-                ))}
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Pick a template to get started:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {templates.map((t) => (
+                    <Button
+                      key={t.id}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleTemplateSelect(t)}
+                    >
+                      <FileText className="mr-1.5 h-3.5 w-3.5" />
+                      {t.name}
+                    </Button>
+                  ))}
+                </div>
               </div>
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* MODE: Freeform */}
+      {mode === "freeform" && (
+        <div className="space-y-2">
+          <Label htmlFor="raw-text">What do you want to post about?</Label>
+          <Textarea
+            id="raw-text"
+            value={rawText}
+            onChange={(e) => setRawText(e.target.value)}
+            placeholder="Describe what you want to post — the AI will write platform-specific captions from this..."
+            rows={4}
+            maxLength={2000}
+          />
+          <p className="text-right text-xs text-muted-foreground">
+            {rawText.length}/2000
+          </p>
+        </div>
       )}
 
       {/* Upload zone */}
@@ -404,46 +467,6 @@ export function CreatePage() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Post text — hidden when template selected (template + variables determine it) */}
-      {selectedTemplate ? (
-        <div className="space-y-2">
-          <Label>Post Text (from template)</Label>
-          <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm leading-relaxed">
-            {rawText.split(/(\{\{.+?\}\})/).map((part, i) =>
-              part.match(/^\{\{(.+?)\}\}$/) ? (
-                <span
-                  key={i}
-                  className="mx-0.5 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800"
-                >
-                  {variableValues[part.match(/^\{\{(.+?)\}\}$/)![1]] ||
-                    part.match(/^\{\{(.+?)\}\}$/)![1]}
-                </span>
-              ) : (
-                <span key={i}>{part}</span>
-              ),
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Fill in the fields above to complete the template text.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <Label htmlFor="raw-text">What do you want to post about?</Label>
-          <Textarea
-            id="raw-text"
-            value={rawText}
-            onChange={(e) => setRawText(e.target.value)}
-            placeholder="Describe what you want to post — the AI will write platform-specific captions from this..."
-            rows={4}
-            maxLength={2000}
-          />
-          <p className="text-right text-xs text-muted-foreground">
-            {rawText.length}/2000
-          </p>
-        </div>
-      )}
 
       {/* Platforms */}
       <fieldset>

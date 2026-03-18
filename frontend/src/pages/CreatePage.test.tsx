@@ -154,10 +154,15 @@ describe("CreatePage", () => {
     mockGetTemplates.mockResolvedValue(sampleTemplates);
     renderCreate();
 
+    // Switch to template tab
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /use a template/i })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("tab", { name: /use a template/i }));
+
     await waitFor(() => {
       expect(screen.getByText("Weekly Farm Update")).toBeInTheDocument();
     });
-
     await user.click(screen.getByText("Weekly Farm Update"));
 
     await waitFor(() => {
@@ -171,14 +176,18 @@ describe("CreatePage", () => {
     mockGetTemplates.mockResolvedValue(sampleTemplates);
     renderCreate();
 
+    // Switch to template tab
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /use a template/i })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("tab", { name: /use a template/i }));
+
     await waitFor(() => {
       expect(screen.getByText("Weekly Farm Update")).toBeInTheDocument();
     });
-
     await user.click(screen.getByText("Weekly Farm Update"));
 
     await waitFor(() => {
-      // Template preview shown with "Fill in the fields" hint
       expect(screen.getByText(/fill in the fields/i)).toBeInTheDocument();
     });
   });
