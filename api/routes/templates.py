@@ -235,12 +235,12 @@ async def generate_batch_from_template(
     template_id: int,
     req: BatchGenerateRequest,
     repo: ContentRepository = Depends(get_content_repo),
-    generator=Depends(get_caption_generator),
 ):
-    """Generate multiple drafts from a template's schedule pattern.
+    """Schedule multiple draft shells from a template's schedule pattern.
 
-    Uses the template's schedule_pattern (e.g. 'weekly:sunday') to calculate
-    dates for the next N weeks, then generates captions for each date.
+    Creates N placeholder drafts at the correct dates/times with the template
+    attached but NO captions generated. Staff fills in variables and generates
+    captions individually per draft when the content is ready.
     """
     template = await repo.get_template(template_id)
     if not template:
@@ -255,25 +255,16 @@ async def generate_batch_from_template(
             status_code=400, detail=f"Invalid schedule pattern: {template.schedule_pattern}"
         )
 
-    # Variable substitution
-    base_text = template.raw_text_template or ""
-    for var_name, var_value in req.variable_values.items():
-        base_text = base_text.replace(f"{{{{{var_name}}}}}", var_value)
-
-    remaining = re.findall(r"\{\{(\w+)\}\}", base_text)
-    if remaining:
-        raise HTTPException(status_code=400, detail=f"Missing variables: {remaining}")
-
     platforms_json = json.dumps({p: True for p in req.platforms})
+    raw_text = template.raw_text_template or ""
     drafts = []
 
     for date in dates:
-        # Create content row
         content_row = await repo.create_content_row(
             {
                 "date": date,
                 "pillar": template.pillar,
-                "raw_text": base_text,
+                "raw_text": raw_text,
                 "platforms": platforms_json,
                 "status": "draft",
                 "captions": "{}",
@@ -281,20 +272,6 @@ async def generate_batch_from_template(
                 "template_id": template_id,
             }
         )
-
-        # Generate captions
-        engine_row = EngineContentRow(
-            row_number=content_row.id,
-            date=date,
-            raw_text=base_text,
-            platforms={Platform(p): True for p in req.platforms},
-            status=ContentStatus.DRAFT,
-            captions={},
-        )
-        captions = await asyncio.to_thread(generator.generate_captions, engine_row)
-        captions_json = json.dumps({str(k): v for k, v in captions.items()})
-        await repo.update_captions(content_row.id, captions_json)
-
         updated = await repo.get_content_row(content_row.id)
         drafts.append(_row_to_response(updated))
 

@@ -279,21 +279,21 @@ export function CreatePage() {
     }
   }
 
-  async function handleBatchGenerate() {
+  async function handleBatchSchedule() {
     if (!selectedTemplate || selectedPlatforms.length === 0) return;
     setIsBatchGenerating(true);
     setError("");
     setBatchResult(null);
     try {
       const result = await api.batchGenerateFromTemplate(selectedTemplate.id, {
-        variable_values: variableValues,
+        variable_values: {},
         platforms: selectedPlatforms,
         weeks: batchWeeks,
         scheduled_time: scheduledTime,
       });
       setBatchResult({ created: result.created });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Batch generation failed");
+      setError(err instanceof Error ? err.message : "Scheduling failed");
     } finally {
       setIsBatchGenerating(false);
     }
@@ -605,16 +605,17 @@ export function CreatePage() {
         )}
       </Button>
 
-      {/* Batch generate — for templates with a schedule */}
+      {/* Batch schedule — for templates with a schedule pattern */}
       {selectedTemplate?.schedule_pattern && !captions && (
         <Card>
           <CardContent className="space-y-3 pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium">Batch Generate</p>
+                <p className="text-sm font-medium">Schedule Ahead</p>
                 <p className="text-xs text-muted-foreground">
-                  Create {batchWeeks} drafts scheduled{" "}
-                  {selectedTemplate.schedule_pattern.replace(":", " every ")}
+                  Plan {batchWeeks} upcoming{" "}
+                  {selectedTemplate.schedule_pattern.replace(":", " every ")} posts.
+                  {" "}Fill in details and generate captions for each individually.
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -633,7 +634,7 @@ export function CreatePage() {
               </div>
             </div>
             <Button
-              onClick={handleBatchGenerate}
+              onClick={handleBatchSchedule}
               disabled={isBatchGenerating || selectedPlatforms.length === 0}
               variant="outline"
               className="w-full"
@@ -641,22 +642,15 @@ export function CreatePage() {
               {isBatchGenerating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating {batchWeeks} drafts...
+                  Scheduling...
                 </>
               ) : (
-                <>
-                  Generate {batchWeeks} Scheduled Drafts
-                </>
+                `Schedule ${batchWeeks} Draft Slots`
               )}
             </Button>
-            {isBatchGenerating && (
-              <p className="text-center text-xs text-muted-foreground animate-pulse">
-                Claude is generating {batchWeeks} posts — this may take a few minutes.
-              </p>
-            )}
             {batchResult && (
               <p className="text-sm text-sage-600 rounded-md bg-sage-50 px-3 py-2">
-                {batchResult.created} drafts created! Find them in Drafts or Calendar.
+                {batchResult.created} draft slots created! Open each in Drafts to fill in details and generate captions.
               </p>
             )}
           </CardContent>

@@ -287,6 +287,74 @@ export function ContentEditor({
     setCaptions((prev) => ({ ...prev, [activeTab]: caption }));
   }
 
+  // Detect template shell: has {{variables}} in raw_text and no captions
+  const templateVars = useMemo(() => {
+    if (!contentRow) return [];
+    const matches = contentRow.raw_text.match(/\{\{(\w+)\}\}/g);
+    return matches ? [...new Set(matches.map((m) => m.slice(2, -2)))] : [];
+  }, [contentRow]);
+  const isTemplateShell =
+    contentRow?.source === "template" &&
+    templateVars.length > 0 &&
+    Object.values(contentRow.captions).every((v) => v === null || v === "");
+
+  // Variable values for template shell fill-in
+  const [shellVars, setShellVars] = useState<Record<string, string>>({});
+  const [isShellGenerating, setIsShellGenerating] = useState(false);
+
+  // Reset shell vars when opening a new template shell
+  useEffect(() => {
+    if (isTemplateShell && templateVars.length > 0) {
+      const defaults: Record<string, string> = {};
+      for (const v of templateVars) defaults[v] = "";
+      setShellVars(defaults);
+    }
+  }, [isTemplateShell, templateVars.join(",")]);
+
+  async function handleShellGenerate() {
+    if (!contentRow) return;
+    setIsShellGenerating(true);
+    setError("");
+    try {
+      // Substitute variables into raw text
+      let finalText = contentRow.raw_text;
+      for (const [k, v] of Object.entries(shellVars)) {
+        finalText = finalText.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v);
+      }
+
+      // Generate captions
+      const enabledPlatforms = Object.entries(contentRow.platforms)
+        .filter(([, v]) => v)
+        .map(([k]) => k);
+      const result = await request<{
+        captions: Record<string, string>;
+        row_id?: number;
+      }>("/api/generate-sync?persist=false", {
+        method: "POST",
+        body: JSON.stringify({
+          raw_text: finalText,
+          platforms: enabledPlatforms,
+          scheduled_date: contentRow.date?.split("T")[0] ?? new Date().toISOString().split("T")[0],
+          content_pillar: contentRow.content_pillar,
+        }),
+      });
+
+      // Update the existing row with substituted text + captions
+      const mergedPlatforms = { ...contentRow.platforms };
+      await api.editDraft(contentRow.row_number, result.captions, mergedPlatforms);
+
+      // Refresh and switch to refine mode
+      setCaptions(result.captions);
+      setActiveTab(enabledPlatforms[0] ?? "");
+      onSave(contentRow); // triggers query invalidation
+      setSaveSuccess("Captions generated! You can now refine them.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Generation failed");
+    } finally {
+      setIsShellGenerating(false);
+    }
+  }
+
   if (!contentRow) return null;
 
   return (
@@ -295,7 +363,9 @@ export function ContentEditor({
         <DialogHeader>
           <div className="flex items-center gap-2">
             {config.icon}
-            <DialogTitle>{config.title}</DialogTitle>
+            <DialogTitle>
+              {isTemplateShell ? "Fill & Generate" : config.title}
+            </DialogTitle>
           </div>
           <DialogDescription className="flex items-center gap-2">
             <span className="truncate">{contentRow.raw_text}</span>
@@ -306,6 +376,75 @@ export function ContentEditor({
             )}
           </DialogDescription>
         </DialogHeader>
+
+        {/* Template shell: variable fill-in + generate */}
+        {isTemplateShell && mode !== "repurpose" && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Fill in the details for this post, then generate captions.
+            </p>
+
+            {/* Template preview with variable highlights */}
+            <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm leading-relaxed">
+              {contentRow.raw_text.split(/(\{\{.+?\}\})/).map((part, i) => {
+                const match = part.match(/^\{\{(.+?)\}\}$/);
+                return match ? (
+                  <span
+                    key={i}
+                    className="mx-0.5 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800"
+                  >
+                    {shellVars[match[1]] || match[1]}
+                  </span>
+                ) : (
+                  <span key={i}>{part}</span>
+                );
+              })}
+            </div>
+
+            {/* Variable inputs */}
+            {templateVars.map((varName) => (
+              <div key={varName}>
+                <Label htmlFor={`shell-var-${varName}`} className="text-sm capitalize">
+                  {varName}
+                </Label>
+                <Input
+                  id={`shell-var-${varName}`}
+                  value={shellVars[varName] ?? ""}
+                  onChange={(e) =>
+                    setShellVars((prev) => ({ ...prev, [varName]: e.target.value }))
+                  }
+                  placeholder={`Enter ${varName}...`}
+                />
+              </div>
+            ))}
+
+            <Button
+              onClick={handleShellGenerate}
+              disabled={
+                isShellGenerating ||
+                templateVars.some((v) => !shellVars[v]?.trim())
+              }
+              className="w-full"
+            >
+              {isShellGenerating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating with AI...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Generate Captions
+                </>
+              )}
+            </Button>
+            {isShellGenerating && (
+              <p className="text-center text-xs text-muted-foreground animate-pulse">
+                Claude is writing platform-specific captions — this usually takes 30-90 seconds.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Repurpose: platform selector + original content reference */}
         {mode === "repurpose" && !repurposeGenerated && (
@@ -417,8 +556,8 @@ export function ContentEditor({
           </div>
         )}
 
-        {/* Platform tabs — shown for refine/create, and repurpose after generation */}
-        {(mode !== "repurpose" || repurposeGenerated) && (
+        {/* Platform tabs — hidden for template shells and pre-generation repurpose */}
+        {!isTemplateShell && (mode !== "repurpose" || repurposeGenerated) && (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="w-full">
             {platforms.map((platform) => {
@@ -573,8 +712,8 @@ export function ContentEditor({
 
         {/* Footer actions */}
         <DialogFooter className="flex-col sm:flex-row gap-2">
-          {/* Repurpose toggle — available in refine mode */}
-          {mode === "refine" && (
+          {/* Repurpose toggle — available in refine mode, not for template shells */}
+          {mode === "refine" && !isTemplateShell && (
             <Button
               variant="outline"
               className="mr-auto gap-1.5"
@@ -605,7 +744,7 @@ export function ContentEditor({
               )}
               {repurposeTarget === "merge" ? "Add to Draft" : "Save as New Draft"}
             </Button>
-          ) : mode !== "repurpose" ? (
+          ) : mode !== "repurpose" && !isTemplateShell ? (
             <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

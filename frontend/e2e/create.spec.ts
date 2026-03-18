@@ -17,7 +17,7 @@ test.describe("Create Page", () => {
       page.getByLabel(/what do you want to post/i),
     ).toBeVisible();
     await expect(page.getByText("Platforms")).toBeVisible();
-    await expect(page.getByLabel("Schedule Date")).toBeVisible();
+    await expect(page.getByLabel("Date")).toBeVisible();
     await expect(
       page.getByRole("button", { name: /generate captions/i }),
     ).toBeVisible();
