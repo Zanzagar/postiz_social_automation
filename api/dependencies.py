@@ -65,10 +65,10 @@ def get_sheets_client():
 
 
 def get_caption_generator():
-    """Build a CaptionGenerator (or demo mock)."""
-    settings = get_settings()
-    if settings.demo_mode:
-        from api.demo import DemoCaptionGenerator
+    """Build a CaptionGenerator.
 
-        return DemoCaptionGenerator()
+    Always uses the real CaptionGenerator (Claude CLI via OAuth) even in
+    demo mode — AI generation is free via Max subscription and should
+    work everywhere Claude CLI is available.
+    """
     return CaptionGenerator()
