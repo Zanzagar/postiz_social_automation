@@ -37,6 +37,7 @@ const sampleRow: ContentRow = {
   posted_at: null,
   error_msg: null,
   source: "manual",
+  auto_publish_at: null,
 };
 
 function renderEditor(

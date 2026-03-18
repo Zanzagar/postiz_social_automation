@@ -44,6 +44,7 @@ const sampleDrafts: ContentRow[] = [
     posted_at: null,
     error_msg: null,
     source: "manual",
+    auto_publish_at: null,
   },
   {
     row_number: 3,
@@ -59,6 +60,7 @@ const sampleDrafts: ContentRow[] = [
     posted_at: null,
     error_msg: null,
     source: "manual",
+    auto_publish_at: null,
   },
 ];
 

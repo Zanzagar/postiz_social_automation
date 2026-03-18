@@ -22,6 +22,7 @@ function suggestionToContentRow(s: Suggestion): ContentRow {
     posted_at: null,
     error_msg: null,
     source: "suggestion",
+    auto_publish_at: null,
   };
 }
 

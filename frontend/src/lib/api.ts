@@ -93,6 +93,7 @@ export interface ContentRow {
   posted_at: string | null;
   error_msg: string | null;
   source: string;
+  auto_publish_at: string | null;
 }
 
 export interface CalendarEntry {

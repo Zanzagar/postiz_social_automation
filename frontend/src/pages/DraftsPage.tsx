@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ContentEditor } from "@/components/content/ContentEditor";
+import { AutoPublishCountdown } from "@/components/content/AutoPublishCountdown";
 import { CheckCircle, Loader2 } from "lucide-react";
 
 export function DraftsPage() {
@@ -194,12 +195,15 @@ function DraftCard({
         </div>
       </CardHeader>
       <CardContent onClick={onClick}>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {platforms.map((p) => (
             <Badge key={p} variant="secondary" className="text-xs">
               {platformLabels[p] ?? p}
             </Badge>
           ))}
+          {draft.auto_publish_at && (
+            <AutoPublishCountdown publishAt={draft.auto_publish_at} />
+          )}
         </div>
       </CardContent>
     </Card>
