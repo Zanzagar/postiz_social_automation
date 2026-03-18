@@ -13,7 +13,9 @@ test.describe("Create Page", () => {
 
   test("shows all form elements", async ({ page }) => {
     await expect(page.getByText("Media")).toBeVisible();
-    await expect(page.getByLabel("Raw Text")).toBeVisible();
+    await expect(
+      page.getByLabel(/what do you want to post/i),
+    ).toBeVisible();
     await expect(page.getByText("Platforms")).toBeVisible();
     await expect(page.getByLabel("Schedule Date")).toBeVisible();
     await expect(
@@ -23,7 +25,7 @@ test.describe("Create Page", () => {
 
   test("shows character count that updates", async ({ page }) => {
     await expect(page.getByText("0/2000")).toBeVisible();
-    await page.getByLabel("Raw Text").fill("Hello world");
+    await page.getByLabel(/what do you want to post/i).fill("Hello world");
     await expect(page.getByText("11/2000")).toBeVisible();
   });
 
@@ -49,48 +51,52 @@ test.describe("Create Page", () => {
     await expect(page.getByLabel("Or paste Google Drive URL")).toBeVisible();
   });
 
-  test("generate captions flow with SSE", async ({ page }) => {
-    await page.route("**/api/generate", (route) => {
-      const sseBody = [
-        'data: {"status":"generating","message":"Analyzing content..."}\n\n',
-        'data: {"status":"generating","message":"Writing captions..."}\n\n',
-        'data: {"status":"done","captions":{"instagram":"Test IG caption for kirtan","facebook":"Test FB caption for kirtan"}}\n\n',
-      ].join("");
-
-      return route.fulfill({
+  test("generate captions flow", async ({ page }) => {
+    await page.route("**/api/generate-sync", (route) =>
+      route.fulfill({
         status: 200,
-        headers: { "Content-Type": "text/event-stream" },
-        body: sseBody,
-      });
-    });
+        contentType: "application/json",
+        body: JSON.stringify({
+          captions: {
+            instagram: "Test IG caption for kirtan",
+            facebook: "Test FB caption for kirtan",
+          },
+          row_id: 1,
+        }),
+      }),
+    );
 
-    await page.getByLabel("Raw Text").fill("Morning kirtan at the temple");
+    await page
+      .getByLabel(/what do you want to post/i)
+      .fill("Morning kirtan at the temple");
     await page.getByLabel("Instagram").click();
     await page.getByLabel("Facebook").click();
 
     await page.getByRole("button", { name: /generate captions/i }).click();
 
-    // Check for unique caption text (not platform names which appear in checkboxes too)
     await expect(page.getByText("Test IG caption for kirtan")).toBeVisible();
     await expect(page.getByText("Test FB caption for kirtan")).toBeVisible();
   });
 
-  test("caption cards show re-prompt and send controls", async ({ page }) => {
-    await page.route("**/api/generate", (route) =>
+  test("caption cards show iteration and send controls", async ({ page }) => {
+    await page.route("**/api/generate-sync", (route) =>
       route.fulfill({
         status: 200,
-        headers: { "Content-Type": "text/event-stream" },
-        body: 'data: {"status":"done","captions":{"instagram":"Test caption for controls"}}\n\n',
+        contentType: "application/json",
+        body: JSON.stringify({
+          captions: { instagram: "Test caption for controls" },
+          row_id: 1,
+        }),
       }),
     );
 
-    await page.getByLabel("Raw Text").fill("Test content");
+    await page.getByLabel(/what do you want to post/i).fill("Test content");
     await page.getByLabel("Instagram").click();
     await page.getByRole("button", { name: /generate captions/i }).click();
 
     await expect(page.getByText("Test caption for controls")).toBeVisible();
     await expect(
-      page.getByPlaceholder(/feedback for regeneration/i),
+      page.getByPlaceholder(/iteration instruction/i),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /send to postiz/i }),
@@ -98,11 +104,14 @@ test.describe("Create Page", () => {
   });
 
   test("send to Postiz shows success message", async ({ page }) => {
-    await page.route("**/api/generate", (route) =>
+    await page.route("**/api/generate-sync", (route) =>
       route.fulfill({
         status: 200,
-        headers: { "Content-Type": "text/event-stream" },
-        body: 'data: {"status":"done","captions":{"instagram":"Caption to send"}}\n\n',
+        contentType: "application/json",
+        body: JSON.stringify({
+          captions: { instagram: "Caption to send" },
+          row_id: 1,
+        }),
       }),
     );
     await page.route("**/api/send-to-postiz", (route) =>
@@ -116,7 +125,7 @@ test.describe("Create Page", () => {
       }),
     );
 
-    await page.getByLabel("Raw Text").fill("Test");
+    await page.getByLabel(/what do you want to post/i).fill("Test");
     await page.getByLabel("Instagram").click();
     await page.getByRole("button", { name: /generate captions/i }).click();
     await expect(page.getByText("Caption to send")).toBeVisible();
@@ -126,20 +135,26 @@ test.describe("Create Page", () => {
   });
 
   test("inline caption editing", async ({ page }) => {
-    await page.route("**/api/generate", (route) =>
+    await page.route("**/api/generate-sync", (route) =>
       route.fulfill({
         status: 200,
-        headers: { "Content-Type": "text/event-stream" },
-        body: 'data: {"status":"done","captions":{"instagram":"Original caption"}}\n\n',
+        contentType: "application/json",
+        body: JSON.stringify({
+          captions: { instagram: "Original caption" },
+          row_id: 1,
+        }),
       }),
     );
 
-    await page.getByLabel("Raw Text").fill("Test");
+    await page.getByLabel(/what do you want to post/i).fill("Test");
     await page.getByLabel("Instagram").click();
     await page.getByRole("button", { name: /generate captions/i }).click();
     await expect(page.getByText("Original caption")).toBeVisible();
 
-    const captionTextarea = page.locator("textarea").last();
+    // The caption textarea in the result card
+    const captionTextarea = page.locator(
+      "textarea.font-mono",
+    );
     await captionTextarea.fill("Edited caption text");
     await expect(captionTextarea).toHaveValue("Edited caption text");
   });

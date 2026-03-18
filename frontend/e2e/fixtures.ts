@@ -221,6 +221,27 @@ export async function setupApiMocks(page: Page): Promise<void> {
       body: JSON.stringify(mockIntegrations),
     }),
   );
+
+  await page.route("**/api/templates", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "[]",
+    }),
+  );
+
+  await page.route("**/api/settings/publish", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        enabled: false,
+        delay_hours: 24,
+        platforms: {},
+        pillar_overrides: {},
+      }),
+    }),
+  );
 }
 
 /**
@@ -249,5 +270,20 @@ export async function setupEmptyApiMocks(page: Page): Promise<void> {
   );
   await page.route("**/api/integrations", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/templates", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/settings/publish", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        enabled: false,
+        delay_hours: 24,
+        platforms: {},
+        pillar_overrides: {},
+      }),
+    }),
   );
 }
