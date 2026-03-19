@@ -2,26 +2,39 @@
 
 import asyncio
 import json
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
 from api.auth import get_current_user
-from api.dependencies import get_caption_generator
+from api.dependencies import get_caption_generator, get_content_repo
+from api.repositories.content import ContentRepository
 from api.schemas import GenerateRequest, RepromptRequest
 from content_engine.models import ContentRow, ContentStatus, Platform
+from content_engine.validator import validate_external_url
 
 router = APIRouter(prefix="/api", tags=["generate"], dependencies=[Depends(get_current_user)])
 
 
 def _build_content_row(req: GenerateRequest | RepromptRequest) -> ContentRow:
     """Build a ContentRow from request data."""
-    from datetime import datetime
-
     platforms = {Platform(p): True for p in req.platforms}
     media = req.media_url
-    if media and not media.startswith(("http://", "https://")):
-        media = None
+    if media:
+        try:
+            validate_external_url(media)
+        except ValueError:
+            media = None
+
+    pillar = None
+    if hasattr(req, "content_pillar") and req.content_pillar:
+        try:
+            from content_engine.models import ContentPillar
+
+            pillar = ContentPillar(req.content_pillar)
+        except ValueError:
+            pillar = None
 
     return ContentRow(
         row_number=0,
@@ -31,11 +44,40 @@ def _build_content_row(req: GenerateRequest | RepromptRequest) -> ContentRow:
         platforms=platforms,
         status=ContentStatus.DRAFT,
         captions={Platform(p): None for p in req.platforms},
+        content_pillar=pillar,
     )
 
 
+async def _persist_generated(
+    req: GenerateRequest | RepromptRequest,
+    captions: dict,
+    repo: ContentRepository,
+) -> int:
+    """Save generated content to SQLite. Returns the new row ID."""
+    platforms_json = json.dumps({str(p): True for p in req.platforms})
+    captions_json = json.dumps({str(k): v for k, v in captions.items()})
+
+    row = await repo.create_content_row(
+        {
+            "raw_text": req.raw_text,
+            "date": datetime.fromisoformat(req.scheduled_date),
+            "media_url": req.media_url if req.media_url else None,
+            "platforms": platforms_json,
+            "captions": captions_json,
+            "status": "draft",
+            "source": "generated",
+            "pillar": req.content_pillar if hasattr(req, "content_pillar") else None,
+        }
+    )
+    return row.id
+
+
 @router.post("/generate")
-async def generate(req: GenerateRequest, generator=Depends(get_caption_generator)):
+async def generate(
+    req: GenerateRequest,
+    generator=Depends(get_caption_generator),
+    repo: ContentRepository = Depends(get_content_repo),
+):
     """Stream caption generation progress via SSE."""
 
     is_demo = hasattr(generator, "__class__") and "Demo" in generator.__class__.__name__
@@ -54,9 +96,12 @@ async def generate(req: GenerateRequest, generator=Depends(get_caption_generator
 
             captions = await asyncio.to_thread(generator.generate_captions, row)
 
+            row_id = await _persist_generated(req, captions, repo)
+
             yield json.dumps(
                 {
                     "status": "done",
+                    "row_id": row_id,
                     "captions": {str(k): v for k, v in captions.items()},
                 }
             )
@@ -67,22 +112,47 @@ async def generate(req: GenerateRequest, generator=Depends(get_caption_generator
 
 
 @router.post("/generate-sync")
-async def generate_sync(req: GenerateRequest, generator=Depends(get_caption_generator)):
-    """Non-streaming caption generation (works through proxies)."""
-    row = _build_content_row(req)
-    try:
-        captions = await asyncio.to_thread(generator.generate_captions, row)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    return {"captions": {str(k): v for k, v in captions.items()}}
+async def generate_sync(
+    req: GenerateRequest,
+    persist: bool = True,
+    skip_ai: bool = False,
+    generator=Depends(get_caption_generator),
+    repo: ContentRepository = Depends(get_content_repo),
+):
+    """Non-streaming caption generation (works through proxies).
+
+    Set persist=false to generate captions without creating a new content row.
+    Set skip_ai=true to save the raw text as-is for all platforms (no AI).
+    """
+    if skip_ai:
+        captions = {p: req.raw_text for p in req.platforms}
+    else:
+        row = _build_content_row(req)
+        try:
+            captions = await asyncio.to_thread(generator.generate_captions, row)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        captions = {str(k): v for k, v in captions.items()}
+
+    result: dict = {"captions": captions}
+    if persist:
+        row_id = await _persist_generated(req, captions, repo)
+        result["row_id"] = row_id
+    return result
 
 
 @router.post("/reprompt")
-async def reprompt(req: RepromptRequest, generator=Depends(get_caption_generator)):
+async def reprompt(
+    req: RepromptRequest,
+    generator=Depends(get_caption_generator),
+    repo: ContentRepository = Depends(get_content_repo),
+):
     """Regenerate captions with feedback."""
     row = _build_content_row(req)
     try:
         captions = await asyncio.to_thread(generator.generate_captions, row, req.feedback)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    return {"captions": {str(k): v for k, v in captions.items()}}
+
+    row_id = await _persist_generated(req, captions, repo)
+    return {"row_id": row_id, "captions": {str(k): v for k, v in captions.items()}}

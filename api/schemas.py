@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # --- Content ---
 
@@ -23,6 +23,7 @@ class ContentRowResponse(BaseModel):
     posted_at: datetime | None = None
     error_msg: str | None = None
     source: str = "staff"
+    auto_publish_at: datetime | None = None
 
 
 class SuggestionResponse(BaseModel):
@@ -59,18 +60,19 @@ class CalendarResponse(BaseModel):
 
 
 class GenerateRequest(BaseModel):
-    raw_text: str
+    raw_text: str = Field(max_length=5000)
     media_url: str | None = None
     platforms: list[str]
     scheduled_date: str
+    content_pillar: str | None = None
 
 
 class RepromptRequest(BaseModel):
-    raw_text: str
+    raw_text: str = Field(max_length=5000)
     media_url: str | None = None
     platforms: list[str]
     scheduled_date: str
-    feedback: str
+    feedback: str = Field(max_length=2000)
 
 
 # --- Postiz ---
@@ -127,3 +129,128 @@ class ApproveResponse(BaseModel):
 
 class EditCaptionsRequest(BaseModel):
     captions: dict[str, str]
+    platforms: dict[str, bool] | None = None
+
+
+# --- Pillars ---
+
+
+class PillarResponse(BaseModel):
+    id: int
+    name: str
+    description: str | None = None
+    color: str | None = None
+    is_active: bool = True
+    sort_order: int = 0
+
+
+class PillarCreateRequest(BaseModel):
+    name: str
+    description: str | None = None
+    color: str | None = None
+    sort_order: int = 0
+
+
+class PillarUpdateRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    color: str | None = None
+    is_active: bool | None = None
+    sort_order: int | None = None
+
+
+# --- Publish Config ---
+
+
+class PlatformPublishConfig(BaseModel):
+    platform: str
+    enabled: bool = False
+    delay_hours: int = 2
+    pillar_overrides: dict[str, bool] = {}
+
+
+class PublishConfigResponse(BaseModel):
+    platforms: list[PlatformPublishConfig]
+
+
+class UpdatePublishConfigRequest(BaseModel):
+    platforms: list[PlatformPublishConfig]
+
+
+# --- Templates ---
+
+
+class TemplateVariable(BaseModel):
+    name: str
+    type: str = "text"
+
+
+class TemplateCreateRequest(BaseModel):
+    name: str
+    pillar: str | None = None
+    platform_instructions: dict[str, str] = {}
+    raw_text_template: str
+    variables: list[TemplateVariable] = []
+    schedule_pattern: str | None = None
+    schedule_time: str | None = None
+    default_segment_id: int | None = None
+
+
+class TemplateResponse(BaseModel):
+    id: int
+    name: str
+    pillar: str | None
+    platform_instructions: dict[str, str]
+    raw_text_template: str | None
+    variables: list[TemplateVariable]
+    schedule_pattern: str | None
+    schedule_time: str | None
+    default_segment_id: int | None
+    created_at: datetime
+    updated_at: datetime | None
+
+
+class GenerateFromTemplateRequest(BaseModel):
+    variable_values: dict[str, str] = Field(default_factory=dict)
+    platforms: list[str]
+    scheduled_date: str
+    scheduled_time: str | None = None
+
+
+class BatchGenerateRequest(BaseModel):
+    variable_values: dict[str, str]
+    platforms: list[str]
+    weeks: int = 4
+    scheduled_time: str | None = None
+
+
+class BatchGenerateResponse(BaseModel):
+    created: int
+    drafts: list[ContentRowResponse]
+
+
+# --- Iteration ---
+
+
+class IterateRequest(BaseModel):
+    content_row_id: int
+    platform: str
+    instruction: str = Field(max_length=2000)
+    mode: str = "refine"
+
+
+class IterateResponse(BaseModel):
+    caption: str
+    iteration_id: int
+
+
+class IterationResponse(BaseModel):
+    id: int
+    content_row_id: int
+    platform: str
+    old_caption: str | None
+    new_caption: str
+    refinement_instruction: str | None
+    mode: str
+    created_by: int | None
+    created_at: datetime

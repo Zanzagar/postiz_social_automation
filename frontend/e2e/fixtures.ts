@@ -221,6 +221,55 @@ export async function setupApiMocks(page: Page): Promise<void> {
       body: JSON.stringify(mockIntegrations),
     }),
   );
+
+  await page.route("**/api/templates", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "[]",
+    }),
+  );
+
+  await page.route("**/api/settings/publish", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        enabled: false,
+        delay_hours: 24,
+        platforms: {},
+        pillar_overrides: {},
+      }),
+    }),
+  );
+
+  await page.route("**/api/pillars**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        { id: 1, name: "Spiritual Education", description: null, color: "#7c3aed", is_active: true, sort_order: 1 },
+        { id: 2, name: "Farm & Community", description: null, color: "#16a34a", is_active: true, sort_order: 2 },
+        { id: 3, name: "Events", description: null, color: "#ea580c", is_active: true, sort_order: 3 },
+      ]),
+    }),
+  );
+
+  await page.route("**/api/iterations/*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "[]",
+    }),
+  );
+
+  await page.route("**/api/iterate", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ caption: "Iterated caption", iteration_id: 1 }),
+    }),
+  );
 }
 
 /**
@@ -248,6 +297,27 @@ export async function setupEmptyApiMocks(page: Page): Promise<void> {
     }),
   );
   await page.route("**/api/integrations", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/templates", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/settings/publish", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        enabled: false,
+        delay_hours: 24,
+        platforms: {},
+        pillar_overrides: {},
+      }),
+    }),
+  );
+  await page.route("**/api/pillars**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/iterations/*", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
 }

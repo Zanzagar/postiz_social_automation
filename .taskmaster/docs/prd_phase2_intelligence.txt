@@ -1,0 +1,140 @@
+# PRD: Phase 2 — Intelligence Layer
+
+## Overview
+Add web presence intelligence, analytics, and hashtag tracking to the Gita Valley social media automation system. This phase makes the AI smarter by crawling websites and social history, pulling engagement data from Postiz, and tracking hashtag performance — all feeding back into content generation prompts.
+
+## Background
+Phase 1 established SQLite as the source of truth and added content iteration, templates, and auto-publish. The AI generates captions using brand rules and platform instructions, but has no awareness of the temple's web presence, historical social performance, or hashtag effectiveness. This phase closes that gap.
+
+## Prerequisites
+- Phase 1 complete: SQLite database, content_rows table, FastAPI endpoints reading/writing SQLite
+- Meta developer app configured (parallel platform setup track) for Graph API access
+- WordPress MCP available for gitavalley.com access
+
+## Features
+
+### 1. Web Presence Crawler — gitavalley.com (WordPress MCP)
+Crawl gitavalley.com via WordPress MCP to build a knowledge base of programs, events, brand language, and content.
+
+**Requirements:**
+- Use WordPress MCP to pull all published pages and posts from gitavalley.com
+- Extract: title, body text, categories, featured images, URLs
+- AI-classify each page into a content pillar (Cow Life, Farm Ops, Community, Kitchen, Spiritual, CTA)
+- Extract structured knowledge: programs offered, events, quotes, useful links, descriptions
+- Store in `web_pages` table (url, site="gitavalley", title, body_text, pillar, content_hash, last_crawled)
+- Store extracted facts in `web_knowledge` table (web_page_id, fact_type, content, pillar, keywords)
+- Content hash for change detection on re-crawl
+- Periodic re-crawl: weekly via scheduler
+
+### 2. Web Presence Crawler — iskcongitanagari.org (Web Scraper)
+Crawl iskcongitanagari.org via BeautifulSoup to capture spiritual and ISKCON community content.
+
+**Requirements:**
+- HTTP requests + BeautifulSoup to crawl all accessible pages
+- Same extraction and classification pipeline as gitavalley.com
+- Store in same `web_pages` and `web_knowledge` tables with site="iskcon"
+- Respect robots.txt and rate-limit requests (1 request/second)
+- Periodic re-crawl: weekly via scheduler
+
+### 3. Social History Import (Meta Graph API)
+Import historical Facebook and Instagram posts with engagement data.
+
+**Requirements:**
+- Use Meta Graph API to pull all posts from Facebook page (facebook.com/gitavalley) and Instagram account (instagram.com/gita.valley)
+- Extract per post: text, media URLs, hashtags, posted_at, likes, comments, shares, reach
+- AI-classify each post into a content pillar
+- Store in `social_history` table: platform, external_id, post_text, media_urls (JSON), hashtags (JSON), posted_at, engagement metrics, pillar, imported_at
+- UNIQUE constraint on (platform, external_id) to prevent duplicate imports
+- One-time historical import + daily sync for new posts via scheduler
+- Media URLs from social history feed into Phase 3 media catalog (stored as references for now)
+
+### 4. Crawl Error Handling & Status
+Robust error handling for all three intelligence sources.
+
+**Requirements:**
+- Each source crawled independently — one source failing does not block others
+- Partial failures within a source: save what was fetched, resume from last checkpoint on next run
+- AI classification failures: store page/post without classification, flag for manual review
+- `POST /api/knowledge/crawl` endpoint: trigger re-crawl of websites (not social — that uses import-social)
+- `POST /api/knowledge/import-social` endpoint: trigger Meta Graph API import
+- `GET /api/knowledge/status` endpoint: returns per-source status (last crawl time, page count, knowledge entry count, last error if any)
+- `GET /api/knowledge/search?q=` endpoint: full-text search across knowledge base (used by AI during generation and by dashboard)
+
+### 5. Knowledge Base Integration into Content Generation
+Inject relevant knowledge into Claude CLI prompts during caption generation.
+
+**Requirements:**
+- When generating captions (existing generate endpoint and new iterate endpoint), query web_knowledge for entries matching the content's pillar
+- Inject relevant facts, quotes, and cross-promotion links into the Claude prompt
+- Include relevant social history examples: "Here are past Instagram posts about this topic that performed well: ..."
+- Knowledge injection is additive — it extends the existing brand rules and platform instructions, not replaces them
+- Maximum context injection: ~2000 tokens of knowledge per generation call (to stay within Claude CLI limits)
+
+### 6. Analytics Pipeline — Postiz Data Pull
+Pull engagement data from Postiz API and store locally.
+
+**Requirements:**
+- Daily scheduled job: fetch engagement data from Postiz for all posted content
+- Use `GET /analytics/:integration` for platform-level stats and `GET /analytics/post/:postId` for post-level stats
+- Store in `analytics_cache` table: content_row_id, platform, postiz_post_id, likes, shares, comments, reach, impressions, fetched_at
+- Match Postiz posts to our content_rows via postiz_ids field
+- `POST /api/analytics/refresh` endpoint: manual trigger for Postiz data pull
+- Handle Postiz API rate limits (30 req/hour): batch requests, retry on 429
+
+### 7. Analytics Correlation Engine
+Correlate engagement data with content metadata for insights.
+
+**Requirements:**
+- `GET /api/analytics/overview` endpoint: total engagement, post count, engagement trend (up/down/flat vs previous period)
+- `GET /api/analytics/pillars` endpoint: engagement breakdown by content pillar per platform
+- `GET /api/analytics/timing` endpoint: best posting times as a heatmap (day of week × hour, engagement score per cell)
+- `GET /api/analytics/posts?sort=engagement` endpoint: posts ranked by total engagement, filterable by platform/pillar/date range
+- Correlation analysis: do iterated posts (refined 2+ times) outperform first-draft posts? Do template-based posts outperform freeform? Store insights in learning context.
+- Inject analytics insights into Claude prompts: "Posts about cow protection get 3x average engagement — emphasize this angle when relevant"
+
+### 8. Dashboard Analytics Widgets
+Add analytics visualization to the Dashboard page.
+
+**Requirements:**
+- Rebuild Dashboard page through Magic MCP + frontend-design pipeline
+- Engagement over time: line chart, per platform, configurable date range
+- Pillar performance: bar chart showing average engagement per pillar
+- Best posting times: heatmap (7 days × 24 hours)
+- Top performing posts: table with post text preview, platform, engagement metrics
+- Content pipeline stats: enhanced version of existing counts (drafts, scheduled, posted) with trend indicators
+- All widgets pull from analytics API endpoints
+- Loading states, empty states, and error states for each widget
+
+### 9. Hashtag & SEO Intelligence
+Track hashtag usage and correlate with engagement.
+
+**Requirements:**
+- Parse hashtags from all posted content captions and social history imports
+- Store in `hashtag_performance` table: hashtag, platform, times_used, total_engagement, avg_engagement, trend (up/down/stable)
+- UNIQUE constraint on (hashtag, platform)
+- Update performance data whenever analytics_cache is refreshed
+- `GET /api/hashtags?platform=` endpoint: top hashtags by platform with performance data
+- During caption generation, inject top-performing hashtags into Claude prompt as suggestions
+- Enforce platform-specific limits: Instagram max 30, Facebook 3-5, TikTok 3-5, Threads 0, LinkedIn 3-5
+- Hashtag suggestions visible in ContentEditor during iteration
+
+## SQLite Schema (Phase 2 additions)
+
+Tables: web_pages, web_knowledge, social_history, analytics_cache, hashtag_performance
+(Full schema in design spec: docs/superpowers/specs/2026-03-16-full-feature-roadmap-design.md)
+
+## Success Criteria
+- AI-generated captions reference actual Gita Valley programs, events, and website content
+- Dashboard shows engagement analytics with pillar breakdown and timing heatmap
+- Hashtag suggestions appear during content iteration
+- Social history from Facebook and Instagram is imported and classified
+- Knowledge base search works from dashboard
+- All crawlers handle errors gracefully (partial failures, rate limits)
+- Existing Phase 1 features continue to work
+
+## Out of Scope
+- Media catalog (Phase 3)
+- Calendar AI planning (Phase 3)
+- Multi-user (Phase 4)
+- Audience segmentation (Phase 4)
+- Dark mode, notifications, PWA (Phase 5)

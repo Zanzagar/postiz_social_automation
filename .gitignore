@@ -30,6 +30,9 @@ credentials*.json
 *.sw?
 # OS specific
 
+# SQLite database
+data/gvsa.db
+
 # Python
 *.egg-info/
 *.egg

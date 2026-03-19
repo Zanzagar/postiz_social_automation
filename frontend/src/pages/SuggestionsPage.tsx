@@ -1,11 +1,37 @@
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, type Suggestion, type ContentRow } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ContentEditor } from "@/components/content/ContentEditor";
 import { Lightbulb } from "lucide-react";
 
+function suggestionToContentRow(s: Suggestion): ContentRow {
+  // row_number -1 signals this is a synthetic row (not yet persisted)
+  // ContentEditor in create mode should create a new row, not edit row -1
+  return {
+    row_number: -1,
+    date: s.suggested_date,
+    content_pillar: s.suggested_pillar,
+    raw_text: s.content_idea,
+    media_url: null,
+    platforms: { instagram: true, facebook: true, tiktok: true, threads: true, linkedin: true },
+    status: "draft",
+    captions: {},
+    feedback: null,
+    postiz_ids: null,
+    posted_at: null,
+    error_msg: null,
+    source: "suggestion",
+    auto_publish_at: null,
+  };
+}
+
 export function SuggestionsPage() {
+  const queryClient = useQueryClient();
+  const [selectedSuggestion, setSelectedSuggestion] = useState<ContentRow | null>(null);
+
   const { data: suggestions, isLoading } = useQuery({
     queryKey: ["suggestions"],
     queryFn: () => api.getSuggestions(),
@@ -37,8 +63,12 @@ export function SuggestionsPage() {
     <div className="space-y-4 p-6">
       <h1 className="text-2xl font-bold text-sage-800">Content Suggestions</h1>
 
-      {suggestions.map((s, i) => (
-        <Card key={i}>
+      {suggestions.map((s) => (
+        <Card
+          key={`${s.suggested_date}-${s.content_idea.slice(0, 30)}`}
+          className="cursor-pointer transition-colors hover:bg-muted/30"
+          onClick={() => setSelectedSuggestion(suggestionToContentRow(s))}
+        >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">{s.content_idea}</CardTitle>
             <Badge variant="outline">{s.suggested_pillar}</Badge>
@@ -52,6 +82,19 @@ export function SuggestionsPage() {
           </CardContent>
         </Card>
       ))}
+
+      {/* ContentEditor in create mode */}
+      <ContentEditor
+        contentRow={selectedSuggestion}
+        mode="create"
+        isOpen={!!selectedSuggestion}
+        onClose={() => setSelectedSuggestion(null)}
+        onSave={() => {
+          queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+          queryClient.invalidateQueries({ queryKey: ["drafts"] });
+          setSelectedSuggestion(null);
+        }}
+      />
     </div>
   );
 }

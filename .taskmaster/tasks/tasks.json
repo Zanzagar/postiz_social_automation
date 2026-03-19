@@ -1637,7 +1637,7 @@
   "react-frontend": {
     "tasks": [
       {
-        "id": "1",
+        "id": 1,
         "title": "Set up FastAPI backend project structure",
         "description": "Create the FastAPI backend application structure with proper project layout, dependencies, and configuration for wrapping the existing content_engine modules.",
         "details": "Create `api/` directory with:\n- `api/__init__.py`\n- `api/main.py` - FastAPI app with CORS, exception handlers\n- `api/config.py` - Settings using pydantic-settings (POSTIZ_API_KEY, SPREADSHEET_ID, GOOGLE_SHEETS_CREDENTIALS, JWT_SECRET, PASSWORD)\n- `api/dependencies.py` - Dependency injection for SheetsClient, PostizClient, CaptionGenerator\n\nUpdate `pyproject.toml` with new dependencies:\n- fastapi>=0.109.0\n- uvicorn[standard]>=0.27.0\n- python-jose[cryptography]>=3.3.0\n- python-multipart>=0.0.6\n- sse-starlette>=1.8.0\n\nCreate `api/run.py` entry point for `uvicorn api.main:app --host 0.0.0.0 --port 8000`",
@@ -1652,7 +1652,7 @@
         "updatedAt": "2026-03-16T16:51:18.466Z"
       },
       {
-        "id": "2",
+        "id": 2,
         "title": "Implement JWT authentication endpoints",
         "description": "Create authentication endpoints with JWT token generation, password verification using existing auth logic, and brute-force protection.",
         "details": "Create `api/auth.py`:\n- `POST /api/auth/login` endpoint accepting `{\"password\": \"...\"}` JSON body\n- Reuse `verify_password()` from `app/auth.py` for constant-time comparison\n- Generate JWT with 1-hour expiry using python-jose\n- Store failed attempts in memory dict keyed by IP (reset after LOCKOUT_SECONDS)\n- Return `{\"access_token\": \"...\", \"token_type\": \"bearer\"}` on success\n- Return 401 with error message on failure, 429 on lockout\n\nCreate `api/middleware.py`:\n- `get_current_user` dependency that validates Bearer token from Authorization header\n- Raises HTTPException 401 if token invalid/expired\n\nProtect all other endpoints with `Depends(get_current_user)`",
@@ -1716,7 +1716,7 @@
         "updatedAt": "2026-03-16T17:00:36.259Z"
       },
       {
-        "id": "3",
+        "id": 3,
         "title": "Implement content generation SSE endpoint",
         "description": "Create the POST /api/generate endpoint that streams caption generation progress via Server-Sent Events.",
         "details": "Create `api/routes/generate.py`:\n- `POST /api/generate` accepts JSON body: `{\"raw_text\": str, \"media_url\": str|null, \"platforms\": [\"instagram\", \"facebook\", ...], \"scheduled_date\": \"YYYY-MM-DD\"}`\n- Returns SSE stream using sse-starlette EventSourceResponse\n- Build ContentRow from request, call CaptionGenerator.generate_captions()\n- Stream events: `{\"status\": \"validating\"}`, `{\"status\": \"generating\", \"platform\": \"instagram\"}`, `{\"status\": \"complete\", \"captions\": {\"instagram\": \"...\", ...}}`\n- On error: `{\"status\": \"error\", \"message\": \"...\"}`\n- Use asyncio.to_thread() for blocking Claude CLI calls\n\nCreate `api/routes/reprompt.py`:\n- `POST /api/reprompt` accepts same body plus `feedback: str`\n- Calls generator.generate_captions(row, feedback=feedback)\n- Returns JSON (not SSE) with captions dict",
@@ -1782,7 +1782,7 @@
         "updatedAt": "2026-03-16T17:27:27.943Z"
       },
       {
-        "id": "4",
+        "id": 4,
         "title": "Implement Postiz integration endpoints",
         "description": "Create endpoints for sending drafts to Postiz and listing connected integrations.",
         "details": "Create `api/routes/postiz.py`:\n- `POST /api/send-to-postiz` accepts `{\"captions\": {\"instagram\": \"...\"}, \"media_url\": str|null, \"scheduled_at\": str|null}`\n- Maps platform names to integration IDs via postiz.list_integrations()\n- Calls postiz.create_draft_post() for each platform\n- Returns `{\"draft_ids\": [\"id1\", \"id2\", ...], \"platforms\": [\"instagram\", \"facebook\"]}`\n\n- `GET /api/integrations`\n- Returns list of connected platforms from postiz.list_integrations()\n- Format: `[{\"id\": \"...\", \"platform\": \"instagram\", \"name\": \"...\"}, ...]`\n\nHandle PostizAPIError and MediaValidationError with appropriate HTTP status codes (502 for API errors, 400 for validation).",
@@ -1799,7 +1799,7 @@
         "updatedAt": "2026-03-16T17:27:32.284Z"
       },
       {
-        "id": "5",
+        "id": 5,
         "title": "Implement content reading endpoints",
         "description": "Create endpoints for reading drafts, calendar data, suggestions, and individual content rows from Google Sheets.",
         "details": "Create `api/routes/content.py`:\n- `GET /api/drafts` - Returns pending_approval rows from sheets.get_rows_by_status(ContentStatus.PENDING_APPROVAL)\n- Serialize ContentRow to JSON with camelCase keys\n\n- `GET /api/calendar` - Returns rows with status in [approved, scheduled, posted]\n- Group by date, include pillar distribution stats\n\n- `GET /api/suggestions` - Returns suggestions from sheets.get_suggestions()\n- Include status filter query param: `?status=suggested`\n\n- `GET /api/content/{row_number}` - Returns single content row\n- 404 if row not found\n\nCreate `api/schemas.py` with Pydantic response models:\n- ContentRowResponse, SuggestionResponse, CalendarResponse\n- Use model_config with alias_generator for camelCase output",
@@ -1816,7 +1816,7 @@
         "updatedAt": "2026-03-16T17:27:36.452Z"
       },
       {
-        "id": "6",
+        "id": 6,
         "title": "Implement content action endpoints",
         "description": "Create endpoints for approving drafts, editing captions, and triggering suggestion generation.",
         "details": "Add to `api/routes/content.py`:\n- `POST /api/drafts/{row_number}/approve`\n- Updates status to APPROVED via sheets.update_status()\n- Creates Postiz drafts for all enabled platforms\n- Returns `{\"success\": true, \"postiz_ids\": [...]}`\n\n- `POST /api/drafts/{row_number}/edit` accepts `{\"captions\": {\"instagram\": \"new caption\"}}`\n- Updates captions via sheets.update_captions()\n- Returns updated row\n\nCreate `api/routes/suggestions.py`:\n- `POST /api/suggest` triggers suggest_pipeline()\n- Run in background thread, return immediately with `{\"status\": \"started\"}`\n- Or use SSE to stream progress if pipeline is modified\n\n- `POST /api/suggestions/{id}/accept` - Marks suggestion as accepted, returns data for Create page prefill\n- `POST /api/suggestions/{id}/dismiss` - Marks suggestion as dismissed",
@@ -1877,7 +1877,7 @@
         "updatedAt": "2026-03-16T17:32:20.448Z"
       },
       {
-        "id": "7",
+        "id": 7,
         "title": "Implement health check endpoint",
         "description": "Create the system health endpoint that checks all service dependencies.",
         "details": "Create `api/routes/health.py`:\n- `GET /api/health` calls existing health module functions:\n  - check_sheets_health(sheets_client)\n  - check_postiz_health(postiz_client)\n  - check_claude_health()\n  - check_oauth_health()\n\n- Return JSON: `{\"services\": [{\"name\": \"sheets\", \"status\": \"ok\"|\"error\", \"message\": \"...\", \"lastChecked\": \"ISO timestamp\"}, ...], \"errors\": [{\"timestamp\": \"...\", \"source\": \"...\", \"message\": \"...\"}]}`\n\n- Include recent errors from sheets.get_recent_errors(limit=10)\n- Add cache (30 second TTL) to avoid hammering external services",
@@ -1894,7 +1894,7 @@
         "updatedAt": "2026-03-16T17:27:40.688Z"
       },
       {
-        "id": "8",
+        "id": 8,
         "title": "Implement file upload endpoint",
         "description": "Create the media upload endpoint for handling photo/video uploads from the frontend.",
         "details": "Create `api/routes/upload.py`:\n- `POST /api/upload` accepts multipart form data with file field\n- Validate file type (image/jpeg, image/png, image/webp, video/mp4)\n- Validate file size (10MB images, 100MB video) using postiz.validate_media()\n- Save to temp directory with UUID filename\n- Return `{\"url\": \"file:///tmp/postiz_upload_xxx.jpg\", \"contentType\": \"image/jpeg\", \"size\": 12345}`\n\n- Files are passed to PostizClient.upload_media() when sending to Postiz\n- Clean up temp files after 1 hour via background task\n\nAlternative: Accept Google Drive URL directly and validate it can be parsed.",
@@ -1958,7 +1958,7 @@
         "updatedAt": "2026-03-16T17:27:44.849Z"
       },
       {
-        "id": "9",
+        "id": 9,
         "title": "Set up React frontend with Vite and Tailwind",
         "description": "Initialize the React SPA with Vite, Tailwind CSS, and essential dependencies for the frontend build.",
         "details": "Create `frontend/` directory:\n```bash\nnpm create vite@latest frontend -- --template react-ts\ncd frontend\nnpm install\nnpm install -D tailwindcss postcss autoprefixer\nnpx tailwindcss init -p\n```\n\nInstall dependencies:\n- react-router-dom@6\n- @tanstack/react-query\n- react-hook-form\n- zod\n- @hookform/resolvers\n- lucide-react (icons)\n- clsx, tailwind-merge (for cn() utility)\n- date-fns\n\nConfigure:\n- `tailwind.config.js` with Gita Valley brand colors (terracotta #C4A484, sage #4A7C59, cream #FFF8E7)\n- `src/lib/utils.ts` with cn() helper\n- `src/index.css` with Tailwind directives and CSS variables\n- `vite.config.ts` with proxy to backend API at localhost:8000",
@@ -1973,7 +1973,7 @@
         "updatedAt": "2026-03-16T17:48:59.538Z"
       },
       {
-        "id": "10",
+        "id": 10,
         "title": "Install and configure shadcn/ui components",
         "description": "Set up shadcn/ui component library with base components needed for the application.",
         "details": "Run shadcn/ui init:\n```bash\nnpx shadcn@latest init\n```\n\nInstall required components:\n```bash\nnpx shadcn@latest add button card input textarea label checkbox\nnpx shadcn@latest add form select tabs toast dialog\nnpx shadcn@latest add calendar dropdown-menu avatar badge\nnpx shadcn@latest add progress skeleton alert\n```\n\nConfigure `components.json` with:\n- Style: default\n- CSS variables: yes\n- Tailwind config path\n- Components alias: @/components\n\nCreate `src/components/ui/` with all shadcn components.",
@@ -1990,7 +1990,7 @@
         "updatedAt": "2026-03-16T18:03:44.581Z"
       },
       {
-        "id": "11",
+        "id": 11,
         "title": "Implement API client and auth context",
         "description": "Create the API client layer with authentication handling and React context for auth state.",
         "details": "Create `src/lib/api.ts`:\n- Axios or fetch wrapper with base URL from env\n- Interceptor to add Authorization header from localStorage\n- Interceptor to catch 401 and redirect to login\n- Typed API functions: login(), generate(), getDrafts(), etc.\n\nCreate `src/contexts/AuthContext.tsx`:\n- AuthProvider with state: isAuthenticated, login(), logout()\n- Store JWT in localStorage on login\n- Check token expiry on mount, clear if expired\n- ProtectedRoute component that redirects to /login if not authenticated\n\nCreate `src/hooks/useAuth.ts` for consuming auth context.\n\nSet up TanStack Query:\n- Create `src/lib/queryClient.ts` with default options\n- Wrap app in QueryClientProvider",
@@ -2052,7 +2052,7 @@
         "updatedAt": "2026-03-16T18:19:10.515Z"
       },
       {
-        "id": "12",
+        "id": 12,
         "title": "Implement Login page",
         "description": "Create the login page with password form, error handling, and lockout display.",
         "details": "Create `src/pages/LoginPage.tsx`:\n- Centered card layout with Gita Valley branding\n- Password input field using shadcn Input\n- Login button with loading state\n- Error message display for invalid password\n- Lockout countdown display when locked out (429 response)\n- Redirect to / on successful login\n\nUse react-hook-form with zod validation:\n- password: required, min 1 character\n\nStyle:\n- Warm cream background\n- Card with soft shadow\n- Gita Valley logo/title at top\n- \"Cultivating Soil and Soul\" tagline",
@@ -2069,7 +2069,7 @@
         "updatedAt": "2026-03-16T18:25:21.593Z"
       },
       {
-        "id": "13",
+        "id": 13,
         "title": "Implement app shell and navigation",
         "description": "Create the main application layout with responsive navigation (bottom nav on mobile, sidebar on desktop).",
         "details": "Create `src/components/layout/AppShell.tsx`:\n- Responsive layout: sidebar on desktop (>768px), bottom nav on mobile\n- Sidebar: Gita Valley branding, nav links with icons, logout button\n- Bottom nav: Icon buttons for Home, Create, Drafts, Calendar, More (dropdown for Suggestions, Health)\n- Use React Router Outlet for page content\n\nCreate `src/components/layout/Sidebar.tsx`:\n- Logo/brand at top\n- Nav items: Dashboard, Create, Drafts, Calendar, Suggestions, Health\n- Active state styling (sage green background)\n- Logout at bottom\n\nCreate `src/components/layout/BottomNav.tsx`:\n- Fixed bottom bar with 5 nav icons\n- Active indicator\n- Touch-friendly (min 44px targets)\n\nSet up React Router in `src/App.tsx`:\n- Routes: /, /create, /drafts, /calendar, /suggestions, /health, /login",
@@ -2135,7 +2135,7 @@
         "updatedAt": "2026-03-16T18:28:56.801Z"
       },
       {
-        "id": "14",
+        "id": 14,
         "title": "Implement Dashboard page",
         "description": "Create the main dashboard with overview cards, quick-create shortcut, calendar mini-view, and health status indicators.",
         "details": "Create `src/pages/DashboardPage.tsx`:\n- Stats cards row: Pending Drafts count, Scheduled This Week, Recent Posts\n- Quick-create card: mini upload area + caption input + \"Generate\" button (navigates to /create with prefilled data)\n- Calendar mini-view: current week with dots for scheduled content (use date-fns)\n- Health status: colored dots (green/red/yellow) for Sheets, Postiz, Claude, OAuth\n- Recent activity feed: last 5 content actions\n\nCreate `src/hooks/useDashboardData.ts`:\n- TanStack Query hook to fetch /api/drafts (count), /api/calendar (this week), /api/health\n- Combine into single dashboard state\n\nStyle:\n- 2-column grid on desktop, stack on mobile\n- Cards with rounded corners, subtle shadows\n- Nature-themed icons (cow, leaf, sun)",
@@ -2197,7 +2197,7 @@
         "updatedAt": "2026-03-16T18:33:08.562Z"
       },
       {
-        "id": "15",
+        "id": 15,
         "title": "Implement Create & Generate page",
         "description": "Create the content creation page with photo upload, caption input, platform selection, and SSE-powered generation.",
         "details": "Create `src/pages/CreatePage.tsx`:\n- Photo upload zone: drag-drop, click to browse, mobile camera capture (accept=\"image/*,video/*\")\n- Google Drive URL input alternative\n- Caption textarea (max 2000 chars) with character count\n- Platform checkboxes with icons (Instagram, Facebook, TikTok, Threads, LinkedIn)\n- Date picker for scheduling\n- \"Generate\" button\n\nCreate `src/components/create/GenerationProgress.tsx`:\n- SSE listener for /api/generate\n- Progress indicator showing current platform\n- Animated status updates\n\nCreate `src/components/create/CaptionCards.tsx`:\n- Platform-specific cards with generated captions\n- Inline editing per platform\n- Re-prompt input with \"Regenerate\" button\n- \"Send to Postiz\" button\n\nUse react-hook-form for the form, useMutation for generation.",
@@ -2273,7 +2273,7 @@
         "updatedAt": "2026-03-16T18:37:24.100Z"
       },
       {
-        "id": "16",
+        "id": 16,
         "title": "Implement Review Drafts page",
         "description": "Create the drafts review page with list view, inline editing, re-prompt, and batch approval functionality.",
         "details": "Create `src/pages/DraftsPage.tsx`:\n- List of pending drafts from /api/drafts\n- \"Select All\" checkbox\n- Empty state: \"All caught up!\" message\n\nCreate `src/components/drafts/DraftCard.tsx`:\n- Selection checkbox\n- Raw text preview (truncated)\n- Platform tabs showing captions (using shadcn Tabs)\n- Inline caption editing\n- Re-prompt input + regenerate button per draft\n- Postiz link if postiz_ids exist\n\nCreate `src/components/drafts/BatchActions.tsx`:\n- Fixed bottom bar when items selected\n- \"Approve & Send X to Postiz\" button\n- Selection count display\n\nUse TanStack Query for data fetching, optimistic updates on approval.",
@@ -2337,7 +2337,7 @@
         "updatedAt": "2026-03-16T18:48:01.330Z"
       },
       {
-        "id": "17",
+        "id": 17,
         "title": "Implement Content Calendar page",
         "description": "Create the calendar view showing scheduled and posted content with pillar distribution visualization.",
         "details": "Create `src/pages/CalendarPage.tsx`:\n- Month/week view toggle\n- Calendar grid using date-fns for date math\n- Navigation: prev/next month, today button\n\nCreate `src/components/calendar/CalendarDay.tsx`:\n- Day cell with content dots\n- Color-coded by pillar (Cow Life=brown, Farm Ops=green, etc.)\n- Click to expand day details\n- Empty days highlighted in yellow (gaps)\n\nCreate `src/components/calendar/DayModal.tsx`:\n- Dialog showing content for selected day\n- List of posts with pillar, platform badges, status\n- Link to view/edit each post\n\nCreate `src/components/calendar/PillarBalance.tsx`:\n- Horizontal bar chart showing actual vs target distribution\n- Use CSS for simple bar visualization (no chart library needed)\n- Legend with pillar names and percentages",
@@ -2402,7 +2402,7 @@
         "updatedAt": "2026-03-16T18:52:16.479Z"
       },
       {
-        "id": "18",
+        "id": 18,
         "title": "Implement Suggestions page",
         "description": "Create the suggestions page with AI-generated content ideas, filtering, accept/dismiss actions.",
         "details": "Create `src/pages/SuggestionsPage.tsx`:\n- List of suggestions from /api/suggestions\n- Filter dropdown: All, Suggested, Accepted, Dismissed\n- \"Generate New Suggestions\" button triggers /api/suggest\n\nCreate `src/components/suggestions/SuggestionCard.tsx`:\n- Content idea title\n- Pillar badge (color-coded)\n- Rationale text\n- Media suggestion\n- Suggested date\n- Accept button: navigates to /create with prefilled data\n- Dismiss button: marks as dismissed, removes from list\n\nCreate `src/hooks/useSuggestions.ts`:\n- TanStack Query for fetching/filtering suggestions\n- Mutations for accept/dismiss\n\nOptimistic updates: remove dismissed items immediately, refetch on error.",
@@ -2419,7 +2419,7 @@
         "updatedAt": "2026-03-16T18:52:20.633Z"
       },
       {
-        "id": "19",
+        "id": 19,
         "title": "Implement System Health page",
         "description": "Create the health monitoring page with service status cards and error log table.",
         "details": "Create `src/pages/HealthPage.tsx`:\n- Grid of service status cards\n- Manual refresh button\n- Error log table at bottom\n\nCreate `src/components/health/ServiceCard.tsx`:\n- Service name (Sheets, Postiz, Claude CLI, OAuth)\n- Status icon: green check, red X, yellow warning\n- Status message\n- Last checked timestamp\n- Expandable details section\n\nCreate `src/components/health/ErrorLog.tsx`:\n- Table with columns: Timestamp, Source, Row #, Message\n- Most recent first\n- Empty state if no errors\n\nUse TanStack Query with refetchInterval for auto-refresh (30 seconds). Manual refresh button forces immediate refetch.",
@@ -2436,7 +2436,7 @@
         "updatedAt": "2026-03-16T18:52:24.876Z"
       },
       {
-        "id": "20",
+        "id": 20,
         "title": "Add mobile-first responsive styling",
         "description": "Ensure all pages are fully responsive with touch-friendly interactions and mobile-optimized layouts.",
         "details": "Review and update all components for mobile:\n\n- Touch targets: minimum 44px height for all interactive elements\n- Forms: full-width inputs on mobile, stack vertically\n- Cards: single column on mobile, grid on desktop\n- Modals: full-screen on mobile, centered on desktop\n- Tables: horizontal scroll wrapper or card layout on mobile\n- Bottom nav: proper safe-area-inset padding for iPhone notch\n\nCreate `src/components/ui/SwipeableCard.tsx`:\n- Swipe gesture for navigating between draft cards\n- Use touch events (touchstart, touchmove, touchend)\n\nUpdate CreatePage:\n- Camera capture button prominent on mobile\n- Platform checkboxes as toggle buttons for easier tapping\n\nTest on iPhone Safari and Android Chrome viewport sizes.",
@@ -2505,7 +2505,7 @@
         "updatedAt": "2026-03-16T18:58:11.725Z"
       },
       {
-        "id": "21",
+        "id": 21,
         "title": "Create Dockerfile for React frontend",
         "description": "Create Docker configuration for serving the React build with nginx:alpine.",
         "details": "Create `frontend/Dockerfile`:\n```dockerfile\n# Build stage\nFROM node:20-alpine AS build\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci\nCOPY . .\nRUN npm run build\n\n# Production stage\nFROM nginx:alpine\nCOPY --from=build /app/dist /usr/share/nginx/html\nCOPY nginx.conf /etc/nginx/conf.d/default.conf\nEXPOSE 3000\n```\n\nCreate `frontend/nginx.conf`:\n- Serve static files from /usr/share/nginx/html\n- SPA fallback: try_files $uri $uri/ /index.html\n- Proxy /api/* to host.docker.internal:8000 (FastAPI on host)\n- Gzip compression enabled\n- Cache static assets (js, css, images)\n\nCreate `.dockerignore` to exclude node_modules, .git\n\nUpdate `docker-compose.yaml` to add frontend service on port 3000.",
@@ -2522,7 +2522,7 @@
         "updatedAt": "2026-03-16T19:00:07.289Z"
       },
       {
-        "id": "22",
+        "id": 22,
         "title": "Write FastAPI endpoint tests",
         "description": "Create comprehensive pytest tests for all FastAPI endpoints with mocked dependencies.",
         "details": "Create `tests/test_api/` directory:\n\n`test_auth.py`:\n- Test login success returns JWT\n- Test login failure returns 401\n- Test lockout after 5 attempts\n- Test protected endpoint requires auth\n\n`test_generate.py`:\n- Test SSE stream format\n- Test generation with mocked CaptionGenerator\n- Test reprompt endpoint\n\n`test_content.py`:\n- Test GET /api/drafts\n- Test GET /api/calendar\n- Test GET /api/suggestions\n- Test POST /api/drafts/{row}/approve\n- Test POST /api/drafts/{row}/edit\n\n`test_health.py`:\n- Test all services checked\n- Test error log included\n\nUse pytest fixtures for TestClient and mocked dependencies. Target 80%+ coverage.",
@@ -2598,7 +2598,7 @@
         "updatedAt": "2026-03-16T19:02:12.922Z"
       },
       {
-        "id": "23",
+        "id": 23,
         "title": "Write React component tests",
         "description": "Create Vitest + React Testing Library tests for key React components.",
         "details": "Set up testing:\n- `npm install -D vitest @testing-library/react @testing-library/jest-dom @testing-library/user-event msw`\n- Configure vitest.config.ts with jsdom environment\n- Create `src/test/setup.ts` with jest-dom matchers\n\nCreate `src/__tests__/`:\n\n`LoginPage.test.tsx`:\n- Test form renders\n- Test validation errors\n- Test successful login redirect\n\n`CreatePage.test.tsx`:\n- Test form fields render\n- Test platform selection\n- Test caption display after generation\n\n`DraftsPage.test.tsx`:\n- Test draft list renders\n- Test selection works\n- Test batch actions appear\n\n`components/layout/AppShell.test.tsx`:\n- Test navigation renders\n- Test responsive behavior\n\nUse MSW for mocking API responses. Target 70%+ coverage.",
@@ -2662,7 +2662,7 @@
         "updatedAt": "2026-03-16T19:02:32.254Z"
       },
       {
-        "id": "24",
+        "id": 24,
         "title": "Create Playwright E2E tests",
         "description": "Write end-to-end tests for critical user flows using Playwright.",
         "details": "Set up Playwright:\n- `npm init playwright@latest` in frontend/\n- Configure playwright.config.ts with baseURL and webServer\n\nCreate `e2e/` directory:\n\n`auth.spec.ts`:\n- Test login flow\n- Test logout\n- Test session expiry\n\n`create-post.spec.ts`:\n- Test complete flow: enter caption → select platforms → generate → send to Postiz\n- Test re-prompt flow\n- Test error handling\n\n`drafts.spec.ts`:\n- Test view drafts\n- Test edit caption inline\n- Test batch approve\n\nCreate `e2e/fixtures.ts` for test data and auth helpers.\n\nRun against local dev servers (FastAPI + Vite) or Docker setup.",
@@ -2716,7 +2716,7 @@
         "updatedAt": "2026-03-16T19:03:45.271Z"
       },
       {
-        "id": "25",
+        "id": 25,
         "title": "Update docker-compose and deployment configuration",
         "description": "Update docker-compose.yaml to include React frontend and document the full deployment setup.",
         "details": "Update `docker-compose.yaml`:\n- Add `content-hub-frontend` service using frontend Dockerfile\n- Map port 3000:3000\n- Add depends_on for postiz services\n- Keep note that FastAPI runs on host (for Claude CLI OAuth)\n\nUpdate `README.md`:\n- Add frontend section with npm commands\n- Document FastAPI startup: `uvicorn api.main:app --port 8000`\n- Document environment variables needed\n- Add architecture diagram update\n\nCreate `Makefile` targets:\n- `make frontend-dev`: npm run dev\n- `make api-dev`: uvicorn api.main:app --reload\n- `make dev`: start both in parallel\n\nMigration notes:\n- Both Streamlit (8501) and React (3000) can run simultaneously\n- After validation, remove content-hub Streamlit service from docker-compose",
@@ -2741,6 +2741,949 @@
       "completedCount": 25,
       "tags": [
         "react-frontend"
+      ],
+      "created": "2026-03-17T00:17:36.555Z",
+      "description": "Tasks for react-frontend context"
+    }
+  },
+  "phase1-content-creation": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Set up SQLite database with Alembic migrations",
+        "description": "Initialize SQLite database infrastructure at data/gvsa.db with Alembic for schema management. Create content_rows, users, content_iterations, templates, and publish_config tables.",
+        "details": "1. Add aiosqlite and SQLAlchemy to pyproject.toml dependencies\n2. Initialize Alembic with `alembic init alembic`\n3. Configure alembic.ini for SQLite at data/gvsa.db\n4. Create SQLAlchemy models in api/models.py:\n\n```python\nfrom sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON, ForeignKey, Text\nfrom sqlalchemy.ext.declarative import declarative_base\nfrom sqlalchemy.orm import relationship\nfrom datetime import datetime\n\nBase = declarative_base()\n\nclass User(Base):\n    __tablename__ = 'users'\n    id = Column(Integer, primary_key=True)\n    username = Column(String(100), unique=True, nullable=False)\n    display_name = Column(String(200))\n    password_hash = Column(String(255), nullable=False)\n    created_at = Column(DateTime, default=datetime.utcnow)\n\nclass ContentRow(Base):\n    __tablename__ = 'content_rows'\n    id = Column(Integer, primary_key=True)\n    date = Column(DateTime, nullable=False)\n    pillar = Column(String(50))\n    raw_text = Column(Text, nullable=False)\n    media_url = Column(String(500))\n    platforms = Column(JSON, default={})\n    status = Column(String(50), default='draft')\n    captions = Column(JSON, default={})\n    postiz_ids = Column(JSON, default=[])\n    posted_at = Column(DateTime)\n    feedback = Column(Text)\n    source = Column(String(50), default='staff')\n    template_id = Column(Integer, ForeignKey('templates.id'), nullable=True)\n    created_by = Column(Integer, ForeignKey('users.id'))\n    media_catalog_ids = Column(JSON, nullable=True)  # Phase 3\n    audience_segment_id = Column(Integer, nullable=True)  # Phase 4\n    require_manual_approval = Column(Boolean, default=False)\n    auto_publish_at = Column(DateTime, nullable=True)\n    created_at = Column(DateTime, default=datetime.utcnow)\n    updated_at = Column(DateTime, onupdate=datetime.utcnow)\n\nclass ContentIteration(Base):\n    __tablename__ = 'content_iterations'\n    id = Column(Integer, primary_key=True)\n    content_row_id = Column(Integer, ForeignKey('content_rows.id'), nullable=False)\n    platform = Column(String(50), nullable=False)\n    old_caption = Column(Text)\n    new_caption = Column(Text, nullable=False)\n    refinement_instruction = Column(Text)\n    mode = Column(String(20))  # create/refine/repurpose\n    created_by = Column(Integer, ForeignKey('users.id'))\n    created_at = Column(DateTime, default=datetime.utcnow)\n\nclass Template(Base):\n    __tablename__ = 'templates'\n    id = Column(Integer, primary_key=True)\n    name = Column(String(200), nullable=False)\n    pillar = Column(String(50))\n    platform_instructions = Column(JSON, default={})\n    raw_text_template = Column(Text, nullable=False)  # with {{variables}}\n    variables = Column(JSON, default=[])  # [{name, type}]\n    schedule_pattern = Column(String(100))  # weekly:sunday, manual\n    default_segment_id = Column(Integer, nullable=True)\n    created_by = Column(Integer, ForeignKey('users.id'))\n    created_at = Column(DateTime, default=datetime.utcnow)\n    updated_at = Column(DateTime, onupdate=datetime.utcnow)\n\nclass PublishConfig(Base):\n    __tablename__ = 'publish_config'\n    id = Column(Integer, primary_key=True)\n    platform = Column(String(50), unique=True, nullable=False)\n    enabled = Column(Boolean, default=False)\n    delay_hours = Column(Integer, default=2)\n    pillar_overrides = Column(JSON, default={})  # {pillar: enabled}\n    updated_by = Column(Integer, ForeignKey('users.id'))\n    updated_at = Column(DateTime, onupdate=datetime.utcnow)\n```\n\n5. Create initial migration: `alembic revision --autogenerate -m 'initial_schema'`\n6. Seed starter templates in migration upgrade() for: Sunday Feast, Weekly Verse, Farm Update, Event Promotion\n7. Add database connection helpers in api/database.py using aiosqlite",
+        "testStrategy": "1. Unit tests for SQLAlchemy models creation\n2. Test migration up/down with empty database\n3. Verify all tables created with correct schema\n4. Test starter templates are seeded correctly\n5. Test foreign key constraints work (e.g., content_row with template_id)",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Add SQLAlchemy and aiosqlite dependencies to pyproject.toml",
+            "description": "Add the required database dependencies (SQLAlchemy, aiosqlite, alembic) to pyproject.toml and verify they install correctly with pip.",
+            "dependencies": [],
+            "details": "Edit pyproject.toml to add dependencies:\n- sqlalchemy[asyncio]>=2.0.0\n- aiosqlite>=0.19.0\n- alembic>=1.13.0\n\nRun `pip install -e .` or `pip install -e \".[dev]\"` to install. Verify imports work with a simple Python script that imports SQLAlchemy and aiosqlite. Create the data/ directory if it doesn't exist for the future database file.",
+            "status": "pending",
+            "testStrategy": "Run `python -c \"import sqlalchemy; import aiosqlite; import alembic; print('Dependencies OK')\"` to verify all packages installed correctly.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Initialize Alembic and configure for async SQLite",
+            "description": "Run alembic init to create the migrations infrastructure and configure alembic.ini and env.py for async SQLite at data/gvsa.db.",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Run `alembic init alembic` to create alembic/ directory and alembic.ini\n2. Edit alembic.ini: set sqlalchemy.url = sqlite+aiosqlite:///data/gvsa.db\n3. Edit alembic/env.py to:\n   - Import the Base from api/models.py (target_metadata = Base.metadata)\n   - Configure async engine support for aiosqlite\n   - Set up run_migrations_online() for async context\n4. Ensure data/ directory exists in .gitignore for the database file but tracked for structure",
+            "status": "pending",
+            "testStrategy": "Run `alembic current` to verify Alembic is configured correctly and can connect to the database path (will show empty since no migrations yet).",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Create SQLAlchemy models for all 5 database tables",
+            "description": "Create api/models.py with SQLAlchemy ORM models for User, ContentRow, ContentIteration, Template, and PublishConfig tables.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create api/models.py with the following models as specified in task details:\n- Base = declarative_base()\n- User: id, username, display_name, password_hash, created_at\n- ContentRow: id, date, pillar, raw_text, media_url, platforms (JSON), status, captions (JSON), postiz_ids (JSON), posted_at, feedback, source, template_id (FK), created_by (FK), media_catalog_ids (JSON), audience_segment_id, require_manual_approval, auto_publish_at, created_at, updated_at\n- ContentIteration: id, content_row_id (FK), platform, old_caption, new_caption, refinement_instruction, mode, created_by (FK), created_at\n- Template: id, name, pillar, platform_instructions (JSON), raw_text_template, variables (JSON), schedule_pattern, default_segment_id, created_by (FK), created_at, updated_at\n- PublishConfig: id, platform (unique), enabled, delay_hours, pillar_overrides (JSON), updated_by (FK), updated_at\n\nAdd relationship() declarations for foreign key navigation where useful.",
+            "status": "pending",
+            "testStrategy": "Import models in Python REPL and verify Base.metadata.tables contains all 5 expected tables with correct column definitions.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Generate and apply initial Alembic migration",
+            "description": "Use Alembic autogenerate to create the initial migration from the SQLAlchemy models, review it, and apply it to create the database schema.",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "1. Run `alembic revision --autogenerate -m 'initial_schema'` to generate migration\n2. Review the generated migration in alembic/versions/ to ensure:\n   - All 5 tables are created (users, content_rows, content_iterations, templates, publish_config)\n   - All columns have correct types (Integer, String, Text, DateTime, Boolean, JSON)\n   - Foreign keys are properly defined with constraints\n   - Indexes are created for frequently queried columns (username unique, platform unique)\n3. Run `alembic upgrade head` to apply the migration and create data/gvsa.db\n4. Verify schema with `sqlite3 data/gvsa.db '.schema'`",
+            "status": "pending",
+            "testStrategy": "Run `alembic upgrade head` then `alembic downgrade base` then `alembic upgrade head` again to verify migration is reversible and idempotent.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Create database connection helpers and seed starter templates",
+            "description": "Create api/database.py with async database connection utilities and a seeding script that populates starter templates for Sunday Feast, Weekly Verse, Farm Update, and Event Promotion.",
+            "dependencies": [
+              4
+            ],
+            "details": "Create api/database.py with:\n- get_async_engine() - creates AsyncEngine for sqlite+aiosqlite:///data/gvsa.db\n- get_async_session() - async context manager yielding AsyncSession\n- init_db() - creates tables if needed (for testing without Alembic)\n\nCreate api/seed.py or add to migration upgrade():\n- Seed 4 starter Template records:\n  1. Sunday Feast: pillar='spiritual', schedule_pattern='weekly:sunday', variables=[{name:'feast_name',type:'text'}]\n  2. Weekly Verse: pillar='spiritual', schedule_pattern='weekly:monday', variables=[{name:'verse_ref',type:'text'},{name:'translation',type:'text'}]\n  3. Farm Update: pillar='farm', schedule_pattern='weekly:friday', variables=[{name:'update_topic',type:'text'}]\n  4. Event Promotion: pillar='events', schedule_pattern='manual', variables=[{name:'event_name',type:'text'},{name:'event_date',type:'date'}]\n\nAdd default PublishConfig rows for each platform (facebook, instagram, twitter) with enabled=False.",
+            "status": "pending",
+            "testStrategy": "Run seed script then query templates table to verify 4 templates exist with correct pillar and schedule_pattern values. Test async session context manager opens and closes cleanly.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 5,
+        "expansionPrompt": "Break down SQLite database setup into subtasks: 1) Add dependencies to pyproject.toml and verify installation, 2) Initialize Alembic and configure for SQLite, 3) Create SQLAlchemy models for all 5 tables, 4) Generate and test initial migration, 5) Create database seeding script for starter templates",
+        "updatedAt": "2026-03-17T19:30:56.816Z"
+      },
+      {
+        "id": "2",
+        "title": "Create database repository layer",
+        "description": "Build an async SQLite repository layer that mirrors the existing SheetsClient interface, enabling seamless transition from Google Sheets to SQLite.",
+        "details": "Create api/repositories/content.py:\n\n```python\nfrom sqlalchemy.ext.asyncio import AsyncSession, create_async_engine\nfrom sqlalchemy.orm import sessionmaker\nfrom sqlalchemy import select, update, delete\nfrom api.models import ContentRow, ContentIteration, Template, PublishConfig, User\nfrom content_engine.models import ContentStatus, Platform\nfrom typing import Optional\nfrom datetime import datetime\n\nclass ContentRepository:\n    def __init__(self, session: AsyncSession):\n        self.session = session\n\n    async def get_rows_by_status(self, status: ContentStatus) -> list[ContentRow]:\n        result = await self.session.execute(\n            select(ContentRow).where(ContentRow.status == status.value)\n        )\n        return result.scalars().all()\n\n    async def get_all_content_rows(self) -> list[ContentRow]:\n        result = await self.session.execute(select(ContentRow))\n        return result.scalars().all()\n\n    async def get_content_row(self, row_id: int) -> Optional[ContentRow]:\n        return await self.session.get(ContentRow, row_id)\n\n    async def create_content_row(self, data: dict) -> ContentRow:\n        row = ContentRow(**data)\n        self.session.add(row)\n        await self.session.commit()\n        await self.session.refresh(row)\n        return row\n\n    async def update_captions(self, row_id: int, captions: dict) -> None:\n        await self.session.execute(\n            update(ContentRow)\n            .where(ContentRow.id == row_id)\n            .values(captions=captions, updated_at=datetime.utcnow())\n        )\n        await self.session.commit()\n\n    async def update_status(self, row_id: int, status: ContentStatus, error_msg: str = None) -> None:\n        values = {'status': status.value, 'updated_at': datetime.utcnow()}\n        if error_msg:\n            values['error_msg'] = error_msg\n        await self.session.execute(\n            update(ContentRow).where(ContentRow.id == row_id).values(**values)\n        )\n        await self.session.commit()\n\n    # Iteration methods\n    async def add_iteration(self, data: dict) -> ContentIteration:\n        iteration = ContentIteration(**data)\n        self.session.add(iteration)\n        await self.session.commit()\n        await self.session.refresh(iteration)\n        return iteration\n\n    async def get_iterations(self, content_row_id: int) -> list[ContentIteration]:\n        result = await self.session.execute(\n            select(ContentIteration)\n            .where(ContentIteration.content_row_id == content_row_id)\n            .order_by(ContentIteration.created_at)\n        )\n        return result.scalars().all()\n\n    # Template methods\n    async def get_templates(self) -> list[Template]:\n        result = await self.session.execute(select(Template))\n        return result.scalars().all()\n\n    async def get_template(self, template_id: int) -> Optional[Template]:\n        return await self.session.get(Template, template_id)\n\n    async def create_template(self, data: dict) -> Template:\n        template = Template(**data)\n        self.session.add(template)\n        await self.session.commit()\n        await self.session.refresh(template)\n        return template\n\n    async def update_template(self, template_id: int, data: dict) -> Optional[Template]:\n        await self.session.execute(\n            update(Template).where(Template.id == template_id).values(**data)\n        )\n        await self.session.commit()\n        return await self.get_template(template_id)\n\n    async def delete_template(self, template_id: int) -> bool:\n        await self.session.execute(delete(Template).where(Template.id == template_id))\n        await self.session.commit()\n        return True\n```\n\nUpdate api/dependencies.py to add async database session dependency",
+        "testStrategy": "1. Test all CRUD operations with in-memory SQLite\n2. Verify query results match expected shapes\n3. Test transaction rollback on errors\n4. Test pagination and filtering\n5. Verify created_at/updated_at timestamps set correctly",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down repository layer into subtasks: 1) Create base async session management in dependencies.py, 2) Implement ContentRepository with content row CRUD methods, 3) Add iteration and template repository methods, 4) Add publish config methods and write unit tests",
+        "updatedAt": "2026-03-17T19:33:36.781Z"
+      },
+      {
+        "id": "3",
+        "title": "Build Google Sheets import/export adapter",
+        "description": "Create a bidirectional adapter that polls Google Sheets for new READY rows, imports them to SQLite, and exports status updates back to Sheets.",
+        "details": "Create api/adapters/sheets_sync.py:\n\n```python\nimport asyncio\nfrom datetime import datetime\nfrom typing import Optional\nfrom content_engine.sheets import SheetsClient\nfrom api.repositories.content import ContentRepository\nfrom content_engine.models import ContentStatus, Platform\nimport logging\n\nlogger = logging.getLogger(__name__)\n\nclass SheetsSyncAdapter:\n    \"\"\"Syncs content between Google Sheets and SQLite.\n    \n    Import: Poll Sheet for rows with status='READY', insert into SQLite,\n            mark as 'imported' in Sheet.\n    Export: Push status changes back to Sheet for rows that originated from import.\n    \"\"\"\n    \n    def __init__(self, sheets_client: SheetsClient, repo: ContentRepository):\n        self.sheets = sheets_client\n        self.repo = repo\n    \n    async def import_ready_rows(self) -> list[int]:\n        \"\"\"Import all READY rows from Sheet to SQLite.\"\"\"\n        rows = self.sheets.get_rows_by_status(ContentStatus.READY)\n        imported_ids = []\n        \n        for row in rows:\n            # Check if already imported (by row_number + source=sheet)\n            existing = await self.repo.find_by_sheet_row(row.row_number)\n            if existing:\n                continue\n                \n            # Insert into SQLite\n            content_row = await self.repo.create_content_row({\n                'date': row.date,\n                'pillar': row.content_pillar.value if row.content_pillar else None,\n                'raw_text': row.raw_text,\n                'media_url': str(row.media_url) if row.media_url else None,\n                'platforms': {p.value: v for p, v in row.platforms.items()},\n                'status': ContentStatus.DRAFT.value,\n                'captions': {p.value: v for p, v in row.captions.items()},\n                'source': 'sheet',\n                'sheet_row_number': row.row_number,  # Track origin\n            })\n            \n            # Mark as imported in Sheet\n            self.sheets.update_status(row.row_number, ContentStatus.DRAFT)\n            imported_ids.append(content_row.id)\n            \n        return imported_ids\n    \n    async def export_status_updates(self) -> int:\n        \"\"\"Push status changes to Sheet for sheet-originated rows.\"\"\"\n        # Get all SQLite rows with source='sheet' that have status changes\n        rows = await self.repo.get_rows_needing_sheet_sync()\n        synced = 0\n        \n        for row in rows:\n            if row.sheet_row_number:\n                self.sheets.update_status(\n                    row.sheet_row_number,\n                    ContentStatus(row.status),\n                    row.error_msg\n                )\n                if row.postiz_ids:\n                    self.sheets.update_postiz_ids(\n                        row.sheet_row_number,\n                        ','.join(row.postiz_ids),\n                        row.posted_at\n                    )\n                # Mark as synced\n                await self.repo.mark_sheet_synced(row.id)\n                synced += 1\n                \n        return synced\n\n# Background task runner\nasync def run_sheets_sync_loop(adapter: SheetsSyncAdapter, interval_seconds: int = 60):\n    while True:\n        try:\n            imported = await adapter.import_ready_rows()\n            if imported:\n                logger.info(f'Imported {len(imported)} rows from Sheet')\n            exported = await adapter.export_status_updates()\n            if exported:\n                logger.info(f'Exported {exported} status updates to Sheet')\n        except Exception as e:\n            logger.exception('Sheet sync error')\n        await asyncio.sleep(interval_seconds)\n```\n\nAdd sheet_row_number and sheet_synced_at columns to content_rows table via Alembic migration.",
+        "testStrategy": "1. Mock SheetsClient and test import logic\n2. Test duplicate detection (don't re-import)\n3. Test status export flow\n4. Test error handling doesn't crash sync loop\n5. Integration test with real Sheet (manual)",
+        "priority": "high",
+        "dependencies": [
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create Alembic migration for sheet sync columns",
+            "description": "Add sheet_row_number (nullable INTEGER) and sheet_synced_at (nullable DATETIME) columns to the content_rows table via an Alembic migration.",
+            "dependencies": [],
+            "details": "Create migration file under migrations/versions/. Add sheet_row_number as nullable Integer column (stores the original Sheet row for imported content). Add sheet_synced_at as nullable DateTime column (tracks when status was last exported back to Sheet). Include both upgrade() and downgrade() functions. These columns enable tracking which SQLite rows originated from Sheet imports and when they were last synced back.",
+            "status": "pending",
+            "testStrategy": "Run alembic upgrade head, verify columns exist via sqlite3 .schema. Run alembic downgrade -1, verify columns removed. Test with fresh database and existing database scenarios.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement import_ready_rows with duplicate detection",
+            "description": "Build the import_ready_rows method in SheetsSyncAdapter that polls Google Sheets for READY rows, inserts them into SQLite, and marks them as imported in the Sheet.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement async method that: 1) Calls sheets_client.get_rows_by_status(ContentStatus.READY) to fetch pending rows, 2) For each row, check if already imported via repo.find_by_sheet_row(row_number) to prevent duplicates, 3) If not exists, call repo.create_content_row() with source='sheet' and sheet_row_number set, 4) Call sheets.update_status() to mark row as DRAFT in Sheet, 5) Return list of newly imported row IDs. Handle type conversions between Sheet ContentPillar/Platform enums and SQLite string values.",
+            "status": "pending",
+            "testStrategy": "Unit test with mocked SheetsClient returning sample rows. Test duplicate detection (same row_number not re-imported). Test empty Sheet returns empty list. Test enum conversion from Platform/ContentPillar to string values.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implement export_status_updates with sync tracking",
+            "description": "Build the export_status_updates method that pushes status changes from SQLite back to Google Sheets for sheet-originated content.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Implement async method that: 1) Calls repo.get_rows_needing_sheet_sync() to get rows where source='sheet' and status changed since last sync, 2) For each row with valid sheet_row_number, call sheets.update_status() with current status and error_msg, 3) If postiz_ids exist, call sheets.update_postiz_ids() with comma-joined IDs and posted_at timestamp, 4) Call repo.mark_sheet_synced(row_id) to update sheet_synced_at timestamp, 5) Return count of synced rows. Add get_rows_needing_sheet_sync() to ContentRepository that filters by source='sheet' and (sheet_synced_at IS NULL OR updated_at > sheet_synced_at).",
+            "status": "pending",
+            "testStrategy": "Unit test with mocked SheetsClient and sample SQLite rows. Test only sheet-originated rows are exported. Test postiz_ids formatting. Test sync timestamp updated after export. Test rows without sheet_row_number are skipped.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Create background task runner with error handling",
+            "description": "Implement the run_sheets_sync_loop async function that runs import and export in a continuous loop with configurable interval and robust error handling.",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Create async function run_sheets_sync_loop(adapter, interval_seconds=60) that: 1) Runs infinite loop with try/except wrapping each sync cycle, 2) Calls import_ready_rows() and logs count of imported rows, 3) Calls export_status_updates() and logs count of exported rows, 4) On exception, log error with logger.exception() but continue loop (don't crash), 5) Sleep for interval_seconds between cycles. Add optional max_retries parameter for consecutive failures before alerting. Add shutdown signal handling for graceful termination. Integrate with FastAPI lifespan for app startup/shutdown.",
+            "status": "pending",
+            "testStrategy": "Test loop runs import then export in sequence. Test exception in import doesn't prevent export. Test exception in export doesn't crash loop. Test interval timing with mocked asyncio.sleep. Test graceful shutdown via cancellation.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Write integration tests with mocked SheetsClient",
+            "description": "Create comprehensive integration tests for the SheetsSyncAdapter that mock the SheetsClient and use an in-memory SQLite database.",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Create tests/test_sheets_sync.py with pytest fixtures: 1) mock_sheets_client fixture using MagicMock for SheetsClient, 2) async_session fixture with in-memory SQLite, 3) sheets_adapter fixture combining both. Test cases: import_ready_rows imports new rows and skips duplicates, export_status_updates syncs status changes, full cycle test (import -> modify status -> export), error handling doesn't crash sync loop, background runner can be started and stopped. Use pytest-asyncio for async test support.",
+            "status": "pending",
+            "testStrategy": "Run pytest tests/test_sheets_sync.py with coverage. Verify all branches covered including error paths. Test with various ContentStatus transitions. Test with missing optional fields (media_url, error_msg). Manual integration test with real Google Sheet (documented but not automated).",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 7,
+        "recommendedSubtasks": 5,
+        "expansionPrompt": "Break down sheets sync adapter into subtasks: 1) Add sheet_row_number and sheet_synced_at columns via Alembic migration, 2) Implement import_ready_rows with duplicate detection, 3) Implement export_status_updates with sync tracking, 4) Create background task runner with error handling, 5) Write integration tests with mocked SheetsClient",
+        "updatedAt": "2026-03-18T01:26:08.231Z"
+      },
+      {
+        "id": "4",
+        "title": "Update FastAPI endpoints to use SQLite",
+        "description": "Migrate all existing FastAPI endpoints from Google Sheets to SQLite while maintaining backward-compatible response shapes.",
+        "details": "Update api/dependencies.py:\n```python\nfrom sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker\nfrom api.models import Base\n\n_engine = None\n_session_factory = None\n\nasync def get_db() -> AsyncSession:\n    global _engine, _session_factory\n    if _engine is None:\n        settings = get_settings()\n        _engine = create_async_engine(f'sqlite+aiosqlite:///{settings.database_path}')\n        _session_factory = async_sessionmaker(_engine, expire_on_commit=False)\n    async with _session_factory() as session:\n        yield session\n\ndef get_content_repo(session: AsyncSession = Depends(get_db)):\n    return ContentRepository(session)\n```\n\nUpdate api/routes/content.py:\n```python\n@router.get('/drafts', response_model=list[ContentRowResponse])\nasync def get_drafts(repo=Depends(get_content_repo)):\n    rows = await repo.get_rows_by_status(ContentStatus.PENDING_APPROVAL)\n    return [_row_to_response(r) for r in rows]\n\n@router.get('/calendar', response_model=CalendarResponse)\nasync def get_calendar(repo=Depends(get_content_repo)):\n    entries = []\n    for status in [ContentStatus.APPROVED, ContentStatus.SCHEDULED, ContentStatus.POSTED]:\n        rows = await repo.get_rows_by_status(status)\n        entries.extend([_entry_from_row(r) for r in rows])\n    entries.sort(key=lambda e: e.date)\n    return CalendarResponse(entries=entries, total=len(entries))\n```\n\nSimilar updates for all endpoints in content.py, generate.py, maintaining exact response schemas.\n\nAdd database_path to api/config.py Settings class with default 'data/gvsa.db'",
+        "testStrategy": "1. Run existing test suite - all 111 tests should pass\n2. Test each endpoint returns same response shape as before\n3. Compare responses with demo mode vs SQLite mode\n4. Load test to ensure async performance\n5. Test database connection pooling",
+        "priority": "high",
+        "dependencies": [
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Update dependencies.py with async database session factory",
+            "description": "Add SQLAlchemy async engine, session factory, and repository dependency injection alongside existing SheetsClient and PostizClient dependencies.",
+            "dependencies": [],
+            "details": "Create async database infrastructure in api/dependencies.py:\n1. Add imports: AsyncSession, create_async_engine, async_sessionmaker from sqlalchemy.ext.asyncio\n2. Import ContentRepository from api/repository.py and Base from api/models.py\n3. Create module-level _engine and _session_factory globals\n4. Implement get_db() async generator that lazily initializes the async engine with settings.database_path and yields AsyncSession instances\n5. Implement get_content_repo() dependency that takes session=Depends(get_db) and returns ContentRepository(session)\n6. Add database_path setting to api/config.py Settings class with default value 'data/gvsa.db'\n7. Ensure demo_mode check uses DemoContentRepository when enabled (similar to existing get_sheets_client pattern)",
+            "status": "pending",
+            "testStrategy": "Unit test get_db() yields valid AsyncSession. Test get_content_repo() returns ContentRepository instance. Test database_path setting loads from env. Test demo_mode returns DemoContentRepository.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Migrate content.py endpoints to use ContentRepository",
+            "description": "Update all 6 content.py endpoints (drafts, calendar, suggestions, content/{row_number}, edit, approve) to use ContentRepository instead of SheetsClient while preserving exact response schemas.",
+            "dependencies": [
+              1
+            ],
+            "details": "Migrate each endpoint in api/routes/content.py:\n1. Replace get_sheets_client dependency with get_content_repo from dependencies.py\n2. GET /drafts: Change sheets.get_rows_by_status() to await repo.get_rows_by_status()\n3. GET /calendar: Same pattern for three status queries (APPROVED, SCHEDULED, POSTED)\n4. GET /suggestions: Change sheets.get_suggestions() to await repo.get_suggestions(status=status)\n5. GET /content/{row_number}: Change sheets.get_all_content_rows() to await repo.get_by_id(row_number) - add 404 handling\n6. POST /drafts/{row_number}/edit: Change sheets.update_captions() to await repo.update_captions() and re-fetch\n7. POST /drafts/{row_number}/approve: Change sheets.update_status() to await repo.update_status()\n8. Preserve _row_to_response() helper - may need to adapt for SQLAlchemy model differences (row_number vs id)\n9. Maintain exact ContentRowResponse, CalendarResponse, SuggestionResponse schemas",
+            "status": "pending",
+            "testStrategy": "Run existing test_content.py tests - all should pass. Compare response shapes before/after migration. Test each endpoint returns same JSON structure. Test error handling (404s) works correctly.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Migrate generate.py endpoints to use repository for persistence",
+            "description": "Update generate.py endpoints (generate, generate-sync, reprompt) to persist generated captions to SQLite via ContentRepository if row persistence is needed.",
+            "dependencies": [
+              1
+            ],
+            "details": "Review and update api/routes/generate.py:\n1. The current generate.py endpoints don't directly use SheetsClient - they use CaptionGenerator\n2. If generated captions should be persisted, add get_content_repo dependency\n3. POST /generate (SSE): After generator.generate_captions() completes, optionally persist via repo.create() or repo.update()\n4. POST /generate-sync: Same - add persistence if captions should be saved to DB\n5. POST /reprompt: After regeneration, persist updated captions if row_number provided\n6. Check if _build_content_row() needs to use repo for row lookup instead of building from scratch\n7. The endpoints may already work without changes if they only return captions without persisting\n8. Verify demo mode behavior - DemoCaptionGenerator should work without database",
+            "status": "pending",
+            "testStrategy": "Run existing generate endpoint tests. Verify SSE streaming still works. Test /generate-sync returns same response format. Test /reprompt with feedback parameter. Ensure demo mode continues working.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Run full test suite and verify backward compatibility",
+            "description": "Execute all 111 tests to ensure SQLite migration maintains backward-compatible response shapes and no regressions are introduced.",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Comprehensive verification:\n1. Run pytest with verbose output: pytest -v --tb=short\n2. Run pytest with coverage: pytest --cov=api --cov-report=term-missing\n3. Compare API responses in demo mode vs SQLite mode for each endpoint\n4. Verify ContentRowResponse fields: row_number, date, content_pillar, raw_text, media_url, platforms, status, captions, feedback, postiz_ids, posted_at, error_msg, source\n5. Verify CalendarResponse: entries array with CalendarEntry objects, total count\n6. Verify SuggestionResponse: suggested_date, content_idea, suggested_pillar, rationale, media_suggestion, status\n7. Run load test to verify async SQLite performance doesn't degrade response times\n8. Test database connection pooling under concurrent requests\n9. Document any response shape differences in migration notes",
+            "status": "pending",
+            "testStrategy": "All 111 tests must pass. Coverage should not decrease. Manual comparison of response JSON schemas. Load test with 50 concurrent requests. Check response times are within 200ms for read endpoints.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down endpoint migration into subtasks: 1) Update dependencies.py with async database session factory, 2) Migrate content.py endpoints (drafts, calendar, suggestions, content CRUD), 3) Migrate generate.py endpoints to use new repository, 4) Run full test suite and verify backward compatibility of response shapes",
+        "updatedAt": "2026-03-18T01:36:09.717Z"
+      },
+      {
+        "id": "5",
+        "title": "Implement AI content iteration backend",
+        "description": "Build POST /api/iterate endpoint that regenerates a single platform caption based on user instruction, and GET /api/iterations/{content_id} for iteration history.",
+        "details": "Add to api/schemas.py:\n```python\nclass IterateRequest(BaseModel):\n    content_row_id: int\n    platform: str  # instagram, facebook, etc.\n    instruction: str  # 'Make it more casual', 'Add a call to action'\n    mode: str = 'refine'  # create, refine, repurpose\n\nclass IterationResponse(BaseModel):\n    id: int\n    content_row_id: int\n    platform: str\n    old_caption: str | None\n    new_caption: str\n    refinement_instruction: str\n    mode: str\n    created_by: int | None\n    created_at: datetime\n\nclass IterateResponse(BaseModel):\n    caption: str\n    iteration_id: int\n```\n\nCreate api/routes/iterate.py:\n```python\nfrom fastapi import APIRouter, Depends, HTTPException\nfrom api.auth import get_current_user\nfrom api.dependencies import get_content_repo, get_caption_generator\nfrom api.schemas import IterateRequest, IterateResponse, IterationResponse\nfrom content_engine.models import Platform\n\nrouter = APIRouter(prefix='/api', tags=['iterate'], dependencies=[Depends(get_current_user)])\n\n@router.post('/iterate', response_model=IterateResponse)\nasync def iterate_caption(\n    req: IterateRequest,\n    repo=Depends(get_content_repo),\n    generator=Depends(get_caption_generator),\n    user=Depends(get_current_user)\n):\n    # Get existing content row\n    row = await repo.get_content_row(req.content_row_id)\n    if not row:\n        raise HTTPException(404, 'Content row not found')\n    \n    # Get current caption for platform\n    platform = Platform(req.platform)\n    old_caption = row.captions.get(req.platform)\n    \n    # Build iteration prompt and call Claude\n    new_caption = await iterate_single_caption(\n        generator,\n        original_caption=old_caption,\n        platform=platform,\n        instruction=req.instruction,\n        raw_text=row.raw_text,\n        pillar=row.pillar\n    )\n    \n    # Save iteration history\n    iteration = await repo.add_iteration({\n        'content_row_id': req.content_row_id,\n        'platform': req.platform,\n        'old_caption': old_caption,\n        'new_caption': new_caption,\n        'refinement_instruction': req.instruction,\n        'mode': req.mode,\n        'created_by': user.id if hasattr(user, 'id') else None\n    })\n    \n    # Update content row with new caption\n    updated_captions = {**row.captions, req.platform: new_caption}\n    await repo.update_captions(req.content_row_id, updated_captions)\n    \n    return IterateResponse(caption=new_caption, iteration_id=iteration.id)\n\n@router.get('/iterations/{content_id}', response_model=list[IterationResponse])\nasync def get_iterations(content_id: int, repo=Depends(get_content_repo)):\n    iterations = await repo.get_iterations(content_id)\n    return [IterationResponse(\n        id=i.id,\n        content_row_id=i.content_row_id,\n        platform=i.platform,\n        old_caption=i.old_caption,\n        new_caption=i.new_caption,\n        refinement_instruction=i.refinement_instruction,\n        mode=i.mode,\n        created_by=i.created_by,\n        created_at=i.created_at\n    ) for i in iterations]\n```\n\nAdd iterate_single_caption() to content_engine/generator.py:\n```python\ndef iterate_single_caption(\n    self,\n    original_caption: str | None,\n    platform: Platform,\n    instruction: str,\n    raw_text: str,\n    pillar: str | None\n) -> str:\n    prompt = f\"\"\"{BRAND_RULES}\n\nORIGINAL CAPTION ({platform.value}):\n{original_caption or '(none)'}\n\nORIGINAL POST IDEA:\n{raw_text}\n\n{'CONTENT PILLAR: ' + pillar if pillar else ''}\n\nUSER INSTRUCTION:\n{instruction}\n\nPLATFORM RULES FOR {platform.value.upper()}:\n{PLATFORM_INSTRUCTIONS.get(platform, '')}\n\nGenerate an improved caption for {platform.value} based on the user instruction.\nRespond with ONLY the caption text, no explanations.\n\"\"\"\n    return _call_claude(prompt)\n```",
+        "testStrategy": "1. Test iterate endpoint with valid content_row_id\n2. Test 404 for invalid content_row_id\n3. Verify iteration saved to database\n4. Verify content_row.captions updated\n5. Test get iterations returns chronological history\n6. Test with demo generator (mock Claude)",
+        "priority": "high",
+        "dependencies": [
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Add IterateRequest, IterationResponse, and IterateResponse schemas to api/schemas.py",
+            "description": "Define the Pydantic request/response models for the iteration endpoints including content_row_id, platform, instruction, mode, and iteration history fields.",
+            "dependencies": [],
+            "details": "Add three new Pydantic models to api/schemas.py:\n1. IterateRequest with fields: content_row_id (int), platform (str), instruction (str), mode (str, default='refine')\n2. IterationResponse with fields: id (int), content_row_id (int), platform (str), old_caption (str|None), new_caption (str), refinement_instruction (str), mode (str), created_by (int|None), created_at (datetime)\n3. IterateResponse with fields: caption (str), iteration_id (int)\n\nFollow existing schema patterns in the file (e.g., ContentRowResponse, GenerateRequest).",
+            "status": "pending",
+            "testStrategy": "Unit tests validating schema field types, defaults, and JSON serialization. Test that IterateRequest accepts valid platform strings and mode defaults to 'refine'.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Add iterate_single_caption method to CaptionGenerator class",
+            "description": "Extend the existing CaptionGenerator class in src/content_engine/generator.py with a method that regenerates a single platform caption based on user instruction.",
+            "dependencies": [
+              1
+            ],
+            "details": "Add iterate_single_caption method to CaptionGenerator class:\n- Parameters: original_caption (str|None), platform (Platform), instruction (str), raw_text (str), pillar (str|None)\n- Build a prompt using BRAND_RULES and PLATFORM_INSTRUCTIONS constants (already defined in generator.py)\n- Include original caption, raw text, pillar context, and user instruction in prompt\n- Call _call_claude() (existing helper function) with the prompt\n- Return the new caption string directly (not JSON)\n\nAlso add iterate_single_caption to DemoCaptionGenerator in api/demo.py that returns mock refined captions for testing.",
+            "status": "pending",
+            "testStrategy": "Test with DemoCaptionGenerator to verify method signature works. Mock _call_claude for unit tests. Verify prompt includes BRAND_RULES and PLATFORM_INSTRUCTIONS. Test with None original_caption edge case.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Create api/routes/iterate.py with POST /api/iterate endpoint",
+            "description": "Create a new route module implementing POST /api/iterate that regenerates a single platform caption, saves iteration history, and updates the content row captions.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Create api/routes/iterate.py with:\n1. Router setup following pattern from generate.py (prefix='/api', tags=['iterate'], auth dependency)\n2. POST /api/iterate endpoint:\n   - Accept IterateRequest body\n   - Inject content_repo and caption_generator via Depends\n   - Fetch content row by content_row_id (raise 404 if not found)\n   - Get current caption for specified platform\n   - Call iterate_single_caption via asyncio.to_thread (pattern from generate.py)\n   - Save iteration record to repository\n   - Update content row captions dict with new caption\n   - Return IterateResponse with caption and iteration_id\n\nRegister router in api/routes/__init__.py.",
+            "status": "pending",
+            "testStrategy": "Test iterate endpoint returns 200 with valid content_row_id. Test 404 for invalid content_row_id. Test iteration saved to database with correct fields. Test content_row.captions updated. Test with demo generator (mock Claude).",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Implement GET /api/iterations/{content_id} endpoint and write integration tests",
+            "description": "Add the GET endpoint for retrieving iteration history for a content row, and write comprehensive tests for both iteration endpoints.",
+            "dependencies": [
+              3
+            ],
+            "details": "Add to api/routes/iterate.py:\n1. GET /api/iterations/{content_id} endpoint:\n   - Fetch all iterations for content_id from repository\n   - Return list[IterationResponse] ordered by created_at\n   - Handle empty list gracefully (return [])\n\nWrite tests in tests/test_iterate.py:\n1. Test POST /api/iterate with valid request returns caption and iteration_id\n2. Test 404 for non-existent content_row_id\n3. Test iteration record saved with correct old_caption, new_caption, instruction\n4. Test content_row.captions dict updated with new caption\n5. Test GET /api/iterations/{content_id} returns chronological history\n6. Test GET with no iterations returns empty list\n7. Test demo mode returns mock refined captions",
+            "status": "pending",
+            "testStrategy": "Integration tests using TestClient with in-memory SQLite. Test chronological ordering of iterations. Test filtering by content_id. Verify all IterationResponse fields populated correctly.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down iteration backend into subtasks: 1) Add IterateRequest/IterationResponse/IterateResponse to schemas.py, 2) Create iterate.py route with POST /api/iterate endpoint, 3) Add iterate_single_caption function to generator (extends existing CaptionGenerator), 4) Implement GET /api/iterations/{content_id} and write tests",
+        "updatedAt": "2026-03-18T01:39:09.189Z"
+      },
+      {
+        "id": "6",
+        "title": "Implement content templates CRUD API",
+        "description": "Build complete CRUD endpoints for templates: GET/POST/PUT/DELETE /api/templates and POST /api/templates/{id}/generate for variable substitution and caption generation.",
+        "details": "Add to api/schemas.py:\n```python\nclass TemplateVariable(BaseModel):\n    name: str\n    type: str  # text, date, etc.\n\nclass TemplateCreateRequest(BaseModel):\n    name: str\n    pillar: str | None = None\n    platform_instructions: dict[str, str] = {}\n    raw_text_template: str  # with {{variables}}\n    variables: list[TemplateVariable]\n    schedule_pattern: str | None = None  # weekly:sunday, manual\n    default_segment_id: int | None = None\n\nclass TemplateResponse(BaseModel):\n    id: int\n    name: str\n    pillar: str | None\n    platform_instructions: dict[str, str]\n    raw_text_template: str\n    variables: list[TemplateVariable]\n    schedule_pattern: str | None\n    default_segment_id: int | None\n    created_at: datetime\n    updated_at: datetime | None\n\nclass GenerateFromTemplateRequest(BaseModel):\n    variable_values: dict[str, str]  # {variable_name: value}\n    platforms: list[str]\n    scheduled_date: str\n```\n\nCreate api/routes/templates.py:\n```python\nimport re\nfrom fastapi import APIRouter, Depends, HTTPException\nfrom api.auth import get_current_user\nfrom api.dependencies import get_content_repo, get_caption_generator\nfrom api.schemas import (\n    TemplateCreateRequest, TemplateResponse, \n    GenerateFromTemplateRequest, ContentRowResponse\n)\n\nrouter = APIRouter(prefix='/api/templates', tags=['templates'], dependencies=[Depends(get_current_user)])\n\n@router.get('', response_model=list[TemplateResponse])\nasync def list_templates(repo=Depends(get_content_repo)):\n    templates = await repo.get_templates()\n    return [_template_to_response(t) for t in templates]\n\n@router.post('', response_model=TemplateResponse)\nasync def create_template(req: TemplateCreateRequest, repo=Depends(get_content_repo), user=Depends(get_current_user)):\n    template = await repo.create_template({\n        'name': req.name,\n        'pillar': req.pillar,\n        'platform_instructions': req.platform_instructions,\n        'raw_text_template': req.raw_text_template,\n        'variables': [v.model_dump() for v in req.variables],\n        'schedule_pattern': req.schedule_pattern,\n        'default_segment_id': req.default_segment_id,\n        'created_by': user.id if hasattr(user, 'id') else None\n    })\n    return _template_to_response(template)\n\n@router.get('/{template_id}', response_model=TemplateResponse)\nasync def get_template(template_id: int, repo=Depends(get_content_repo)):\n    template = await repo.get_template(template_id)\n    if not template:\n        raise HTTPException(404, 'Template not found')\n    return _template_to_response(template)\n\n@router.put('/{template_id}', response_model=TemplateResponse)\nasync def update_template(template_id: int, req: TemplateCreateRequest, repo=Depends(get_content_repo)):\n    template = await repo.update_template(template_id, req.model_dump())\n    if not template:\n        raise HTTPException(404, 'Template not found')\n    return _template_to_response(template)\n\n@router.delete('/{template_id}')\nasync def delete_template(template_id: int, repo=Depends(get_content_repo)):\n    await repo.delete_template(template_id)\n    return {'deleted': True}\n\n@router.post('/{template_id}/generate', response_model=ContentRowResponse)\nasync def generate_from_template(\n    template_id: int,\n    req: GenerateFromTemplateRequest,\n    repo=Depends(get_content_repo),\n    generator=Depends(get_caption_generator),\n    user=Depends(get_current_user)\n):\n    template = await repo.get_template(template_id)\n    if not template:\n        raise HTTPException(404, 'Template not found')\n    \n    # Variable substitution\n    raw_text = template.raw_text_template\n    for var_name, var_value in req.variable_values.items():\n        raw_text = raw_text.replace(f'{{{{{var_name}}}}}', var_value)\n    \n    # Verify all variables substituted\n    remaining = re.findall(r'\\{\\{(\\w+)\\}\\}', raw_text)\n    if remaining:\n        raise HTTPException(400, f'Missing variables: {remaining}')\n    \n    # Create content row\n    from datetime import datetime\n    content_row = await repo.create_content_row({\n        'date': datetime.fromisoformat(req.scheduled_date),\n        'pillar': template.pillar,\n        'raw_text': raw_text,\n        'platforms': {p: True for p in req.platforms},\n        'status': 'draft',\n        'captions': {},\n        'source': 'template',\n        'template_id': template_id,\n        'created_by': user.id if hasattr(user, 'id') else None\n    })\n    \n    # Generate captions\n    captions = await asyncio.to_thread(\n        generator.generate_captions,\n        _row_to_engine_model(content_row)\n    )\n    await repo.update_captions(content_row.id, {k.value: v for k, v in captions.items()})\n    \n    return _row_to_response(await repo.get_content_row(content_row.id))\n```",
+        "testStrategy": "1. Test CRUD operations for templates\n2. Test variable substitution works correctly\n3. Test missing variable raises 400\n4. Test generate creates content_row with template_id set\n5. Test starter templates are seeded and accessible\n6. Verify platform_instructions override works",
+        "priority": "medium",
+        "dependencies": [
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Add template-related Pydantic schemas to api/schemas.py",
+            "description": "Define TemplateVariable, TemplateCreateRequest, TemplateResponse, and GenerateFromTemplateRequest models for validating template API requests and responses.",
+            "dependencies": [],
+            "details": "Add to api/schemas.py:\n- TemplateVariable(BaseModel): name (str), type (str for text/date/etc.)\n- TemplateCreateRequest(BaseModel): name, pillar (optional), platform_instructions (dict), raw_text_template (str with {{variables}}), variables (list[TemplateVariable]), schedule_pattern (optional), default_segment_id (optional)\n- TemplateResponse(BaseModel): all fields from request plus id, created_at, updated_at\n- GenerateFromTemplateRequest(BaseModel): variable_values (dict[str, str]), platforms (list[str]), scheduled_date (str)\n\nEnsure datetime imports are present and models follow existing patterns in schemas.py.",
+            "status": "pending",
+            "testStrategy": "Unit test schema validation: test required fields raise ValidationError when missing, test optional fields accept None, test variable_values dict accepts arbitrary string keys/values, test platforms accepts list of platform strings.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement basic CRUD endpoints for templates",
+            "description": "Create api/routes/templates.py with GET /api/templates (list), POST /api/templates (create), GET /api/templates/{id} (get), PUT /api/templates/{id} (update), and DELETE /api/templates/{id} endpoints.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create api/routes/templates.py:\n- Router with prefix='/api/templates', tags=['templates'], dependencies=[Depends(get_current_user)]\n- GET '' - list all templates via repo.get_templates(), map to TemplateResponse\n- POST '' - create template from TemplateCreateRequest, include created_by from user\n- GET '/{template_id}' - fetch single template, raise HTTPException(404) if not found\n- PUT '/{template_id}' - update template fields, raise 404 if not found\n- DELETE '/{template_id}' - delete template, return {'deleted': True}\n- Helper function _template_to_response() to convert DB model to response schema\n\nRegister router in api/main.py with app.include_router(templates.router).",
+            "status": "pending",
+            "testStrategy": "Test each CRUD operation: POST creates and returns template with all fields, GET /{id} returns 404 for invalid ID, PUT updates fields correctly, DELETE removes template, GET list returns all templates. Use pytest fixtures with test database.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implement POST /{id}/generate endpoint with variable substitution",
+            "description": "Add the generate endpoint that substitutes template variables, validates all variables are provided, creates a content row, and generates platform-specific captions.",
+            "dependencies": [
+              2
+            ],
+            "details": "Add to api/routes/templates.py:\n- POST '/{template_id}/generate' endpoint accepting GenerateFromTemplateRequest\n- Fetch template or raise 404\n- Variable substitution: replace {{var_name}} with values from request.variable_values using string.replace()\n- Validation: use re.findall(r'\\{\\{(\\w+)\\}\\}', raw_text) to detect remaining unsubstituted variables, raise HTTPException(400, f'Missing variables: {remaining}') if any\n- Create content_row via repo.create_content_row() with: date from scheduled_date, pillar from template, raw_text (substituted), platforms dict, status='draft', source='template', template_id\n- Generate captions using caption_generator dependency (asyncio.to_thread for sync generator)\n- Update content row captions and return ContentRowResponse\n\nImport asyncio, re, datetime as needed.",
+            "status": "pending",
+            "testStrategy": "Test variable substitution replaces all {{var}} patterns correctly, test missing variable returns 400 with variable names listed, test successful generation creates content_row with template_id set, test captions are generated for specified platforms, test scheduled_date parsed correctly.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Write comprehensive tests for all template operations",
+            "description": "Create test_templates.py with full coverage of CRUD operations, variable substitution edge cases, and generate endpoint behavior including error scenarios.",
+            "dependencies": [
+              3
+            ],
+            "details": "Create tests/test_templates.py:\n- Fixtures: test client, mock repo, mock caption generator, sample template data\n- CRUD tests: test_list_templates_empty, test_list_templates_returns_all, test_create_template_success, test_create_template_missing_required_fields, test_get_template_success, test_get_template_not_found_404, test_update_template_success, test_update_template_not_found_404, test_delete_template_success\n- Generate tests: test_generate_success_all_variables_substituted, test_generate_missing_variable_returns_400, test_generate_template_not_found_404, test_generate_creates_content_row_with_template_id, test_generate_calls_caption_generator\n- Edge cases: test_variable_substitution_multiple_occurrences, test_empty_variables_list, test_platform_instructions_override\n\nUse pytest-asyncio for async tests, mock dependencies appropriately.",
+            "status": "pending",
+            "testStrategy": "Run pytest tests/test_templates.py with coverage report. Verify all endpoints return correct status codes, all edge cases handled, and mock interactions verified. Target >90% coverage for templates.py module.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down templates API into subtasks: 1) Add template-related schemas (TemplateVariable, TemplateCreateRequest, etc.), 2) Implement basic CRUD endpoints (list, get, create, update, delete), 3) Implement POST /{id}/generate with variable substitution, 4) Write comprehensive tests for all template operations",
+        "updatedAt": "2026-03-18T01:43:25.294Z"
+      },
+      {
+        "id": "7",
+        "title": "Implement auto-publish configuration API",
+        "description": "Build GET/PUT /api/settings/publish endpoints for configuring per-platform auto-publish with delay windows and pillar overrides.",
+        "details": "Add to api/schemas.py:\n```python\nclass PlatformPublishConfig(BaseModel):\n    platform: str\n    enabled: bool = False\n    delay_hours: int = 2\n    pillar_overrides: dict[str, bool] = {}  # {pillar: enabled}\n\nclass PublishConfigResponse(BaseModel):\n    platforms: list[PlatformPublishConfig]\n\nclass UpdatePublishConfigRequest(BaseModel):\n    platforms: list[PlatformPublishConfig]\n```\n\nCreate api/routes/settings.py:\n```python\nfrom fastapi import APIRouter, Depends\nfrom api.auth import get_current_user\nfrom api.dependencies import get_content_repo\nfrom api.schemas import PublishConfigResponse, UpdatePublishConfigRequest, PlatformPublishConfig\nfrom content_engine.models import Platform\n\nrouter = APIRouter(prefix='/api/settings', tags=['settings'], dependencies=[Depends(get_current_user)])\n\n@router.get('/publish', response_model=PublishConfigResponse)\nasync def get_publish_config(repo=Depends(get_content_repo)):\n    configs = await repo.get_publish_configs()\n    # Ensure all platforms have entries\n    platform_map = {c.platform: c for c in configs}\n    result = []\n    for platform in Platform:\n        if platform.value in platform_map:\n            c = platform_map[platform.value]\n            result.append(PlatformPublishConfig(\n                platform=c.platform,\n                enabled=c.enabled,\n                delay_hours=c.delay_hours,\n                pillar_overrides=c.pillar_overrides or {}\n            ))\n        else:\n            result.append(PlatformPublishConfig(platform=platform.value))\n    return PublishConfigResponse(platforms=result)\n\n@router.put('/publish', response_model=PublishConfigResponse)\nasync def update_publish_config(\n    req: UpdatePublishConfigRequest,\n    repo=Depends(get_content_repo),\n    user=Depends(get_current_user)\n):\n    for config in req.platforms:\n        await repo.upsert_publish_config(\n            platform=config.platform,\n            enabled=config.enabled,\n            delay_hours=config.delay_hours,\n            pillar_overrides=config.pillar_overrides,\n            updated_by=user.id if hasattr(user, 'id') else None\n        )\n    return await get_publish_config(repo)\n```\n\nAdd auto-publish logic to approval flow in api/routes/content.py:\n```python\n@router.post('/drafts/{row_id}/approve', response_model=ApproveResponse)\nasync def approve_draft(\n    row_id: int,\n    repo=Depends(get_content_repo),\n    postiz=Depends(get_postiz_client)\n):\n    row = await repo.get_content_row(row_id)\n    if not row:\n        raise HTTPException(404, 'Row not found')\n    \n    # Check auto-publish config\n    if not row.require_manual_approval:\n        configs = await repo.get_publish_configs()\n        config_map = {c.platform: c for c in configs}\n        \n        auto_publish_at = None\n        for platform, enabled in row.platforms.items():\n            if not enabled:\n                continue\n            config = config_map.get(platform)\n            if config and config.enabled:\n                # Check pillar override\n                if row.pillar and config.pillar_overrides.get(row.pillar) is False:\n                    continue\n                # Calculate auto-publish time\n                delay = timedelta(hours=config.delay_hours)\n                publish_time = datetime.utcnow() + delay\n                if auto_publish_at is None or publish_time > auto_publish_at:\n                    auto_publish_at = publish_time\n        \n        if auto_publish_at:\n            await repo.update_auto_publish_at(row_id, auto_publish_at)\n    \n    await repo.update_status(row_id, ContentStatus.APPROVED)\n    # ... rest of Postiz integration\n```",
+        "testStrategy": "1. Test GET returns default config for all platforms\n2. Test PUT updates config correctly\n3. Test auto-publish timing calculated correctly\n4. Test pillar override blocks auto-publish\n5. Test require_manual_approval flag overrides config\n6. Test delay_hours countdown calculation",
+        "priority": "medium",
+        "dependencies": [
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 5,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down auto-publish API into subtasks: 1) Add PlatformPublishConfig and related schemas, create settings.py route, 2) Implement GET/PUT /api/settings/publish endpoints with upsert logic, 3) Integrate auto-publish timing calculation into approve_draft flow in content.py",
+        "updatedAt": "2026-03-18T01:48:28.362Z"
+      },
+      {
+        "id": "8",
+        "title": "Add frontend API client methods for new endpoints",
+        "description": "Extend frontend/src/lib/api.ts with typed methods for iterate, iterations, templates CRUD, and publish settings endpoints.",
+        "details": "Add to frontend/src/lib/api.ts:\n```typescript\n// --- Iteration Types ---\nexport interface IterateRequest {\n  content_row_id: number;\n  platform: string;\n  instruction: string;\n  mode: 'create' | 'refine' | 'repurpose';\n}\n\nexport interface IterationResponse {\n  id: number;\n  content_row_id: number;\n  platform: string;\n  old_caption: string | null;\n  new_caption: string;\n  refinement_instruction: string;\n  mode: string;\n  created_by: number | null;\n  created_at: string;\n}\n\nexport interface IterateResponse {\n  caption: string;\n  iteration_id: number;\n}\n\n// --- Template Types ---\nexport interface TemplateVariable {\n  name: string;\n  type: string;\n}\n\nexport interface Template {\n  id: number;\n  name: string;\n  pillar: string | null;\n  platform_instructions: Record<string, string>;\n  raw_text_template: string;\n  variables: TemplateVariable[];\n  schedule_pattern: string | null;\n  created_at: string;\n  updated_at: string | null;\n}\n\nexport interface CreateTemplateRequest {\n  name: string;\n  pillar?: string;\n  platform_instructions?: Record<string, string>;\n  raw_text_template: string;\n  variables: TemplateVariable[];\n  schedule_pattern?: string;\n}\n\nexport interface GenerateFromTemplateRequest {\n  variable_values: Record<string, string>;\n  platforms: string[];\n  scheduled_date: string;\n}\n\n// --- Publish Config Types ---\nexport interface PlatformPublishConfig {\n  platform: string;\n  enabled: boolean;\n  delay_hours: number;\n  pillar_overrides: Record<string, boolean>;\n}\n\nexport interface PublishConfigResponse {\n  platforms: PlatformPublishConfig[];\n}\n\n// --- API Functions ---\nexport const api = {\n  // ... existing methods ...\n\n  // Iteration\n  iterate(data: IterateRequest) {\n    return request<IterateResponse>('/api/iterate', {\n      method: 'POST',\n      body: JSON.stringify(data),\n    });\n  },\n\n  getIterations(contentId: number) {\n    return request<IterationResponse[]>(`/api/iterations/${contentId}`);\n  },\n\n  // Templates\n  getTemplates() {\n    return request<Template[]>('/api/templates');\n  },\n\n  getTemplate(templateId: number) {\n    return request<Template>(`/api/templates/${templateId}`);\n  },\n\n  createTemplate(data: CreateTemplateRequest) {\n    return request<Template>('/api/templates', {\n      method: 'POST',\n      body: JSON.stringify(data),\n    });\n  },\n\n  updateTemplate(templateId: number, data: CreateTemplateRequest) {\n    return request<Template>(`/api/templates/${templateId}`, {\n      method: 'PUT',\n      body: JSON.stringify(data),\n    });\n  },\n\n  deleteTemplate(templateId: number) {\n    return request<{ deleted: boolean }>(`/api/templates/${templateId}`, {\n      method: 'DELETE',\n    });\n  },\n\n  generateFromTemplate(templateId: number, data: GenerateFromTemplateRequest) {\n    return request<ContentRow>(`/api/templates/${templateId}/generate`, {\n      method: 'POST',\n      body: JSON.stringify(data),\n    });\n  },\n\n  // Publish Settings\n  getPublishConfig() {\n    return request<PublishConfigResponse>('/api/settings/publish');\n  },\n\n  updatePublishConfig(platforms: PlatformPublishConfig[]) {\n    return request<PublishConfigResponse>('/api/settings/publish', {\n      method: 'PUT',\n      body: JSON.stringify({ platforms }),\n    });\n  },\n};\n```",
+        "testStrategy": "1. Unit test TypeScript types compile correctly\n2. Mock API tests for each new method\n3. Integration test with backend endpoints\n4. Test error handling for 404, 400 responses\n5. Verify token auth headers sent",
+        "priority": "high",
+        "dependencies": [
+          "5",
+          "6",
+          "7"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 3,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "No expansion needed - this is a straightforward typing and method addition task following existing patterns in api.ts",
+        "updatedAt": "2026-03-18T01:57:26.108Z"
+      },
+      {
+        "id": "9",
+        "title": "Build unified ContentEditor modal component",
+        "description": "Create a shared React modal component for viewing and iterating on content across all pages, with three modes: create, refine, and repurpose.",
+        "details": "Create frontend/src/components/content/ContentEditor.tsx using Magic MCP + frontend-design pipeline:\n\n1. First run frontend-design skill to get creative direction\n2. Use Magic MCP component_inspiration for modal/editor patterns\n3. Use component_builder to generate initial component\n4. Use component_refiner to iterate\n\nComponent requirements:\n```typescript\ninterface ContentEditorProps {\n  contentRow: ContentRow | null;  // null for create mode from suggestion\n  mode: 'create' | 'refine' | 'repurpose';\n  suggestion?: Suggestion;  // for create mode from suggestion\n  isOpen: boolean;\n  onClose: () => void;\n  onSave: (updatedRow: ContentRow) => void;\n}\n```\n\nFeatures:\n- Modal overlay with backdrop\n- Per-platform caption cards (Instagram, Facebook, TikTok, Threads, LinkedIn)\n- Each caption card has:\n  - Current caption text (editable Textarea)\n  - Refinement instruction input below\n  - 'Iterate' button that calls POST /api/iterate\n  - Loading state during iteration\n- Iteration history panel (collapsible):\n  - GET /api/iterations/{content_id} on open\n  - Click any previous version to restore that caption\n- Template badge if content.template_id is set\n- Auto-publish countdown if content.auto_publish_at is set\n- Mode-specific behaviors:\n  - create: Shows 'Generate' button, creates new content_row\n  - refine: Shows 'Update' button, updates existing captions\n  - repurpose: Shows 'Create New' button, creates linked content_row\n- Responsive: full-screen on mobile, centered modal on desktop\n\nStyling: Use shadcn/ui Dialog, Tabs, Card, Button, Textarea, Input, Badge components",
+        "testStrategy": "1. Visual regression test (Playwright screenshot)\n2. Test each mode renders correctly\n3. Test iteration API called on button click\n4. Test history loads and rollback works\n5. Test responsive layout at mobile/desktop breakpoints\n6. Test accessibility (keyboard nav, screen reader)",
+        "priority": "high",
+        "dependencies": [
+          "8"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Run frontend-design skill and Magic MCP inspiration for modal/editor patterns",
+            "description": "Execute the frontend-design skill to get creative direction for the ContentEditor modal, then use Magic MCP component_inspiration to find design inspiration for modal and editor patterns.",
+            "dependencies": [],
+            "details": "1. Invoke the frontend-design skill with context about the ContentEditor modal requirements: three modes (create/refine/repurpose), per-platform caption editing, iteration history, responsive design.\n2. After getting creative direction, run `mcp-cli info magic/21st_magic_component_inspiration` to check the schema.\n3. Call component_inspiration to search for:\n   - Modal/dialog patterns with tabbed content\n   - Content editor layouts with multiple text areas\n   - History/revision panels with rollback functionality\n4. Document the creative direction and inspiration findings in docs/plans/ for reference during implementation.\n5. Use these findings to inform component structure before running component_builder.",
+            "status": "pending",
+            "testStrategy": "Visual review of inspiration results; documented creative direction file exists and is comprehensive.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Build base modal structure with Dialog component and mode-aware header",
+            "description": "Create the ContentEditor.tsx file with base Dialog modal structure, implementing the core props interface and mode-specific header/title rendering.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create frontend/src/components/content/ContentEditor.tsx:\n1. Define ContentEditorProps interface with contentRow, mode, suggestion, isOpen, onClose, onSave.\n2. Import and use shadcn/ui Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription.\n3. Implement mode-specific titles: 'Create Content' for create, 'Refine Content' for refine, 'Repurpose Content' for repurpose.\n4. Add Template badge using Badge component if contentRow?.template_id is set.\n5. Add auto-publish countdown display if contentRow?.auto_publish_at is set (calculate time remaining).\n6. Style DialogContent with responsive classes: full-screen on mobile (sm:max-w-full), centered max-w-3xl on desktop.\n7. Use Magic MCP component_builder with the inspiration from subtask 1 to generate initial structure.",
+            "status": "pending",
+            "testStrategy": "Unit test: renders with correct title for each mode; renders Template badge when template_id present; renders countdown when auto_publish_at present; snapshot test for modal structure.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implement per-platform caption tabs with iteration input",
+            "description": "Add Tabs component with a tab for each platform (Instagram, Facebook, TikTok, Threads, LinkedIn), each containing an editable caption Textarea and iteration instruction input with 'Iterate' button.",
+            "dependencies": [
+              2
+            ],
+            "details": "Inside ContentEditor:\n1. Import Tabs, TabsList, TabsTrigger, TabsContent from @/components/ui/tabs.\n2. Define platforms array: ['instagram', 'facebook', 'tiktok', 'threads', 'linkedin'] with display labels.\n3. Maintain local state for captions (initialized from contentRow.captions or empty for create mode).\n4. For each platform tab:\n   - Render TabsTrigger with platform icon/label\n   - Render TabsContent containing:\n     a. Textarea for current caption (controlled, editable)\n     b. Input for refinement instruction (placeholder: 'Instructions for refinement...')\n     c. Button labeled 'Iterate' that calls handleIterate(platform)\n5. Implement handleIterate function:\n   - Set loading state for that platform\n   - Call POST /api/iterate with content_row_id, platform, instruction, mode\n   - On success, update captions state with new caption\n   - Clear instruction input, clear loading state\n6. Add api.iterate() method to frontend/src/lib/api.ts if not present.\n7. Show Loader2 spinner on Iterate button during loading.",
+            "status": "pending",
+            "testStrategy": "Unit test: all 5 platform tabs render; caption text is editable; Iterate button calls POST /api/iterate with correct payload; loading state shown during API call; caption updates on success.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Implement iteration history panel with rollback",
+            "description": "Add a collapsible iteration history panel that fetches and displays previous caption versions from GET /api/iterations/{content_id}, with click-to-restore functionality.",
+            "dependencies": [
+              3
+            ],
+            "details": "Add to ContentEditor:\n1. Create IterationHistory sub-component or section within the modal.\n2. Add 'History' toggle button (Collapsible from radix-ui or simple state toggle).\n3. When expanded and content_id exists:\n   - Fetch GET /api/iterations/{content_id} on open\n   - Store iterations in local state\n   - Display loading skeleton while fetching\n4. Render iteration list:\n   - Each iteration shows: timestamp, platform, preview of caption (truncated), 'Restore' button\n   - Sort by created_at descending (newest first)\n5. Implement handleRestore(iteration):\n   - Update the captions state with iteration.caption for that platform\n   - Optionally highlight the restored caption\n6. Add api.getIterations(contentId) method to frontend/src/lib/api.ts.\n7. Style with Card components for each iteration entry.\n8. Handle empty state: 'No iteration history yet'.",
+            "status": "pending",
+            "testStrategy": "Unit test: history panel expands/collapses; fetches iterations on expand; displays iteration list correctly; Restore button updates caption state; handles empty history gracefully.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Add mode-specific behaviors (create/refine/repurpose)",
+            "description": "Implement the three operational modes with their distinct behaviors: create mode generates new content, refine mode updates existing, repurpose mode creates linked content.",
+            "dependencies": [
+              4
+            ],
+            "details": "Implement mode-specific logic:\n1. Create mode (contentRow is null, suggestion provided):\n   - Initialize captions as empty for all platforms\n   - Primary button: 'Generate' (calls POST /api/generate or /api/iterate with mode='create')\n   - On save: calls onSave with newly created ContentRow\n   - Pre-fill raw_text from suggestion.content_idea if provided\n2. Refine mode (contentRow exists):\n   - Initialize captions from contentRow.captions\n   - Primary button: 'Update' (calls PUT /api/content/{id} or uses onSave)\n   - On save: updates existing row, calls onSave with updated ContentRow\n3. Repurpose mode (contentRow exists):\n   - Initialize captions from contentRow.captions as starting point\n   - Primary button: 'Create New' (creates new row linked via parent_id)\n   - On save: creates new ContentRow with reference to original\n4. Add DialogFooter with Cancel button (calls onClose) and mode-specific primary button.\n5. Disable primary button if no platforms have captions.\n6. Show mode indicator badge in header: 'Creating' / 'Refining' / 'Repurposing'.",
+            "status": "pending",
+            "testStrategy": "Unit test: create mode shows Generate button and starts with empty captions; refine mode shows Update button and loads existing captions; repurpose mode shows Create New button; correct API called for each mode; onSave called with correct data.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 6,
+            "title": "Ensure responsive design and accessibility",
+            "description": "Apply responsive styling for mobile (full-screen) vs desktop (centered modal), and implement accessibility features including keyboard navigation, focus management, and screen reader support.",
+            "dependencies": [
+              5
+            ],
+            "details": "Final polish for responsiveness and accessibility:\n1. Responsive styling:\n   - Mobile (<640px): full-screen modal, tabs as horizontal scroll or vertical stack\n   - Tablet/Desktop (>=640px): centered modal with max-w-3xl, horizontal tabs\n   - Use Tailwind responsive prefixes: 'sm:', 'md:', 'lg:'\n   - Ensure touch targets are at least 44x44px on mobile\n2. Accessibility:\n   - Ensure Dialog has proper aria-labelledby (DialogTitle) and aria-describedby (DialogDescription)\n   - Add aria-label to Iterate buttons: 'Iterate {platform} caption'\n   - Ensure tab order is logical: tabs → textarea → instruction input → iterate button\n   - Add keyboard shortcuts: Escape closes modal, Cmd/Ctrl+Enter submits\n   - Focus first editable element when modal opens\n   - Announce mode changes to screen readers\n3. Use Magic MCP component_refiner to iterate on any visual/UX issues found.\n4. Test with keyboard-only navigation.\n5. Test with screen reader (VoiceOver/NVDA) for announcements.",
+            "status": "pending",
+            "testStrategy": "Playwright visual regression at mobile (375px) and desktop (1280px) breakpoints; keyboard navigation test (Tab through all elements, Escape closes); axe accessibility audit passes with no critical issues; screen reader announces modal title and mode on open.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 8,
+        "recommendedSubtasks": 6,
+        "expansionPrompt": "Break down ContentEditor modal into subtasks: 1) Run frontend-design skill and Magic MCP inspiration for modal/editor patterns, 2) Build base modal structure with Dialog component, 3) Implement per-platform caption tabs with iteration input, 4) Implement iteration history panel with rollback, 5) Add mode-specific behaviors (create/refine/repurpose), 6) Ensure responsive design and accessibility",
+        "updatedAt": "2026-03-18T02:06:13.670Z"
+      },
+      {
+        "id": "10",
+        "title": "Rebuild Create page with template selector and inline ContentEditor",
+        "description": "Rebuild the Create page through Magic MCP pipeline, adding template selector dropdown and inline refinement inputs after generation.",
+        "details": "Rebuild frontend/src/pages/CreatePage.tsx:\n\n1. Run frontend-design skill for Create page creative direction\n2. Use Magic MCP component_inspiration, component_builder, component_refiner\n\nNew features to add:\n- Template selector dropdown at top:\n  - Fetches templates via useQuery(['templates'], api.getTemplates)\n  - On select, pre-fills raw_text with template.raw_text_template\n  - Shows variable inputs for each template.variables\n  - 'Use Template' generates with filled variables\n- After generation:\n  - Show per-platform caption cards using ContentEditor inline (not modal)\n  - Each card has refinement input and 'Iterate' button\n  - Can iterate individual platform captions\n- Maintain existing features:\n  - Media upload/Google Drive URL\n  - Raw text input (pre-filled from template or manual)\n  - Platform checkboxes\n  - Schedule date picker\n  - Generate button with loading state\n  - Send to Postiz action\n\n```typescript\nfunction CreatePage() {\n  const { data: templates } = useQuery(['templates'], api.getTemplates);\n  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);\n  const [variableValues, setVariableValues] = useState<Record<string, string>>({});\n  \n  // ... existing state ...\n  \n  const handleTemplateSelect = (templateId: number) => {\n    const template = templates?.find(t => t.id === templateId);\n    setSelectedTemplate(template);\n    setRawText(template?.raw_text_template || '');\n    // Initialize variable values\n    setVariableValues(\n      Object.fromEntries(template?.variables.map(v => [v.name, '']) || [])\n    );\n  };\n  \n  const handleGenerateFromTemplate = async () => {\n    if (!selectedTemplate) return;\n    const result = await api.generateFromTemplate(selectedTemplate.id, {\n      variable_values: variableValues,\n      platforms: selectedPlatforms,\n      scheduled_date: scheduledDate\n    });\n    setCaptions(result.captions);\n    setContentRowId(result.id);  // For iteration tracking\n  };\n  \n  // ... render ...\n}\n```",
+        "testStrategy": "1. Test template dropdown populates correctly\n2. Test variable inputs appear when template selected\n3. Test variable substitution in preview\n4. Test generate from template creates content with template_id\n5. Test inline iteration works after generation\n6. Playwright e2e test for full create flow",
+        "priority": "high",
+        "dependencies": [
+          "9"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Run frontend-design skill for Create page creative direction",
+            "description": "Execute the frontend-design skill to establish creative direction for the rebuilt Create page, including template selector UX, variable input forms, and inline post-generation iteration flow.",
+            "dependencies": [],
+            "details": "Invoke /frontend-design skill with focus on:\n1. Template selector dropdown placement and visual hierarchy (top of page, prominent)\n2. Variable input form layout when template is selected (dynamic fields based on template.variables)\n3. Post-generation inline editing UX (per-platform caption cards with refinement inputs)\n4. Visual distinction between template-based and direct generation flows\n5. Loading states for template fetch, variable substitution preview, and generation\n\nOutput: Design doc in docs/plans/ with component structure, color usage per project brand (sage theme), and interaction patterns. This guides Magic MCP component generation in subsequent subtasks.",
+            "status": "pending",
+            "testStrategy": "Review design doc for completeness: covers template selector, variable inputs, inline iteration, maintains existing features. Verify alignment with project brand guidelines (sage theme).",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Add template selector dropdown with variable inputs",
+            "description": "Build the template selection UI at the top of CreatePage with dynamic variable input fields that appear when a template is selected.",
+            "dependencies": [
+              1
+            ],
+            "details": "Use Magic MCP component_inspiration → component_builder → component_refiner pipeline.\n\nImplementation:\n1. Add useQuery(['templates'], api.getTemplates) hook\n2. Add Select/dropdown component for template selection\n3. Add state: selectedTemplate, variableValues\n4. When template selected:\n   - Pre-fill rawText with template.raw_text_template\n   - Show input field for each template.variables entry\n   - Show 'Use Template' button\n5. Template selector should be collapsible or optional (user can skip and use direct input)\n\n```typescript\nconst [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);\nconst [variableValues, setVariableValues] = useState<Record<string, string>>({});\n\nconst handleTemplateSelect = (templateId: number) => {\n  const template = templates?.find(t => t.id === templateId);\n  setSelectedTemplate(template || null);\n  setRawText(template?.raw_text_template || '');\n  setVariableValues(\n    Object.fromEntries(template?.variables.map(v => [v.name, '']) || [])\n  );\n};\n```\n\nAdd api.getTemplates to frontend/src/lib/api.ts if not present.",
+            "status": "pending",
+            "testStrategy": "1. Test template dropdown renders with fetched templates\n2. Test selecting template updates rawText with template content\n3. Test variable inputs appear for each template.variables entry\n4. Test variable values update state correctly\n5. Test clearing template selection resets to direct input mode",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Integrate inline ContentEditor for post-generation iteration",
+            "description": "Replace or enhance CaptionCards to show per-platform caption cards with inline refinement inputs and individual 'Iterate' buttons after generation completes.",
+            "dependencies": [
+              1
+            ],
+            "details": "Refactor post-generation UI:\n\n1. Each platform caption card includes:\n   - Editable caption textarea (existing)\n   - Refinement instruction input field\n   - 'Iterate' button to regenerate just that platform's caption\n   - Loading state per-platform during iteration\n\n2. State additions:\n   - contentRowId: number | null (for iteration tracking)\n   - iterating: Record<string, boolean> (per-platform loading state)\n\n3. Create ContentEditor component or extend CaptionCards:\n```typescript\ninterface PlatformCaptionCardProps {\n  platform: string;\n  caption: string;\n  onCaptionChange: (caption: string) => void;\n  onIterate: (instruction: string) => Promise<void>;\n  isIterating: boolean;\n}\n```\n\n4. Iterate handler calls api.iterate (POST /api/iterate) with:\n   - content_row_id\n   - platform\n   - instruction\n   - mode: 'refine'\n\nAdd api.iterate to api.ts if not present (depends on Task 5 backend).",
+            "status": "pending",
+            "testStrategy": "1. Test inline refinement input appears for each platform after generation\n2. Test 'Iterate' button triggers iteration for single platform only\n3. Test loading state shows during iteration\n4. Test caption updates after successful iteration\n5. Test error handling for failed iterations",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Wire up generateFromTemplate API call",
+            "description": "Implement the template-based generation flow that substitutes variables and creates content through POST /api/generate-from-template endpoint.",
+            "dependencies": [
+              2
+            ],
+            "details": "Add template generation path alongside existing direct generation:\n\n1. Add api.generateFromTemplate to api.ts:\n```typescript\ngenerateFromTemplate(templateId: number, data: {\n  variable_values: Record<string, string>;\n  platforms: string[];\n  scheduled_date: string;\n  media_url?: string | null;\n}) {\n  return request<{ id: number; captions: Record<string, string> }>(\n    '/api/generate-from-template',\n    { method: 'POST', body: JSON.stringify({ template_id: templateId, ...data }) }\n  );\n}\n```\n\n2. Add handleGenerateFromTemplate in CreatePage:\n```typescript\nconst handleGenerateFromTemplate = async () => {\n  if (!selectedTemplate) return;\n  setIsGenerating(true);\n  setError('');\n  try {\n    const result = await api.generateFromTemplate(selectedTemplate.id, {\n      variable_values: variableValues,\n      platforms: selectedPlatforms,\n      scheduled_date: scheduledDate,\n      media_url: mediaUrl || null,\n    });\n    setCaptions(result.captions);\n    setContentRowId(result.id);  // For iteration tracking\n  } catch (err) {\n    setError(err instanceof Error ? err.message : 'Generation failed');\n  } finally {\n    setIsGenerating(false);\n  }\n};\n```\n\n3. Render 'Use Template' button that calls handleGenerateFromTemplate when template is selected.",
+            "status": "pending",
+            "testStrategy": "1. Test 'Use Template' button calls generateFromTemplate with correct payload\n2. Test variable substitution preview before generation\n3. Test generated captions display after successful call\n4. Test contentRowId is captured for iteration tracking\n5. Test error handling for failed template generation",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Maintain backward compatibility with direct generation flow",
+            "description": "Ensure the existing direct generation flow (rawText → generate → captions) continues to work alongside the new template-based flow.",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "The page must support two generation paths:\n\n1. **Direct flow** (existing): User types rawText → clicks 'Generate Captions' → receives captions\n2. **Template flow** (new): User selects template → fills variables → clicks 'Use Template' → receives captions\n\nImplementation:\n1. Keep existing handleGenerate function unchanged\n2. Show 'Generate Captions' button when no template selected OR rawText differs from template content\n3. Show 'Use Template' button when template selected and variables filled\n4. Both paths should:\n   - Update setCaptions with result\n   - Enable inline iteration (set contentRowId for template path, handle direct path gracefully)\n   - Work with existing media upload, platform selection, schedule date\n\n5. Add visual indication of current mode:\n   - Badge or indicator showing 'Using template: [name]' vs 'Direct input'\n   - Clear template selection button to return to direct mode\n\n6. Edge cases:\n   - User selects template, modifies rawText manually → treat as direct generation\n   - User clears template selection → revert to direct flow\n   - Both flows use same CaptionCards/inline editor component for results",
+            "status": "pending",
+            "testStrategy": "1. Test direct generation still works when no template selected\n2. Test switching between template and direct modes\n3. Test modified template text triggers direct generation\n4. Test clearing template returns to direct flow\n5. Test both flows integrate with existing features (media, platforms, schedule)\n6. Playwright e2e test covering both paths end-to-end",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 7,
+        "recommendedSubtasks": 5,
+        "expansionPrompt": "Break down Create page rebuild into subtasks: 1) Run frontend-design skill for creative direction, 2) Add template selector dropdown with variable inputs, 3) Integrate inline ContentEditor for post-generation iteration, 4) Wire up generateFromTemplate API call, 5) Maintain backward compatibility with existing direct generation flow",
+        "updatedAt": "2026-03-18T02:12:35.368Z"
+      },
+      {
+        "id": "11",
+        "title": "Rebuild Drafts page with ContentEditor modal integration",
+        "description": "Rebuild the Drafts page through Magic MCP pipeline with card-based layout, clicking items opens ContentEditor modal in refine mode.",
+        "details": "Rebuild frontend/src/pages/DraftsPage.tsx:\n\n1. Run frontend-design skill for Drafts page\n2. Use Magic MCP component_inspiration, component_builder, component_refiner\n\nNew design:\n- Card-based layout (not list)\n- Each card shows:\n  - Raw text preview (truncated)\n  - Status badge (draft, pending_approval, etc.)\n  - Platform icons for enabled platforms\n  - Creation date\n  - Template badge if applicable (template.name)\n  - Auto-publish countdown if applicable\n- Click card → opens ContentEditor modal in 'refine' mode\n- Batch select with checkbox overlay\n- Batch actions bar at bottom (approve selected)\n- Filter dropdown: All / Pending / Auto-publishing\n\n```typescript\nfunction DraftsPage() {\n  const [selectedDraft, setSelectedDraft] = useState<ContentRow | null>(null);\n  const [filter, setFilter] = useState<'all' | 'pending' | 'auto-publishing'>('all');\n  \n  const { data: drafts } = useQuery(['drafts', filter], () => \n    api.getDrafts({ filter })\n  );\n  \n  return (\n    <div>\n      <FilterDropdown value={filter} onChange={setFilter} />\n      \n      <div className=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n        {drafts?.map(draft => (\n          <DraftCard \n            key={draft.id}\n            draft={draft}\n            onClick={() => setSelectedDraft(draft)}\n            isSelected={selectedIds.has(draft.id)}\n            onToggleSelect={() => toggleSelect(draft.id)}\n          />\n        ))}\n      </div>\n      \n      <ContentEditor\n        contentRow={selectedDraft}\n        mode=\"refine\"\n        isOpen={!!selectedDraft}\n        onClose={() => setSelectedDraft(null)}\n        onSave={(updated) => {\n          queryClient.invalidateQueries(['drafts']);\n          setSelectedDraft(null);\n        }}\n      />\n      \n      {/* Batch actions bar */}\n    </div>\n  );\n}\n```",
+        "testStrategy": "1. Test card layout renders correctly\n2. Test clicking card opens ContentEditor in refine mode\n3. Test filter dropdown filters results\n4. Test template badge shows when applicable\n5. Test auto-publish countdown displays\n6. Test batch select and approve works\n7. Playwright e2e test",
+        "priority": "medium",
+        "dependencies": [
+          "9"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Run frontend-design skill and Magic MCP pipeline for card-based Drafts page design",
+            "description": "Execute the frontend-design skill to establish creative direction for the Drafts page redesign, then use Magic MCP component_inspiration, component_builder, and component_refiner to generate a high-quality card-based layout design.",
+            "dependencies": [],
+            "details": "1. Run frontend-design skill with context: 'Drafts page for social media content management - card-based layout with status badges, platform icons, template indicators, and auto-publish countdowns. Click card to open ContentEditor modal.'\n2. Use Magic MCP component_inspiration to search for card-grid designs with batch selection patterns\n3. Use Magic MCP component_builder to generate initial DraftCard component with: truncated raw_text preview, status badge (draft/pending_approval), platform icons row, creation date, optional template badge, optional auto-publish countdown\n4. Use Magic MCP component_refiner to polish hover states, selection ring styles, and responsive grid layout\n5. Save generated designs/code for integration in subtask 2",
+            "status": "pending",
+            "testStrategy": "Visual review of Magic MCP output, verify generated components include all required card elements (status badge, platform icons, template badge, countdown)",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Convert DraftsPage from list layout to card-based grid with enhanced DraftCard component",
+            "description": "Replace the current inline DraftCard with a new card-based layout that displays status badges, platform icons, template name, and auto-publish countdown. Remove inline Tabs/Textarea editing since editing moves to modal.",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Extract DraftCard from DraftsPage.tsx into separate frontend/src/components/drafts/DraftCard.tsx component\n2. Implement new DraftCard with:\n   - Truncated raw_text preview (100 chars)\n   - Status badge using Badge component (color-coded: draft=gray, pending_approval=amber, auto-publishing=blue)\n   - Platform icons row showing enabled platforms with icons (IG/FB/TT/TH/LI)\n   - Creation date display\n   - Template badge (template.name) if content has template_id\n   - Auto-publish countdown timer if auto_publish_at exists\n3. Replace current list layout with responsive grid: `grid grid-cols-1 md:grid-cols-2 gap-4`\n4. Remove inline Tabs/Textarea editing from card (editing handled by modal)\n5. Add checkbox overlay for batch selection (top-left corner)\n6. Update ContentRow type in api.ts if needed to include template_id/auto_publish_at fields",
+            "status": "pending",
+            "testStrategy": "1. Test card renders with all elements (status, platforms, date, template badge, countdown)\n2. Test truncation at 100 chars with ellipsis\n3. Test grid layout at mobile and desktop breakpoints\n4. Test checkbox toggle works for batch selection",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Integrate ContentEditor modal with refine mode on card click",
+            "description": "Create or import ContentEditor component as a modal dialog that opens when clicking a draft card. The modal should open in 'refine' mode, allowing caption editing with AI iteration capabilities.",
+            "dependencies": [
+              2
+            ],
+            "details": "1. Create frontend/src/components/ContentEditor.tsx (or import if Task 9 already built it)\n2. ContentEditor modal requirements:\n   - Uses Dialog component from ui/dialog.tsx\n   - Props: contentRow: ContentRow | null, mode: 'create' | 'refine' | 'repurpose', isOpen: boolean, onClose: () => void, onSave: (updated: ContentRow) => void\n   - In 'refine' mode: shows all platform captions with editable Textareas, AI iterate button per platform\n3. Add state to DraftsPage: `const [selectedDraft, setSelectedDraft] = useState<ContentRow | null>(null)`\n4. Wire DraftCard onClick to `setSelectedDraft(draft)`\n5. Render ContentEditor modal:\n   ```tsx\n   <ContentEditor\n     contentRow={selectedDraft}\n     mode=\"refine\"\n     isOpen={!!selectedDraft}\n     onClose={() => setSelectedDraft(null)}\n     onSave={(updated) => {\n       queryClient.invalidateQueries(['drafts']);\n       setSelectedDraft(null);\n     }}\n   />\n   ```\n6. Ensure modal saves edits via api.editDraft and closes cleanly",
+            "status": "pending",
+            "testStrategy": "1. Test clicking card opens modal with correct draft content\n2. Test modal displays all enabled platform captions\n3. Test editing caption and saving updates draft\n4. Test closing modal (X button, escape key, backdrop click)\n5. Test query invalidation refreshes draft list after save",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Add filter dropdown and maintain batch selection/approve functionality",
+            "description": "Add a filter dropdown to filter drafts by status (All / Pending / Auto-publishing) and ensure the existing batch select and batch approve functionality continues to work with the new card layout.",
+            "dependencies": [
+              2
+            ],
+            "details": "1. Add filter state: `const [filter, setFilter] = useState<'all' | 'pending' | 'auto-publishing'>('all')`\n2. Create FilterDropdown component using Select from ui/select.tsx:\n   - Options: All (default), Pending (status='pending_approval'), Auto-publishing (has auto_publish_at)\n   - Place in header row next to 'Review Drafts' title\n3. Modify useQuery to include filter:\n   ```tsx\n   const { data: drafts } = useQuery(\n     ['drafts', filter],\n     () => api.getDrafts({ filter })\n   );\n   ```\n   - Or filter client-side if backend doesn't support filter param\n4. Preserve batch selection state (`selected` Set<number>)\n5. Ensure 'Select all' checkbox only selects visible (filtered) drafts\n6. Maintain batch actions bar at bottom:\n   - Shows when selected.size > 0\n   - 'Approve & Send to Postiz' button calls handleBatchApprove for selected items\n   - Update handleBatchApprove to work with new card-based data (no editedCaptions needed since editing is in modal)\n7. Test batch approve clears selection and invalidates query after completion",
+            "status": "pending",
+            "testStrategy": "1. Test filter dropdown changes visible drafts\n2. Test 'All' shows all drafts, 'Pending' shows only pending_approval, 'Auto-publishing' shows only items with auto_publish_at\n3. Test batch select with checkbox overlay on cards\n4. Test 'Select all' only selects filtered items\n5. Test batch approve works and clears selection\n6. Test batch approve button disabled during operation (loading state)",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down Drafts page rebuild into subtasks: 1) Run frontend-design and Magic MCP for card-based layout design, 2) Convert from list to card-based layout with status/platform badges, 3) Integrate ContentEditor modal in refine mode on card click, 4) Add filter dropdown and maintain batch selection/approve functionality",
+        "updatedAt": "2026-03-18T02:16:29.577Z"
+      },
+      {
+        "id": "12",
+        "title": "Rebuild Calendar page with monthly/weekly/list views",
+        "description": "Rebuild the Calendar page through Magic MCP pipeline with three view modes: monthly grid, weekly columns, and existing list view.",
+        "details": "Rebuild frontend/src/pages/CalendarPage.tsx:\n\n1. Run frontend-design skill for Calendar page\n2. Use Magic MCP component_inspiration for calendar patterns\n3. Use component_builder and component_refiner\n\nNew features:\n- View toggle tabs: Monthly | Weekly | List\n- Monthly view:\n  - 7x5-6 grid (Sun-Sat columns, week rows)\n  - Day cells show pillar-colored dots/thumbnails for content\n  - Click cell → expands to show content list for that day\n  - Click content item → opens ContentEditor modal\n- Weekly view:\n  - 7 day columns (current week)\n  - Time slots (optional, or just stacked cards per day)\n  - Content cards with platform icons, status\n  - Drag-and-drop to reschedule (optional future)\n- List view (existing, enhanced):\n  - Grouped by date\n  - Cards with full details\n  - Good for bulk actions\n- ContentEditor integration:\n  - Scheduled content → refine mode\n  - Posted content → repurpose mode\n- Auto-publish countdown timer on cards where applicable\n\n```typescript\ntype CalendarView = 'monthly' | 'weekly' | 'list';\n\nfunction CalendarPage() {\n  const [view, setView] = useState<CalendarView>('monthly');\n  const [selectedContent, setSelectedContent] = useState<CalendarEntry | null>(null);\n  const [selectedDate, setSelectedDate] = useState(new Date());\n  \n  const { data: calendar } = useQuery(['calendar'], api.getCalendar);\n  \n  const mode = selectedContent?.status === 'posted' ? 'repurpose' : 'refine';\n  \n  return (\n    <div>\n      <Tabs value={view} onValueChange={(v) => setView(v as CalendarView)}>\n        <TabsList>\n          <TabsTrigger value=\"monthly\">Monthly</TabsTrigger>\n          <TabsTrigger value=\"weekly\">Weekly</TabsTrigger>\n          <TabsTrigger value=\"list\">List</TabsTrigger>\n        </TabsList>\n      </Tabs>\n      \n      {view === 'monthly' && (\n        <MonthlyGrid \n          entries={calendar?.entries}\n          selectedDate={selectedDate}\n          onDateChange={setSelectedDate}\n          onContentClick={setSelectedContent}\n        />\n      )}\n      {view === 'weekly' && (\n        <WeeklyView \n          entries={calendar?.entries}\n          currentWeek={selectedDate}\n          onContentClick={setSelectedContent}\n        />\n      )}\n      {view === 'list' && (\n        <ListView \n          entries={calendar?.entries}\n          onContentClick={setSelectedContent}\n        />\n      )}\n      \n      <ContentEditor\n        contentRow={selectedContent ? contentRowFromEntry(selectedContent) : null}\n        mode={mode}\n        isOpen={!!selectedContent}\n        onClose={() => setSelectedContent(null)}\n        onSave={() => {\n          queryClient.invalidateQueries(['calendar']);\n          setSelectedContent(null);\n        }}\n      />\n    </div>\n  );\n}\n```\n\nHelper components:\n- MonthlyGrid: date-fns for month math, pillar colors mapped\n- WeeklyView: 7 columns, startOfWeek/endOfWeek from date-fns\n- ListView: existing grouped view (keep current implementation)",
+        "testStrategy": "1. Test view toggle switches correctly\n2. Test monthly grid renders correct number of days\n3. Test pillar colors applied to dots\n4. Test clicking content opens correct mode\n5. Test posted content opens repurpose mode\n6. Test weekly view shows current week\n7. Test auto-publish countdown displays\n8. Playwright e2e test for each view",
+        "priority": "medium",
+        "dependencies": [
+          "9"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Run frontend-design skill for Calendar page creative direction",
+            "description": "Execute the frontend-design skill to establish creative direction for the Calendar page rebuild, defining visual hierarchy, interaction patterns, and responsive layout strategy for the three view modes.",
+            "dependencies": [],
+            "details": "Run frontend-design skill with context: Calendar page with three views (monthly grid, weekly columns, list). Focus on: 1) View toggle tab styling that feels cohesive with AppShell, 2) Monthly grid cell design with pillar-colored content dots, 3) Weekly column layout with day headers and content cards, 4) Consistent card styling across views, 5) ContentEditor modal trigger points, 6) Auto-publish countdown badge styling. Output a design brief with color tokens, spacing, and component hierarchy.",
+            "status": "pending",
+            "testStrategy": "Visual review of design brief against existing sage/muted color palette in components. Verify design decisions align with existing Card, Badge, and Tabs components.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Create MonthlyGrid component with date-fns calendar math and pillar colors",
+            "description": "Build the MonthlyGrid component using Magic MCP pipeline, implementing proper calendar grid rendering with date-fns for month calculations and pillar-colored content indicators.",
+            "dependencies": [
+              1
+            ],
+            "details": "Use Magic MCP component_inspiration for calendar grid patterns, then component_builder and component_refiner. Implementation requirements: 1) 7-column grid (Sun-Sat) with 5-6 week rows depending on month, 2) Use date-fns startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, 3) Day cells show pillar-colored dots mapping content_pillar to color (spiritual=sage, farm=amber, events=blue, etc.), 4) Click cell expands to show content list overlay for that day, 5) Outside-month days styled with reduced opacity, 6) Today highlighted, 7) Month navigation (prev/next) updating selectedDate. Props: entries: CalendarEntry[], selectedDate: Date, onDateChange, onContentClick.",
+            "status": "pending",
+            "testStrategy": "1. Unit test calendar math produces correct day count for various months (Feb leap year, 31-day months). 2. Test pillar color mapping renders correct CSS classes. 3. Test click handlers fire with correct date/content. 4. Visual regression test grid layout at desktop/mobile.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Create WeeklyView component with day columns and content cards",
+            "description": "Build the WeeklyView component using Magic MCP pipeline, displaying 7 day columns for the current week with stacked content cards showing platform icons and status.",
+            "dependencies": [
+              1
+            ],
+            "details": "Use Magic MCP component_inspiration for weekly calendar/kanban patterns, then component_builder and component_refiner. Implementation: 1) 7 equal-width columns with day headers (Mon 3/17, etc.), 2) Each column contains stacked content cards, 3) Cards show: truncated raw_text, platform icons (facebook/instagram/etc from platforms record), status Badge, pillar color accent, 4) Week navigation (prev/next week) using date-fns startOfWeek/endOfWeek, 5) Current day column highlighted, 6) Optional: time slot rows if scheduled_at includes time, 7) Click card triggers onContentClick. Props: entries: CalendarEntry[], currentWeek: Date, onContentClick.",
+            "status": "pending",
+            "testStrategy": "1. Test week boundary calculation with date-fns. 2. Test content cards filter to correct day columns. 3. Test platform icons render for enabled platforms only. 4. Test status badges show correct variant. 5. Visual test responsive column stacking on mobile.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Enhance existing ListView with ContentEditor integration",
+            "description": "Refactor the existing date-grouped list view from CalendarPage into a reusable ListView component with click handlers that open ContentEditor modal.",
+            "dependencies": [
+              1
+            ],
+            "details": "Extract and enhance the existing grouped list rendering (lines 48-104 of CalendarPage.tsx): 1) Move to ListView component with props: entries: CalendarEntry[], onContentClick: (entry) => void, 2) Keep existing date grouping and Card styling, 3) Add cursor-pointer and hover state to cards, 4) Add onClick handler to each card calling onContentClick(entry), 5) Add auto-publish countdown badge if entry has scheduled_at (use date-fns formatDistanceToNow), 6) Consider bulk selection checkboxes for future batch actions. This is enhancement of existing code, not Magic MCP rebuild.",
+            "status": "pending",
+            "testStrategy": "1. Test existing grouped rendering still works. 2. Test click handler fires with correct entry. 3. Test auto-publish countdown displays and updates. 4. Snapshot test to catch unintended changes to existing layout.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Implement view toggle tabs and CalendarPage state management",
+            "description": "Rebuild CalendarPage.tsx orchestrating the three view components with Tabs-based view switching and shared state for selected content and date.",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Rebuild CalendarPage.tsx to match the specification: 1) Import Tabs, TabsList, TabsTrigger, TabsContent from ui/tabs, 2) useState for view ('monthly'|'weekly'|'list'), selectedContent (CalendarEntry|null), selectedDate (Date), 3) useQuery for calendar data as existing, 4) Tabs component with three triggers: Monthly, Weekly, List, 5) Conditionally render MonthlyGrid, WeeklyView, or ListView based on active tab, 6) Pass shared handlers: onContentClick sets selectedContent, onDateChange updates selectedDate, 7) Keep loading skeleton and empty state from existing implementation.",
+            "status": "pending",
+            "testStrategy": "1. Test tab switching changes view state. 2. Test URL state preservation (optional query params for view). 3. Test onContentClick sets selectedContent correctly. 4. Integration test that clicking content in any view opens modal. 5. Test loading and empty states render.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 6,
+            "title": "Add ContentEditor modal integration with refine/repurpose mode switching",
+            "description": "Integrate the ContentEditor modal (from Task 9) into CalendarPage, automatically determining mode based on content status (posted→repurpose, else→refine).",
+            "dependencies": [
+              5
+            ],
+            "details": "Complete the CalendarPage integration: 1) Import ContentEditor from components/content/ContentEditor, 2) Add modal rendering: <ContentEditor contentRow={contentRowFromEntry(selectedContent)} mode={mode} isOpen={!!selectedContent} onClose={() => setSelectedContent(null)} onSave={handleSave} />, 3) Implement mode logic: const mode = selectedContent?.status === 'posted' ? 'repurpose' : 'refine', 4) Implement contentRowFromEntry helper to convert CalendarEntry to ContentRow format (may need additional API call for full data), 5) handleSave: invalidate calendar query and close modal, 6) Add auto-publish countdown badge to content cards showing time until scheduled_at.",
+            "status": "pending",
+            "testStrategy": "1. Test posted content opens in repurpose mode. 2. Test draft/scheduled content opens in refine mode. 3. Test onClose clears selectedContent. 4. Test onSave invalidates query and closes modal. 5. E2E test: click calendar item → modal opens → edit → save → calendar refreshes.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 8,
+        "recommendedSubtasks": 6,
+        "expansionPrompt": "Break down Calendar page rebuild into subtasks: 1) Run frontend-design skill for calendar creative direction, 2) Create MonthlyGrid component with date-fns math and pillar colors, 3) Create WeeklyView component with day columns, 4) Enhance existing ListView with ContentEditor integration, 5) Implement view toggle tabs, 6) Add ContentEditor modal with refine/repurpose mode switching based on content status",
+        "updatedAt": "2026-03-18T02:20:00.603Z"
+      },
+      {
+        "id": "13",
+        "title": "Update Suggestions page with ContentEditor create mode",
+        "description": "Update the Suggestions page so clicking a suggestion opens ContentEditor in create mode, generating captions in-place without navigation.",
+        "details": "Update frontend/src/pages/SuggestionsPage.tsx:\n\n1. Run frontend-design skill for minor updates\n2. Use Magic MCP component_refiner for iteration\n\nChanges:\n- Add onClick handler to suggestion cards\n- Clicking opens ContentEditor modal in 'create' mode\n- Pass suggestion data to ContentEditor\n- ContentEditor in create mode:\n  - Pre-fills raw_text from suggestion.content_idea\n  - Pre-selects pillar from suggestion.suggested_pillar\n  - Pre-selects date from suggestion.suggested_date\n  - Platform checkboxes (default all enabled)\n  - 'Generate' button creates content_row and generates captions\n  - After generation, switches to refine mode for iteration\n\n```typescript\nfunction SuggestionsPage() {\n  const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);\n  const queryClient = useQueryClient();\n  \n  const { data: suggestions } = useQuery(['suggestions'], api.getSuggestions);\n  \n  return (\n    <div className=\"space-y-4 p-6\">\n      <h1 className=\"text-2xl font-bold\">Content Suggestions</h1>\n      \n      {suggestions?.map((s, i) => (\n        <Card \n          key={i} \n          className=\"cursor-pointer hover:shadow-md transition-shadow\"\n          onClick={() => setSelectedSuggestion(s)}\n        >\n          {/* ... existing card content ... */}\n        </Card>\n      ))}\n      \n      <ContentEditor\n        contentRow={null}  // null triggers create mode\n        mode=\"create\"\n        suggestion={selectedSuggestion}\n        isOpen={!!selectedSuggestion}\n        onClose={() => setSelectedSuggestion(null)}\n        onSave={(newRow) => {\n          queryClient.invalidateQueries(['suggestions']);\n          queryClient.invalidateQueries(['drafts']);\n          setSelectedSuggestion(null);\n          // Optionally navigate to drafts or show success toast\n        }}\n      />\n    </div>\n  );\n}\n```\n\nContentEditor create mode logic:\n```typescript\n// In ContentEditor.tsx\nif (mode === 'create' && suggestion) {\n  // Initialize form with suggestion data\n  const [rawText, setRawText] = useState(suggestion.content_idea);\n  const [pillar, setPillar] = useState(suggestion.suggested_pillar);\n  const [scheduledDate, setScheduledDate] = useState(suggestion.suggested_date);\n  const [platforms, setPlatforms] = useState(['instagram', 'facebook', 'tiktok', 'threads', 'linkedin']);\n  \n  const handleGenerate = async () => {\n    const result = await api.generateSync({\n      raw_text: rawText,\n      platforms,\n      scheduled_date: scheduledDate\n    });\n    // ... set captions, switch to refine-like UI\n  };\n}\n```",
+        "testStrategy": "1. Test clicking suggestion opens modal in create mode\n2. Test suggestion data pre-fills form\n3. Test generate creates content_row\n4. Test after generation, iteration inputs appear\n5. Test save calls onSave callback\n6. Playwright e2e test for suggestion → create flow",
+        "priority": "medium",
+        "dependencies": [
+          "9"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down Suggestions page update into subtasks: 1) Add onClick handler to suggestion cards, 2) Integrate ContentEditor modal in create mode with suggestion pre-fill, 3) Handle post-generation flow and query invalidation",
+        "updatedAt": "2026-03-18T02:23:04.265Z"
+      },
+      {
+        "id": "14",
+        "title": "Build template manager page in dashboard",
+        "description": "Create a new Templates page for listing, creating, editing, deleting, and previewing content templates.",
+        "details": "Create frontend/src/pages/TemplatesPage.tsx:\n\n1. Run frontend-design skill for Templates page\n2. Use Magic MCP component_inspiration, component_builder, component_refiner\n\nFeatures:\n- List all templates in card grid\n- Each card shows:\n  - Template name\n  - Pillar badge\n  - Schedule pattern (weekly:sunday, manual)\n  - Variable count\n  - Edit/Delete buttons\n- 'Create Template' button → opens template editor modal\n- Template editor modal:\n  - Name input\n  - Pillar dropdown\n  - Raw text template with {{variable}} syntax\n  - Variable definition (add/remove, name + type)\n  - Platform-specific instructions (optional override)\n  - Schedule pattern (dropdown: manual, weekly:day, monthly:date)\n  - Preview pane showing resolved template\n- Edit mode: pre-fills form, shows update button\n- Delete confirmation dialog\n\n```typescript\nfunction TemplatesPage() {\n  const [isEditorOpen, setIsEditorOpen] = useState(false);\n  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);\n  \n  const { data: templates } = useQuery(['templates'], api.getTemplates);\n  const createMutation = useMutation(api.createTemplate, {\n    onSuccess: () => queryClient.invalidateQueries(['templates'])\n  });\n  const updateMutation = useMutation(\n    (data: { id: number; template: CreateTemplateRequest }) => \n      api.updateTemplate(data.id, data.template),\n    { onSuccess: () => queryClient.invalidateQueries(['templates']) }\n  );\n  const deleteMutation = useMutation(api.deleteTemplate, {\n    onSuccess: () => queryClient.invalidateQueries(['templates'])\n  });\n  \n  return (\n    <div className=\"p-6\">\n      <div className=\"flex justify-between items-center mb-6\">\n        <h1 className=\"text-2xl font-bold\">Content Templates</h1>\n        <Button onClick={() => { setEditingTemplate(null); setIsEditorOpen(true); }}>\n          Create Template\n        </Button>\n      </div>\n      \n      <div className=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4\">\n        {templates?.map(template => (\n          <TemplateCard\n            key={template.id}\n            template={template}\n            onEdit={() => { setEditingTemplate(template); setIsEditorOpen(true); }}\n            onDelete={() => deleteMutation.mutate(template.id)}\n          />\n        ))}\n      </div>\n      \n      <TemplateEditorModal\n        template={editingTemplate}\n        isOpen={isEditorOpen}\n        onClose={() => setIsEditorOpen(false)}\n        onSave={(data) => {\n          if (editingTemplate) {\n            updateMutation.mutate({ id: editingTemplate.id, template: data });\n          } else {\n            createMutation.mutate(data);\n          }\n          setIsEditorOpen(false);\n        }}\n      />\n    </div>\n  );\n}\n```\n\nAdd to navigation in AppShell.tsx",
+        "testStrategy": "1. Test template list loads correctly\n2. Test create new template flow\n3. Test edit existing template flow\n4. Test delete with confirmation\n5. Test variable editor add/remove\n6. Test template preview with sample values\n7. Playwright e2e test",
+        "priority": "medium",
+        "dependencies": [
+          "8"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Design Templates page layout using frontend-design skill and Magic MCP",
+            "description": "Run the frontend-design skill to get creative direction for the Templates page, then use Magic MCP component_inspiration, component_builder, and component_refiner to generate the base page structure with card grid layout.",
+            "dependencies": [],
+            "details": "1. Invoke frontend-design skill for Templates page creative direction\n2. Use Magic MCP component_inspiration to search for template/card-grid dashboard designs\n3. Use component_builder to generate initial TemplatesPage.tsx with:\n   - Header section with title and 'Create Template' button\n   - Responsive card grid (1/2/3 columns at sm/md/lg breakpoints)\n   - Empty state when no templates exist\n4. Use component_refiner to polish the generated component\n5. Export page from frontend/src/pages/TemplatesPage.tsx",
+            "status": "pending",
+            "testStrategy": "Visual inspection of page layout at different breakpoints. Verify empty state renders when templates array is empty.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Build TemplateCard component with name, pillar badge, schedule, and action buttons",
+            "description": "Create the TemplateCard component that displays template metadata including name, pillar badge, schedule pattern indicator, variable count, and edit/delete action buttons.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create frontend/src/components/templates/TemplateCard.tsx:\n1. Card container with hover state and shadow\n2. Template name as card title\n3. Pillar badge component (colored by pillar type)\n4. Schedule pattern display (e.g., 'Weekly: Sunday', 'Manual')\n5. Variable count indicator (e.g., '3 variables')\n6. Action buttons row:\n   - Edit button (pencil icon) - calls onEdit prop\n   - Delete button (trash icon) - calls onDelete prop with confirmation\n7. Props interface: template: Template, onEdit: () => void, onDelete: () => void\n8. Use existing design system components (Button, Badge) where available",
+            "status": "pending",
+            "testStrategy": "Unit test renders all template fields correctly. Test onEdit and onDelete callbacks fire when buttons clicked. Test delete shows confirmation before calling onDelete.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Build TemplateEditorModal with variable editor and form fields",
+            "description": "Create the TemplateEditorModal component with all form inputs for creating/editing templates, including the dynamic variable definition editor with add/remove functionality.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create frontend/src/components/templates/TemplateEditorModal.tsx:\n1. Modal wrapper (Dialog component)\n2. Form fields:\n   - Name input (required)\n   - Pillar dropdown (from pillars list)\n   - Raw text template textarea with {{variable}} syntax support\n   - Schedule pattern dropdown (manual, weekly:monday-sunday, monthly:1-31)\n3. Variable definition editor:\n   - List of variable rows with name input + type dropdown\n   - Add variable button\n   - Remove variable button per row\n   - Extract variables from template text on blur\n4. Platform-specific instructions (collapsible section with per-platform textareas)\n5. Form state management with react-hook-form or useState\n6. Props: template: Template | null, isOpen: boolean, onClose: () => void, onSave: (data) => void\n7. Pre-fill form when template prop is provided (edit mode)",
+            "status": "pending",
+            "testStrategy": "Test form validates required fields. Test variable editor add/remove works. Test edit mode pre-fills values. Test onSave called with correct data shape.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Add template preview pane with sample variable substitution",
+            "description": "Add a preview pane to the TemplateEditorModal that shows the resolved template text with sample values for each defined variable, updating live as the user types.",
+            "dependencies": [
+              3
+            ],
+            "details": "Enhance TemplateEditorModal with preview functionality:\n1. Add preview pane (right side or below editor on mobile)\n2. Generate sample values based on variable type:\n   - text: 'Sample [varname]'\n   - date: current date formatted\n   - number: '42'\n3. Substitute {{variable}} placeholders with sample values\n4. Update preview on template text change (debounced)\n5. Show character count for platforms with limits\n6. Handle missing variables gracefully (show placeholder in red)\n7. Split view layout: editor left, preview right (stack on mobile)\n8. Copy preview to clipboard button",
+            "status": "pending",
+            "testStrategy": "Test preview updates when template text changes. Test sample values generated correctly by type. Test missing variables highlighted. Test character count accurate.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Wire up CRUD mutations and integrate with API endpoints",
+            "description": "Connect the TemplatesPage to the backend API using React Query mutations for create, update, and delete operations, with proper loading states and error handling.",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Wire up frontend/src/pages/TemplatesPage.tsx:\n1. Add API functions to frontend/src/api.ts:\n   - getTemplates(): GET /api/templates\n   - createTemplate(data): POST /api/templates\n   - updateTemplate(id, data): PUT /api/templates/{id}\n   - deleteTemplate(id): DELETE /api/templates/{id}\n2. In TemplatesPage:\n   - useQuery(['templates'], api.getTemplates) for list\n   - useMutation for create with onSuccess invalidating ['templates']\n   - useMutation for update with onSuccess invalidating ['templates']\n   - useMutation for delete with onSuccess invalidating ['templates']\n3. Loading states: skeleton cards while loading\n4. Error handling: toast notifications on mutation failure\n5. Optimistic updates for delete (optional)\n6. Add route to App.tsx and navigation link to Sidebar.tsx",
+            "status": "pending",
+            "testStrategy": "Test list loads templates from API. Test create mutation adds new template. Test update mutation modifies existing. Test delete removes template. Test error states show toast. Playwright e2e test full CRUD flow.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 7,
+        "recommendedSubtasks": 5,
+        "expansionPrompt": "Break down template manager page into subtasks: 1) Run frontend-design and Magic MCP for page layout, 2) Build TemplateCard component with name/pillar/schedule badges, 3) Build TemplateEditorModal with variable editor, 4) Wire up CRUD mutations (create/update/delete), 5) Add template preview pane with sample variable values",
+        "updatedAt": "2026-03-18T02:32:31.069Z"
+      },
+      {
+        "id": "15",
+        "title": "Add auto-publish settings section to Settings page",
+        "description": "Add a settings section for configuring per-platform auto-publish rules with delay windows and pillar overrides.",
+        "details": "Create or update frontend/src/pages/SettingsPage.tsx:\n\n1. Run frontend-design skill for Settings page section\n2. Use Magic MCP component_builder, component_refiner\n\nAuto-publish settings section:\n- Accordion/expandable section per platform\n- Each platform section:\n  - Enable/disable toggle\n  - Delay hours input (1-24)\n  - Pillar overrides:\n    - Checkbox per pillar to enable/disable auto-publish\n    - Disabled pillars require manual approval\n- Save button at bottom\n\n```typescript\nfunction AutoPublishSettings() {\n  const { data: config, isLoading } = useQuery(['publishConfig'], api.getPublishConfig);\n  const [localConfig, setLocalConfig] = useState<PlatformPublishConfig[]>([]);\n  const updateMutation = useMutation(api.updatePublishConfig, {\n    onSuccess: () => {\n      queryClient.invalidateQueries(['publishConfig']);\n      toast.success('Auto-publish settings saved');\n    }\n  });\n  \n  useEffect(() => {\n    if (config) setLocalConfig(config.platforms);\n  }, [config]);\n  \n  const updatePlatform = (platform: string, updates: Partial<PlatformPublishConfig>) => {\n    setLocalConfig(prev => prev.map(p => \n      p.platform === platform ? { ...p, ...updates } : p\n    ));\n  };\n  \n  return (\n    <Card>\n      <CardHeader>\n        <CardTitle>Auto-Publish Configuration</CardTitle>\n        <p className=\"text-muted-foreground\">\n          Configure automatic publishing with optional delay window for staff review.\n        </p>\n      </CardHeader>\n      <CardContent className=\"space-y-4\">\n        {localConfig.map(platform => (\n          <Accordion key={platform.platform}>\n            <AccordionTrigger>\n              <div className=\"flex items-center gap-2\">\n                <Switch\n                  checked={platform.enabled}\n                  onCheckedChange={(enabled) => updatePlatform(platform.platform, { enabled })}\n                />\n                <span>{platform.platform}</span>\n              </div>\n            </AccordionTrigger>\n            <AccordionContent className=\"space-y-4\">\n              <div>\n                <Label>Delay before publishing (hours)</Label>\n                <Input\n                  type=\"number\"\n                  min=\"0\"\n                  max=\"24\"\n                  value={platform.delay_hours}\n                  onChange={(e) => updatePlatform(platform.platform, { \n                    delay_hours: parseInt(e.target.value) \n                  })}\n                />\n                <p className=\"text-xs text-muted-foreground\">\n                  Content waits this long after approval before auto-publishing.\n                </p>\n              </div>\n              \n              <div>\n                <Label>Pillar overrides</Label>\n                {Object.values(ContentPillar).map(pillar => (\n                  <label key={pillar} className=\"flex items-center gap-2\">\n                    <Checkbox\n                      checked={platform.pillar_overrides[pillar] !== false}\n                      onCheckedChange={(checked) => updatePlatform(platform.platform, {\n                        pillar_overrides: {\n                          ...platform.pillar_overrides,\n                          [pillar]: checked\n                        }\n                      })}\n                    />\n                    {pillar}\n                  </label>\n                ))}\n              </div>\n            </AccordionContent>\n          </Accordion>\n        ))}\n        \n        <Button \n          onClick={() => updateMutation.mutate(localConfig)}\n          disabled={updateMutation.isLoading}\n        >\n          Save Changes\n        </Button>\n      </CardContent>\n    </Card>\n  );\n}\n```\n\nAdd SettingsPage to router if not exists. Add navigation link in sidebar.",
+        "testStrategy": "1. Test config loads from API\n2. Test toggle enables/disables platform\n3. Test delay hours input validation\n4. Test pillar checkboxes update correctly\n5. Test save persists to backend\n6. Test toast shows on save\n7. Playwright e2e test",
+        "priority": "medium",
+        "dependencies": [
+          "8"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 5,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down auto-publish settings section into subtasks: 1) Create SettingsPage if not exists and add to routing, 2) Build AutoPublishSettings component with per-platform accordion, 3) Implement pillar overrides UI and save mutation",
+        "updatedAt": "2026-03-18T02:36:24.796Z"
+      },
+      {
+        "id": "16",
+        "title": "Add auto-publish countdown display to Drafts/Calendar",
+        "description": "Display auto-publish countdown timers on content cards in Drafts and Calendar views when auto_publish_at is set.",
+        "details": "Create frontend/src/components/content/AutoPublishCountdown.tsx:\n```typescript\nimport { useState, useEffect } from 'react';\nimport { formatDistanceToNow, differenceInSeconds, isPast } from 'date-fns';\nimport { Clock, AlertCircle } from 'lucide-react';\n\ninterface AutoPublishCountdownProps {\n  publishAt: string;  // ISO datetime\n  onExpired?: () => void;\n}\n\nexport function AutoPublishCountdown({ publishAt, onExpired }: AutoPublishCountdownProps) {\n  const [timeLeft, setTimeLeft] = useState('');\n  const [isExpired, setIsExpired] = useState(false);\n  \n  useEffect(() => {\n    const updateCountdown = () => {\n      const target = new Date(publishAt);\n      if (isPast(target)) {\n        setIsExpired(true);\n        setTimeLeft('Publishing...');\n        onExpired?.();\n        return;\n      }\n      \n      const seconds = differenceInSeconds(target, new Date());\n      if (seconds < 3600) {\n        // Show minutes\n        const minutes = Math.ceil(seconds / 60);\n        setTimeLeft(`${minutes}m`);\n      } else {\n        // Show hours:minutes\n        const hours = Math.floor(seconds / 3600);\n        const mins = Math.floor((seconds % 3600) / 60);\n        setTimeLeft(`${hours}h ${mins}m`);\n      }\n    };\n    \n    updateCountdown();\n    const interval = setInterval(updateCountdown, 60000); // Update every minute\n    \n    return () => clearInterval(interval);\n  }, [publishAt, onExpired]);\n  \n  if (!publishAt) return null;\n  \n  return (\n    <div className={\n      `flex items-center gap-1 text-xs px-2 py-1 rounded-full ` +\n      (isExpired \n        ? 'bg-orange-100 text-orange-700' \n        : 'bg-blue-100 text-blue-700')\n    }>\n      {isExpired ? <AlertCircle className=\"h-3 w-3\" /> : <Clock className=\"h-3 w-3\" />}\n      <span>Auto-publish {isExpired ? 'now' : `in ${timeLeft}`}</span>\n    </div>\n  );\n}\n```\n\nIntegrate into DraftCard and CalendarCard components:\n```typescript\n// In DraftCard\n{draft.auto_publish_at && (\n  <AutoPublishCountdown \n    publishAt={draft.auto_publish_at}\n    onExpired={() => queryClient.invalidateQueries(['drafts'])}\n  />\n)}\n```\n\nAdd auto_publish_at to ContentRow and CalendarEntry types in api.ts",
+        "testStrategy": "1. Test countdown renders correct time format\n2. Test countdown updates over time\n3. Test expired state triggers callback\n4. Test different time ranges (minutes vs hours)\n5. Visual test for styling\n6. Test null/undefined publishAt returns null",
+        "priority": "low",
+        "dependencies": [
+          "11",
+          "12"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 3,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "No expansion needed - this is a focused utility component that gets integrated into existing pages",
+        "updatedAt": "2026-03-18T02:40:22.329Z"
+      },
+      {
+        "id": "17",
+        "title": "Write backend tests for new endpoints",
+        "description": "Add pytest tests for all new API endpoints: iterate, iterations, templates CRUD, and publish settings.",
+        "details": "Create tests/api/test_iterate.py:\n```python\nimport pytest\nfrom httpx import AsyncClient\nfrom api.main import app\nfrom api.models import ContentRow, ContentIteration\n\n@pytest.fixture\nasync def test_content_row(db_session):\n    row = ContentRow(\n        date=datetime.now(),\n        raw_text='Test post',\n        platforms={'instagram': True},\n        status='draft',\n        captions={'instagram': 'Original caption'}\n    )\n    db_session.add(row)\n    await db_session.commit()\n    return row\n\n@pytest.mark.asyncio\nasync def test_iterate_caption(client: AsyncClient, test_content_row, auth_headers):\n    response = await client.post('/api/iterate', json={\n        'content_row_id': test_content_row.id,\n        'platform': 'instagram',\n        'instruction': 'Make it more casual',\n        'mode': 'refine'\n    }, headers=auth_headers)\n    assert response.status_code == 200\n    data = response.json()\n    assert 'caption' in data\n    assert 'iteration_id' in data\n\n@pytest.mark.asyncio\nasync def test_get_iterations(client: AsyncClient, test_content_row, auth_headers):\n    # First create an iteration\n    await client.post('/api/iterate', json={\n        'content_row_id': test_content_row.id,\n        'platform': 'instagram',\n        'instruction': 'Test',\n        'mode': 'refine'\n    }, headers=auth_headers)\n    \n    response = await client.get(f'/api/iterations/{test_content_row.id}', headers=auth_headers)\n    assert response.status_code == 200\n    data = response.json()\n    assert len(data) >= 1\n\n@pytest.mark.asyncio\nasync def test_iterate_404(client: AsyncClient, auth_headers):\n    response = await client.post('/api/iterate', json={\n        'content_row_id': 99999,\n        'platform': 'instagram',\n        'instruction': 'Test',\n        'mode': 'refine'\n    }, headers=auth_headers)\n    assert response.status_code == 404\n```\n\nCreate tests/api/test_templates.py:\n```python\n@pytest.mark.asyncio\nasync def test_template_crud(client: AsyncClient, auth_headers):\n    # Create\n    response = await client.post('/api/templates', json={\n        'name': 'Test Template',\n        'raw_text_template': 'Hello {{name}}!',\n        'variables': [{'name': 'name', 'type': 'text'}]\n    }, headers=auth_headers)\n    assert response.status_code == 200\n    template_id = response.json()['id']\n    \n    # Read\n    response = await client.get(f'/api/templates/{template_id}', headers=auth_headers)\n    assert response.status_code == 200\n    assert response.json()['name'] == 'Test Template'\n    \n    # Update\n    response = await client.put(f'/api/templates/{template_id}', json={\n        'name': 'Updated Template',\n        'raw_text_template': 'Hi {{name}}!',\n        'variables': [{'name': 'name', 'type': 'text'}]\n    }, headers=auth_headers)\n    assert response.status_code == 200\n    assert response.json()['name'] == 'Updated Template'\n    \n    # Delete\n    response = await client.delete(f'/api/templates/{template_id}', headers=auth_headers)\n    assert response.status_code == 200\n\n@pytest.mark.asyncio\nasync def test_generate_from_template(client: AsyncClient, auth_headers, test_template):\n    response = await client.post(f'/api/templates/{test_template.id}/generate', json={\n        'variable_values': {'name': 'World'},\n        'platforms': ['instagram'],\n        'scheduled_date': '2024-01-15'\n    }, headers=auth_headers)\n    assert response.status_code == 200\n    assert response.json()['template_id'] == test_template.id\n```\n\nCreate tests/api/test_publish_config.py with similar patterns.",
+        "testStrategy": "1. Run pytest with coverage report\n2. Aim for >80% coverage on new endpoints\n3. Test edge cases (404, 400, validation errors)\n4. Test with demo mode enabled\n5. Test database rollback on errors",
+        "priority": "medium",
+        "dependencies": [
+          "5",
+          "6",
+          "7"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down backend testing into subtasks: 1) Set up async test fixtures with in-memory SQLite, 2) Write tests for iterate endpoints (POST /iterate, GET /iterations), 3) Write tests for template CRUD and generate, 4) Write tests for publish config endpoints",
+        "updatedAt": "2026-03-18T02:43:35.271Z"
+      },
+      {
+        "id": "18",
+        "title": "Write frontend Playwright tests for new features",
+        "description": "Add Playwright e2e tests for ContentEditor, Create page with templates, Drafts/Calendar with modal integration, and Templates page.",
+        "details": "Create frontend/e2e/content-editor.spec.ts:\n```typescript\nimport { test, expect } from '@playwright/test';\n\ntest.describe('ContentEditor', () => {\n  test.beforeEach(async ({ page }) => {\n    // Login\n    await page.goto('/login');\n    await page.fill('[name=\"password\"]', 'test-password');\n    await page.click('button[type=\"submit\"]');\n    await page.waitForURL('/dashboard');\n  });\n  \n  test('refine mode opens from drafts', async ({ page }) => {\n    await page.goto('/drafts');\n    await page.click('[data-testid=\"draft-card\"]:first-child');\n    await expect(page.locator('[data-testid=\"content-editor-modal\"]')).toBeVisible();\n    await expect(page.locator('[data-testid=\"mode-badge\"]')).toHaveText('Refine');\n  });\n  \n  test('iterate caption updates correctly', async ({ page }) => {\n    await page.goto('/drafts');\n    await page.click('[data-testid=\"draft-card\"]:first-child');\n    \n    const instagramTab = page.locator('[data-testid=\"platform-tab-instagram\"]');\n    await instagramTab.click();\n    \n    const instructionInput = page.locator('[data-testid=\"refinement-input-instagram\"]');\n    await instructionInput.fill('Make it more casual');\n    await page.click('[data-testid=\"iterate-button-instagram\"]');\n    \n    // Wait for iteration to complete\n    await expect(page.locator('[data-testid=\"caption-instagram\"]')).not.toHaveText('');\n  });\n  \n  test('iteration history shows previous versions', async ({ page }) => {\n    // ... test history panel\n  });\n});\n```\n\nCreate frontend/e2e/create-page.spec.ts:\n```typescript\ntest.describe('Create Page', () => {\n  test('template selector pre-fills form', async ({ page }) => {\n    await page.goto('/create');\n    \n    await page.click('[data-testid=\"template-selector\"]');\n    await page.click('[data-testid=\"template-option\"]:first-child');\n    \n    // Check raw text is pre-filled\n    const rawText = page.locator('[data-testid=\"raw-text-input\"]');\n    await expect(rawText).not.toHaveValue('');\n    \n    // Check variable inputs appear\n    await expect(page.locator('[data-testid=\"variable-input\"]')).toBeVisible();\n  });\n  \n  test('generate from template creates content', async ({ page }) => {\n    // ... test full flow\n  });\n});\n```\n\nCreate frontend/e2e/templates-page.spec.ts:\n```typescript\ntest.describe('Templates Page', () => {\n  test('create new template', async ({ page }) => {\n    await page.goto('/templates');\n    await page.click('[data-testid=\"create-template-button\"]');\n    \n    await page.fill('[data-testid=\"template-name\"]', 'E2E Test Template');\n    await page.fill('[data-testid=\"template-text\"]', 'Hello {{name}}!');\n    await page.click('[data-testid=\"add-variable-button\"]');\n    await page.fill('[data-testid=\"variable-name-0\"]', 'name');\n    await page.click('[data-testid=\"save-template-button\"]');\n    \n    await expect(page.locator('text=E2E Test Template')).toBeVisible();\n  });\n});\n```\n\nAdd to frontend/package.json:\n```json\n\"scripts\": {\n  \"test:e2e\": \"playwright test\",\n  \"test:e2e:ui\": \"playwright test --ui\"\n}\n```",
+        "testStrategy": "1. Run Playwright tests in CI\n2. Test all critical user flows\n3. Screenshot comparison for visual regressions\n4. Test on mobile viewport\n5. Test error states and loading states",
+        "priority": "medium",
+        "dependencies": [
+          "10",
+          "11",
+          "12",
+          "13",
+          "14"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 6,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down Playwright testing into subtasks: 1) Create test fixtures for templates and content data, 2) Write ContentEditor tests for all three modes, 3) Write Create page tests with template selection, 4) Write Drafts/Calendar/Suggestions modal integration tests",
+        "updatedAt": "2026-03-18T02:43:39.904Z"
+      },
+      {
+        "id": "19",
+        "title": "Update navigation and routing for new pages",
+        "description": "Add Templates and Settings pages to the application navigation, update router configuration, and ensure mobile bottom nav is updated.",
+        "details": "Update frontend/src/App.tsx:\n```typescript\nimport { TemplatesPage } from '@/pages/TemplatesPage';\nimport { SettingsPage } from '@/pages/SettingsPage';\n\n// In router configuration\nconst router = createBrowserRouter([\n  // ... existing routes ...\n  {\n    path: 'templates',\n    element: <ProtectedRoute><TemplatesPage /></ProtectedRoute>,\n  },\n  {\n    path: 'settings',\n    element: <ProtectedRoute><SettingsPage /></ProtectedRoute>,\n  },\n]);\n```\n\nUpdate frontend/src/components/layout/Sidebar.tsx:\n```typescript\nconst navItems = [\n  { icon: Home, label: 'Dashboard', path: '/dashboard' },\n  { icon: PlusCircle, label: 'Create', path: '/create' },\n  { icon: FileText, label: 'Drafts', path: '/drafts' },\n  { icon: Calendar, label: 'Calendar', path: '/calendar' },\n  { icon: Lightbulb, label: 'Suggestions', path: '/suggestions' },\n  { icon: Layout, label: 'Templates', path: '/templates' },  // New\n  { icon: Heart, label: 'Health', path: '/health' },\n  { icon: Settings, label: 'Settings', path: '/settings' },  // New\n];\n```\n\nUpdate frontend/src/components/layout/BottomNav.tsx for mobile:\n```typescript\n// Show 5 main items on mobile, rest in 'More' menu\nconst mainItems = [\n  { icon: Home, label: 'Home', path: '/dashboard' },\n  { icon: PlusCircle, label: 'Create', path: '/create' },\n  { icon: FileText, label: 'Drafts', path: '/drafts' },\n  { icon: Calendar, label: 'Calendar', path: '/calendar' },\n  { icon: MoreHorizontal, label: 'More', action: 'menu' },\n];\n\nconst moreItems = [\n  { icon: Lightbulb, label: 'Suggestions', path: '/suggestions' },\n  { icon: Layout, label: 'Templates', path: '/templates' },\n  { icon: Heart, label: 'Health', path: '/health' },\n  { icon: Settings, label: 'Settings', path: '/settings' },\n];\n```\n\nAdd 'More' dropdown menu component for mobile overflow.",
+        "testStrategy": "1. Test all nav links work correctly\n2. Test mobile bottom nav shows correct items\n3. Test 'More' menu opens and navigates correctly\n4. Test active state highlighting\n5. Test protected routes redirect to login",
+        "priority": "low",
+        "dependencies": [
+          "14",
+          "15"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 3,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "No expansion needed - this is a straightforward update to existing navigation components",
+        "updatedAt": "2026-03-18T02:42:20.703Z"
+      },
+      {
+        "id": "20",
+        "title": "Run full test suite and verify backward compatibility",
+        "description": "Run all existing tests (111 backend + frontend), verify no regressions, and ensure API response shapes are unchanged for existing endpoints.",
+        "details": "1. Run backend tests:\n```bash\ncd /home/cjh5690/projects/ISKCON-GN/postiz_social_automation\npytest tests/ -v --cov=api --cov=content_engine --cov-report=html\n```\n\n2. Run frontend tests:\n```bash\ncd frontend\nnpm run test\nnpm run test:e2e\n```\n\n3. Verify API backward compatibility:\n- Capture current API responses with demo mode\n- Compare response shapes after migration\n- Key endpoints to verify:\n  - GET /api/drafts\n  - GET /api/calendar\n  - GET /api/suggestions\n  - POST /api/generate-sync\n  - POST /api/reprompt\n  - POST /api/drafts/{id}/approve\n\n4. Manual testing checklist:\n- [ ] Login works\n- [ ] Dashboard loads\n- [ ] Create page generates captions\n- [ ] Drafts page shows pending content\n- [ ] Calendar shows scheduled content\n- [ ] Suggestions load\n- [ ] Health page shows service status\n- [ ] Template CRUD works\n- [ ] Iteration works in ContentEditor\n- [ ] Auto-publish settings save correctly\n\n5. Performance check:\n- Run load test with locust or similar\n- Compare SQLite vs Sheets latency\n- Verify async database operations don't block\n\n6. Document any breaking changes in CHANGELOG.md",
+        "testStrategy": "1. All 111 existing tests pass\n2. Coverage report shows >80% on new code\n3. No regressions in API response shapes\n4. Frontend visual snapshot tests pass\n5. Manual QA checklist complete\n6. Performance within acceptable bounds",
+        "priority": "high",
+        "dependencies": [
+          "17",
+          "18"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down verification into subtasks: 1) Run backend tests and fix any regressions, 2) Run frontend tests and verify visual/e2e tests pass, 3) Perform manual QA checklist and document any breaking changes",
+        "updatedAt": "2026-03-18T02:43:30.666Z"
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2026-03-18T02:43:39.904Z",
+      "taskCount": 20,
+      "completedCount": 20,
+      "tags": [
+        "phase1-content-creation"
       ]
     }
   }

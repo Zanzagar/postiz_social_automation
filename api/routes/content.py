@@ -1,9 +1,12 @@
 """Content reading and action endpoints."""
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.auth import get_current_user
-from api.dependencies import get_postiz_client, get_sheets_client
+from api.dependencies import get_content_repo, get_postiz_client, get_sheets_client
+from api.repositories.content import ContentRepository
 from api.schemas import (
     ApproveResponse,
     CalendarEntry,
@@ -12,63 +15,85 @@ from api.schemas import (
     EditCaptionsRequest,
     SuggestionResponse,
 )
-from content_engine.models import ContentStatus, Platform
 from content_engine.postiz import PostizAPIError
 
 router = APIRouter(prefix="/api", tags=["content"], dependencies=[Depends(get_current_user)])
 
 
+def _parse_json_field(value: str | None) -> dict:
+    """Parse a JSON string field, returning empty dict if None/empty."""
+    if not value:
+        return {}
+    try:
+        return json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
 def _row_to_response(row) -> ContentRowResponse:
-    """Convert a ContentRow model to API response."""
+    """Convert a SQLAlchemy ContentRow to API response."""
+    platforms = _parse_json_field(row.platforms)
+    captions = _parse_json_field(row.captions)
+
     return ContentRowResponse(
-        row_number=row.row_number,
-        date=row.date,
-        content_pillar=str(row.content_pillar) if row.content_pillar else None,
+        row_number=row.id,
+        date=row.date or row.created_at,
+        content_pillar=row.pillar,
         raw_text=row.raw_text,
-        media_url=str(row.media_url) if row.media_url else None,
-        platforms={str(k): v for k, v in row.platforms.items()},
-        status=str(row.status),
-        captions={str(k): v for k, v in row.captions.items()},
+        media_url=row.media_url,
+        platforms=platforms,
+        status=row.status or "draft",
+        captions=captions,
         feedback=row.feedback,
         postiz_ids=row.postiz_ids,
         posted_at=row.posted_at,
-        error_msg=row.error_msg,
-        source=row.source,
+        error_msg=None,
+        source=row.source or "manual",
+    )
+
+
+def _row_to_calendar_entry(row) -> CalendarEntry:
+    """Convert a SQLAlchemy ContentRow to a CalendarEntry."""
+    platforms = _parse_json_field(row.platforms)
+    captions = _parse_json_field(row.captions)
+
+    return CalendarEntry(
+        row_number=row.id,
+        date=row.date or row.created_at,
+        content_pillar=row.pillar,
+        raw_text=row.raw_text,
+        status=row.status or "draft",
+        platforms=platforms,
+        captions=captions,
     )
 
 
 @router.get("/drafts", response_model=list[ContentRowResponse])
-async def get_drafts(sheets=Depends(get_sheets_client)):
-    """Return rows pending approval."""
-    rows = sheets.get_rows_by_status(ContentStatus.PENDING_APPROVAL)
+async def get_drafts(repo: ContentRepository = Depends(get_content_repo)):
+    """Return all pre-published rows (draft, pending_approval, approved)."""
+    rows = []
+    for status in ["draft", "pending_approval", "approved"]:
+        rows.extend(await repo.get_rows_by_status(status))
     return [_row_to_response(r) for r in rows]
 
 
 @router.get("/calendar", response_model=CalendarResponse)
-async def get_calendar(sheets=Depends(get_sheets_client)):
-    """Return calendar entries (approved, scheduled, posted)."""
+async def get_calendar(repo: ContentRepository = Depends(get_content_repo)):
+    """Return all content as calendar entries."""
     entries = []
-    for status in [ContentStatus.APPROVED, ContentStatus.SCHEDULED, ContentStatus.POSTED]:
-        rows = sheets.get_rows_by_status(status)
-        for row in rows:
-            entries.append(
-                CalendarEntry(
-                    row_number=row.row_number,
-                    date=row.date,
-                    content_pillar=str(row.content_pillar) if row.content_pillar else None,
-                    raw_text=row.raw_text,
-                    status=str(row.status),
-                    platforms={str(k): v for k, v in row.platforms.items()},
-                    captions={str(k): v for k, v in row.captions.items()},
-                )
-            )
+    for status in ["draft", "pending_approval", "approved", "scheduled", "posted"]:
+        rows = await repo.get_rows_by_status(status)
+        entries.extend([_row_to_calendar_entry(r) for r in rows])
     entries.sort(key=lambda e: e.date)
     return CalendarResponse(entries=entries, total=len(entries))
 
 
 @router.get("/suggestions", response_model=list[SuggestionResponse])
 async def get_suggestions(status: str | None = None, sheets=Depends(get_sheets_client)):
-    """Return suggestions, optionally filtered by status."""
+    """Return suggestions, optionally filtered by status.
+
+    Note: Suggestions still use Sheets until a Suggestion table is added.
+    """
     suggestions = sheets.get_suggestions(status=status)
     return [
         SuggestionResponse(
@@ -83,46 +108,49 @@ async def get_suggestions(status: str | None = None, sheets=Depends(get_sheets_c
     ]
 
 
-@router.get("/content/{row_number}", response_model=ContentRowResponse)
-async def get_content_row(row_number: int, sheets=Depends(get_sheets_client)):
-    """Return a single content row by row number."""
-    rows = sheets.get_all_content_rows()
-    for row in rows:
-        if row.row_number == row_number:
-            return _row_to_response(row)
-    raise HTTPException(status_code=404, detail=f"Row {row_number} not found.")
+@router.get("/content/{row_id}", response_model=ContentRowResponse)
+async def get_content_row(row_id: int, repo: ContentRepository = Depends(get_content_repo)):
+    """Return a single content row by ID."""
+    row = await repo.get_content_row(row_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Row {row_id} not found.")
+    return _row_to_response(row)
 
 
-@router.post("/drafts/{row_number}/edit", response_model=ContentRowResponse)
-async def edit_draft(row_number: int, req: EditCaptionsRequest, sheets=Depends(get_sheets_client)):
+@router.post("/drafts/{row_id}/edit", response_model=ContentRowResponse)
+async def edit_draft(
+    row_id: int,
+    req: EditCaptionsRequest,
+    repo: ContentRepository = Depends(get_content_repo),
+):
     """Update captions for a draft row."""
-    captions = {Platform(k): v for k, v in req.captions.items()}
-    sheets.update_captions(row_number, captions)
-    # Re-fetch updated row
-    rows = sheets.get_all_content_rows()
-    for row in rows:
-        if row.row_number == row_number:
-            return _row_to_response(row)
-    raise HTTPException(status_code=404, detail=f"Row {row_number} not found after edit.")
+    row = await repo.get_content_row(row_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Row {row_id} not found.")
+
+    captions_json = json.dumps(req.captions)
+    await repo.update_captions(row_id, captions_json)
+
+    if req.platforms is not None:
+        platforms_json = json.dumps(req.platforms)
+        await repo.update_platforms(row_id, platforms_json)
+
+    updated = await repo.get_content_row(row_id)
+    return _row_to_response(updated)
 
 
-@router.post("/drafts/{row_number}/approve", response_model=ApproveResponse)
+@router.post("/drafts/{row_id}/approve", response_model=ApproveResponse)
 async def approve_draft(
-    row_number: int,
-    sheets=Depends(get_sheets_client),
+    row_id: int,
+    repo: ContentRepository = Depends(get_content_repo),
     postiz=Depends(get_postiz_client),
 ):
     """Approve a draft and create Postiz posts for all enabled platforms."""
-    rows = sheets.get_all_content_rows()
-    row = None
-    for r in rows:
-        if r.row_number == row_number:
-            row = r
-            break
+    row = await repo.get_content_row(row_id)
     if not row:
-        raise HTTPException(status_code=404, detail=f"Row {row_number} not found.")
+        raise HTTPException(status_code=404, detail=f"Row {row_id} not found.")
 
-    sheets.update_status(row_number, ContentStatus.APPROVED)
+    await repo.update_status(row_id, "approved")
 
     # Create Postiz drafts
     try:
@@ -132,10 +160,13 @@ async def approve_draft(
 
     platform_id_map = {i.get("identifier", "").lower(): i["id"] for i in integrations}
 
+    platforms = _parse_json_field(row.platforms)
+    captions = _parse_json_field(row.captions)
+
     draft_ids = []
-    enabled = [str(p) for p, on in row.platforms.items() if on]
+    enabled = [p for p, on in platforms.items() if on]
     for platform in enabled:
-        caption = row.captions.get(Platform(platform))
+        caption = captions.get(platform)
         integration_id = platform_id_map.get(platform)
         if not caption or not integration_id:
             continue
