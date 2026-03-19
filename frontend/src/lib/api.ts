@@ -444,7 +444,7 @@ export const api = {
 
   batchGenerateFromTemplate(
     templateId: number,
-    data: { variable_values: Record<string, string>; platforms: string[]; weeks: number },
+    data: { variable_values: Record<string, string>; platforms: string[]; weeks: number; scheduled_time?: string },
   ) {
     return request<{ created: number; drafts: ContentRow[] }>(
       `/api/templates/${templateId}/generate-batch`,

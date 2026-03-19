@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi, beforeEach } from "vitest";
@@ -18,7 +18,7 @@ vi.mock("@/lib/api", () => ({
 import { api } from "@/lib/api";
 const mockIterate = vi.mocked(api.iterate);
 const mockGetIterations = vi.mocked(api.getIterations);
-const mockEditDraft = vi.mocked(api.editDraft);
+vi.mocked(api.editDraft);
 
 const sampleRow: ContentRow = {
   row_number: 1,

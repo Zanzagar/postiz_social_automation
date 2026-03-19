@@ -21,7 +21,6 @@ import {
   api,
   request,
   type GenerateRequest,
-  type Pillar,
   type Template,
 } from "@/lib/api";
 import {

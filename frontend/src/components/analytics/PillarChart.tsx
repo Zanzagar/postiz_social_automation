@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { api, PillarBreakdown } from "@/lib/api";
+import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
