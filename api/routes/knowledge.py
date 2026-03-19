@@ -78,6 +78,213 @@ async def get_status(db_path: str = Depends(get_db_path)):
 
 
 # ------------------------------------------------------------------
+# GET /stats — detailed knowledge breakdown
+# ------------------------------------------------------------------
+
+
+@router.get("/stats")
+async def get_stats(db_path: str = Depends(get_db_path)):
+    """Return detailed knowledge stats: by fact_type, by pillar, coverage gaps."""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+
+    # Total counts
+    total_pages = conn.execute("SELECT COUNT(*) FROM web_pages").fetchone()[0]
+    total_knowledge = conn.execute("SELECT COUNT(*) FROM web_knowledge").fetchone()[0]
+    pages_with_knowledge = conn.execute(
+        "SELECT COUNT(DISTINCT web_page_id) FROM web_knowledge WHERE web_page_id IS NOT NULL"
+    ).fetchone()[0]
+    pages_without = total_pages - pages_with_knowledge
+
+    # By fact_type
+    by_type = conn.execute(
+        "SELECT fact_type, COUNT(*) as count FROM web_knowledge GROUP BY fact_type ORDER BY count DESC"
+    ).fetchall()
+
+    # By pillar
+    by_pillar = conn.execute(
+        """SELECT COALESCE(pillar, 'Unclassified') as pillar, COUNT(*) as count
+           FROM web_knowledge GROUP BY pillar ORDER BY count DESC"""
+    ).fetchall()
+
+    # Coverage: pages with most/least knowledge
+    coverage = conn.execute(
+        """SELECT wp.title, wp.site, wp.url, COUNT(wk.id) as fact_count
+           FROM web_pages wp
+           LEFT JOIN web_knowledge wk ON wk.web_page_id = wp.id
+           WHERE length(wp.body_text) > 200
+           GROUP BY wp.id
+           ORDER BY fact_count ASC
+           LIMIT 10"""
+    ).fetchall()
+
+    conn.close()
+
+    return {
+        "total_pages": total_pages,
+        "total_knowledge": total_knowledge,
+        "pages_with_knowledge": pages_with_knowledge,
+        "pages_without_knowledge": pages_without,
+        "by_type": [{"type": r["fact_type"], "count": r["count"]} for r in by_type],
+        "by_pillar": [{"pillar": r["pillar"], "count": r["count"]} for r in by_pillar],
+        "coverage_gaps": [
+            {"title": r["title"], "site": r["site"], "url": r["url"], "fact_count": r["fact_count"]}
+            for r in coverage
+            if r["fact_count"] == 0
+        ],
+    }
+
+
+# ------------------------------------------------------------------
+# GET /graph — knowledge graph data (nodes + edges)
+# ------------------------------------------------------------------
+
+
+@router.get("/graph")
+async def get_graph_data(db_path: str = Depends(get_db_path)):
+    """Return nodes and links for force-directed knowledge graph."""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+
+    nodes = []
+    links = []
+
+    # Pillar nodes (large)
+    pillars = conn.execute(
+        """SELECT COALESCE(pillar, 'Unclassified') as pillar, COUNT(*) as count
+           FROM web_knowledge GROUP BY pillar"""
+    ).fetchall()
+    for p in pillars:
+        nodes.append(
+            {
+                "id": f"pillar:{p['pillar']}",
+                "label": p["pillar"],
+                "type": "pillar",
+                "size": 8 + p["count"] // 2,
+            }
+        )
+
+    # Page nodes (medium) — only pages with knowledge
+    pages = conn.execute(
+        """SELECT wp.id, wp.title, wp.site, COUNT(wk.id) as fact_count
+           FROM web_pages wp
+           JOIN web_knowledge wk ON wk.web_page_id = wp.id
+           GROUP BY wp.id"""
+    ).fetchall()
+    for pg in pages:
+        nodes.append(
+            {
+                "id": f"page:{pg['id']}",
+                "label": pg["title"][:30],
+                "type": "page",
+                "site": pg["site"],
+                "size": 3 + pg["fact_count"],
+            }
+        )
+
+    # Fact nodes (small) + edges
+    facts = conn.execute(
+        """SELECT wk.id, wk.fact_type, wk.content, wk.pillar, wk.web_page_id
+           FROM web_knowledge wk LIMIT 200"""
+    ).fetchall()
+    for f in facts:
+        fact_id = f"fact:{f['id']}"
+        nodes.append({"id": fact_id, "label": f["content"][:40], "type": f["fact_type"], "size": 2})
+        # Link fact → page
+        if f["web_page_id"]:
+            links.append({"source": f"page:{f['web_page_id']}", "target": fact_id})
+        # Link fact → pillar
+        pillar_key = f["pillar"] or "Unclassified"
+        links.append({"source": f"pillar:{pillar_key}", "target": fact_id})
+
+    conn.close()
+    return {"nodes": nodes, "links": links}
+
+
+# ------------------------------------------------------------------
+# GET /browse — paginated list of all knowledge entries
+# ------------------------------------------------------------------
+
+
+@router.get("/browse")
+async def browse_knowledge(
+    pillar: str | None = Query(default=None),
+    fact_type: str | None = Query(default=None),
+    site: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, le=200),
+    db_path: str = Depends(get_db_path),
+):
+    """Browse all knowledge entries with filters and pagination."""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+
+    conditions = []
+    params: list = []
+
+    if pillar:
+        conditions.append("wk.pillar = ?")
+        params.append(pillar)
+    if fact_type:
+        conditions.append("wk.fact_type = ?")
+        params.append(fact_type)
+    if site:
+        conditions.append("wp.site = ?")
+        params.append(site)
+
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    total = conn.execute(
+        f"""SELECT COUNT(*) FROM web_knowledge wk
+            LEFT JOIN web_pages wp ON wk.web_page_id = wp.id {where}""",
+        params,
+    ).fetchone()[0]
+
+    offset = (page - 1) * per_page
+    rows = conn.execute(
+        f"""SELECT wk.id, wk.fact_type, wk.content, wk.pillar, wk.keywords,
+                   wp.title as page_title, wp.url as page_url, wp.site
+            FROM web_knowledge wk
+            LEFT JOIN web_pages wp ON wk.web_page_id = wp.id
+            {where}
+            ORDER BY wk.id DESC
+            LIMIT ? OFFSET ?""",
+        [*params, per_page, offset],
+    ).fetchall()
+
+    conn.close()
+
+    results = []
+    for row in rows:
+        keywords = []
+        if row["keywords"]:
+            try:
+                keywords = json.loads(row["keywords"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        results.append(
+            {
+                "id": row["id"],
+                "fact_type": row["fact_type"],
+                "content": row["content"],
+                "pillar": row["pillar"],
+                "keywords": keywords,
+                "page_title": row["page_title"],
+                "page_url": row["page_url"],
+                "site": row["site"],
+            }
+        )
+
+    return {
+        "results": results,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": (total + per_page - 1) // per_page,
+    }
+
+
+# ------------------------------------------------------------------
 # GET /search — full-text search across knowledge base
 # ------------------------------------------------------------------
 

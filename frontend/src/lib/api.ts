@@ -307,6 +307,40 @@ export interface KnowledgeStatusResponse {
   knowledge_entries: number;
 }
 
+export interface KnowledgeStats {
+  total_pages: number;
+  total_knowledge: number;
+  pages_with_knowledge: number;
+  pages_without_knowledge: number;
+  by_type: Array<{ type: string; count: number }>;
+  by_pillar: Array<{ pillar: string; count: number }>;
+  coverage_gaps: Array<{ title: string; site: string; url: string; fact_count: number }>;
+}
+
+export interface KnowledgeEntry {
+  id: number;
+  fact_type: string;
+  content: string;
+  pillar: string;
+  keywords: string[];
+  page_title: string;
+  page_url: string;
+  site: string;
+}
+
+export interface BrowseResponse {
+  results: KnowledgeEntry[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export interface GraphData {
+  nodes: Array<{ id: string; label: string; type: string; size: number; site?: string }>;
+  links: Array<{ source: string; target: string }>;
+}
+
 // --- API Functions ---
 
 export const api = {
@@ -517,6 +551,23 @@ export const api = {
 
   triggerSocialImport() {
     return request<{ status: string }>("/api/knowledge/import-social", { method: "POST" });
+  },
+
+  getKnowledgeStats() {
+    return request<KnowledgeStats>("/api/knowledge/stats");
+  },
+
+  browseKnowledge(params: { pillar?: string; fact_type?: string; site?: string; page?: number }) {
+    const searchParams = new URLSearchParams();
+    if (params.pillar) searchParams.set("pillar", params.pillar);
+    if (params.fact_type) searchParams.set("fact_type", params.fact_type);
+    if (params.site) searchParams.set("site", params.site);
+    if (params.page) searchParams.set("page", String(params.page));
+    return request<BrowseResponse>(`/api/knowledge/browse?${searchParams}`);
+  },
+
+  getKnowledgeGraph() {
+    return request<GraphData>("/api/knowledge/graph");
   },
 
   getCrawlProgress() {
