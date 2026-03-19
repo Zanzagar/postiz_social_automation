@@ -9,6 +9,17 @@ vi.mock("@/hooks/useDashboardData", () => ({
   useDashboardData: vi.fn(),
 }));
 
+// Mock analytics components to avoid complex setup
+vi.mock("@/components/analytics/PillarChart", () => ({
+  PillarChart: () => <div data-testid="pillar-chart">PillarChart</div>,
+}));
+vi.mock("@/components/analytics/TopPostsTable", () => ({
+  TopPostsTable: () => <div data-testid="top-posts">TopPostsTable</div>,
+}));
+vi.mock("@/components/analytics/KnowledgeStatus", () => ({
+  KnowledgeStatus: () => <div data-testid="knowledge-status">KnowledgeStatus</div>,
+}));
+
 import { useDashboardData } from "@/hooks/useDashboardData";
 const mockUseDashboard = vi.mocked(useDashboardData);
 

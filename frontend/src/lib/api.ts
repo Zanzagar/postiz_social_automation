@@ -262,6 +262,51 @@ export interface PublishConfigResponse {
   platforms: PlatformPublishConfig[];
 }
 
+// --- Analytics Types ---
+
+export interface AnalyticsOverview {
+  total_posts: number;
+  total_engagement: number;
+  avg_engagement: number;
+  total_reach: number;
+  total_impressions: number;
+}
+
+export interface PillarBreakdown {
+  pillar: string;
+  post_count: number;
+  total_engagement: number;
+  avg_engagement: number;
+  total_reach: number;
+}
+
+export interface TopPost {
+  id: number;
+  pillar: string;
+  raw_text: string;
+  date: string;
+  platform: string;
+  engagement: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  reach: number;
+}
+
+export interface KnowledgeSource {
+  name: string;
+  type: string;
+  page_count?: number;
+  post_count?: number;
+  last_crawled?: string;
+  last_imported?: string;
+}
+
+export interface KnowledgeStatusResponse {
+  sources: KnowledgeSource[];
+  knowledge_entries: number;
+}
+
 // --- API Functions ---
 
 export const api = {
@@ -446,6 +491,40 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ platforms }),
     });
+  },
+
+  // Analytics
+  getAnalyticsOverview() {
+    return request<AnalyticsOverview>("/api/analytics/overview");
+  },
+
+  getPillarBreakdown() {
+    return request<{ pillars: PillarBreakdown[] }>("/api/analytics/pillars");
+  },
+
+  getTopPosts(limit = 10) {
+    return request<{ posts: TopPost[] }>(`/api/analytics/top-posts?limit=${limit}`);
+  },
+
+  // Knowledge
+  getKnowledgeStatus() {
+    return request<KnowledgeStatusResponse>("/api/knowledge/status");
+  },
+
+  triggerCrawl() {
+    return request<{ status: string }>("/api/knowledge/crawl", { method: "POST" });
+  },
+
+  triggerSocialImport() {
+    return request<{ status: string }>("/api/knowledge/import-social", { method: "POST" });
+  },
+
+  searchKnowledge(q: string, pillar?: string) {
+    const params = new URLSearchParams({ q });
+    if (pillar) params.set("pillar", pillar);
+    return request<{ results: Array<{ id: number; fact_type: string; content: string; pillar: string; page_title: string; page_url: string; site: string }>; count: number }>(
+      `/api/knowledge/search?${params}`,
+    );
   },
 };
 
