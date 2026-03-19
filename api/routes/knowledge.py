@@ -149,14 +149,14 @@ async def get_stats(db_path: str = Depends(get_db_path)):
 
 @router.get("/graph")
 async def get_graph_data(db_path: str = Depends(get_db_path)):
-    """Return nodes and links for force-directed knowledge graph."""
+    """Return topic → page graph (no individual facts — keeps it readable)."""
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
 
     nodes = []
     links = []
 
-    # Topic nodes (large) — primary grouping
+    # Topic nodes (large hubs)
     topics = conn.execute(
         """SELECT COALESCE(topic, 'Unclassified') as topic, COUNT(*) as count
            FROM web_knowledge GROUP BY topic"""
@@ -165,44 +165,37 @@ async def get_graph_data(db_path: str = Depends(get_db_path)):
         nodes.append(
             {
                 "id": f"topic:{t['topic']}",
-                "label": t["topic"],
+                "label": f"{t['topic']} ({t['count']})",
                 "type": "topic",
-                "size": 8 + t["count"] // 3,
+                "count": t["count"],
+                "size": 12 + t["count"] // 5,
             }
         )
 
-    # Page nodes (medium) — only pages with knowledge
+    # Page nodes — sized by fact count, linked to their dominant topic
     pages = conn.execute(
-        """SELECT wp.id, wp.title, wp.site, COUNT(wk.id) as fact_count
+        """SELECT wp.id, wp.title, wp.site, COUNT(wk.id) as fact_count,
+                  (SELECT wk2.topic FROM web_knowledge wk2
+                   WHERE wk2.web_page_id = wp.id AND wk2.topic IS NOT NULL
+                   GROUP BY wk2.topic ORDER BY COUNT(*) DESC LIMIT 1) as dominant_topic
            FROM web_pages wp
            JOIN web_knowledge wk ON wk.web_page_id = wp.id
-           GROUP BY wp.id"""
+           GROUP BY wp.id
+           HAVING fact_count > 0"""
     ).fetchall()
     for pg in pages:
         nodes.append(
             {
                 "id": f"page:{pg['id']}",
-                "label": pg["title"][:30],
+                "label": pg["title"][:25],
                 "type": "page",
                 "site": pg["site"],
-                "size": 3 + pg["fact_count"],
+                "count": pg["fact_count"],
+                "size": 3 + min(pg["fact_count"], 20),
             }
         )
-
-    # Fact nodes (small) + edges
-    facts = conn.execute(
-        """SELECT wk.id, wk.fact_type, wk.content, wk.topic, wk.web_page_id
-           FROM web_knowledge wk LIMIT 200"""
-    ).fetchall()
-    for f in facts:
-        fact_id = f"fact:{f['id']}"
-        nodes.append({"id": fact_id, "label": f["content"][:40], "type": f["fact_type"], "size": 2})
-        # Link fact → page
-        if f["web_page_id"]:
-            links.append({"source": f"page:{f['web_page_id']}", "target": fact_id})
-        # Link fact → topic
-        topic_key = f["topic"] or "Unclassified"
-        links.append({"source": f"topic:{topic_key}", "target": fact_id})
+        topic_key = pg["dominant_topic"] or "Unclassified"
+        links.append({"source": f"topic:{topic_key}", "target": f"page:{pg['id']}"})
 
     conn.close()
     return {"nodes": nodes, "links": links}

@@ -216,25 +216,52 @@ export function KnowledgePage() {
         </div>
       )}
 
-      {/* Topic cards */}
+      {/* Topic distribution */}
       {s && s.by_topic.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {s.by_topic.map((t, i) => (
-            <button
-              key={t.topic}
-              onClick={() => handleTopicClick(t.topic)}
-              className={`rounded-xl border p-4 text-left transition-all hover:shadow-md ${
-                filterTopic === t.topic
-                  ? PILLAR_COLORS[i % PILLAR_COLORS.length] + " ring-2 ring-offset-1"
-                  : "border-gray-200 hover:border-gray-300"
-              }`}
-            >
-              <p className="text-lg font-bold">{t.count}</p>
-              <p className="text-sm font-medium">{t.topic}</p>
-              <p className="text-xs text-muted-foreground">knowledge entries</p>
-            </button>
-          ))}
-        </div>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Knowledge by Topic</CardTitle>
+            <p className="text-xs text-muted-foreground">Click a topic to filter the table below</p>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {s.by_topic.map((t, i) => {
+                const pct = Math.round((t.count / s.total_knowledge) * 100);
+                return (
+                  <button
+                    key={t.topic}
+                    onClick={() => handleTopicClick(t.topic)}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all hover:shadow-sm ${
+                      filterTopic === t.topic
+                        ? PILLAR_COLORS[i % PILLAR_COLORS.length] + " ring-2 ring-offset-1"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium">{t.topic}</span>
+                      <span className="text-xs text-muted-foreground">{t.count} entries ({pct}%)</span>
+                    </div>
+                    {/* Mini bar */}
+                    <div className="h-6 w-16 overflow-hidden rounded-full bg-gray-100">
+                      <div
+                        className="h-full rounded-full bg-sage-400"
+                        style={{ width: `${Math.max(pct, 5)}%` }}
+                      />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            {filterTopic && (
+              <button
+                onClick={() => { setFilterTopic(""); setCurrentPage(1); }}
+                className="mt-2 text-xs text-blue-600 hover:underline"
+              >
+                Clear topic filter
+              </button>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Main content area */}
@@ -412,34 +439,36 @@ function KnowledgeTable({
 
 function KnowledgeGraph() {
   const graphRef = useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState({ w: 800, h: 500 });
   const [ForceGraph, setForceGraph] = useState<React.ComponentType<Record<string, unknown>> | null>(null);
+  const [selectedNode, setSelectedNode] = useState<Record<string, unknown> | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["knowledge", "graph"],
     queryFn: () => api.getKnowledgeGraph(),
   });
 
-  // Dynamic import to avoid SSR issues
   useEffect(() => {
     import("react-force-graph-2d").then((mod) => {
       setForceGraph(() => mod.default);
     });
   }, []);
 
-  const nodeColors: Record<string, string> = {
-    topic: "#4a7c59",
-    page: "#3b82f6",
-    program: "#2563eb",
-    event: "#7c3aed",
-    quote: "#d97706",
-    link: "#059669",
-    description: "#6b7280",
+  useEffect(() => {
+    if (graphRef.current) {
+      setDimensions({ w: graphRef.current.clientWidth, h: 500 });
+    }
+  }, []);
+
+  const SITE_COLORS: Record<string, string> = {
+    gitavalley: "#60a5fa",
+    iskcon: "#a78bfa",
   };
 
   if (isLoading || !ForceGraph) {
     return (
       <Card>
-        <CardContent className="flex h-96 items-center justify-center">
+        <CardContent className="flex h-[540px] items-center justify-center">
           <p className="text-muted-foreground">Loading graph...</p>
         </CardContent>
       </Card>
@@ -449,7 +478,7 @@ function KnowledgeGraph() {
   if (!data || data.nodes.length === 0) {
     return (
       <Card>
-        <CardContent className="flex h-96 items-center justify-center">
+        <CardContent className="flex h-[540px] items-center justify-center">
           <p className="text-muted-foreground">No knowledge data to visualize</p>
         </CardContent>
       </Card>
@@ -458,29 +487,110 @@ function KnowledgeGraph() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Knowledge Graph</CardTitle>
-        <div className="flex flex-wrap gap-3 text-xs">
-          {Object.entries(nodeColors).map(([type, color]) => (
-            <span key={type} className="flex items-center gap-1">
-              <span className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
-              {type}
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">Knowledge Map</CardTitle>
+          <div className="flex gap-4 text-xs">
+            <span className="flex items-center gap-1.5">
+              <span className="h-3.5 w-3.5 rounded-full bg-sage-500" />
+              Topics
             </span>
-          ))}
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-full bg-blue-400" />
+              Gita Valley pages
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-full bg-purple-400" />
+              ISKCON pages
+            </span>
+          </div>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Topics are hubs, pages orbit around their dominant topic. Node size = fact count. Click to inspect.
+        </p>
       </CardHeader>
-      <CardContent>
-        <div ref={graphRef} className="h-[500px] overflow-hidden rounded-lg border bg-gray-950">
-          <ForceGraph
-            graphData={data}
-            nodeLabel={(node: Record<string, unknown>) => node.label as string}
-            nodeColor={(node: Record<string, unknown>) => nodeColors[(node.type as string)] ?? "#999"}
-            nodeVal={(node: Record<string, unknown>) => (node.size as number) ?? 2}
-            linkColor={() => "rgba(255,255,255,0.1)"}
-            backgroundColor="#030712"
-            width={graphRef.current?.clientWidth ?? 800}
-            height={500}
-          />
+      <CardContent className="p-0">
+        <div className="flex">
+          <div ref={graphRef} className="h-[500px] flex-1 overflow-hidden rounded-bl-lg border-t bg-gray-950">
+            <ForceGraph
+              graphData={data}
+              nodeLabel={(node: Record<string, unknown>) => {
+                const count = node.count as number;
+                return `${node.label}${count ? ` — ${count} facts` : ""}`;
+              }}
+              nodeColor={(node: Record<string, unknown>) => {
+                if (node.type === "topic") return "#4a7c59";
+                return SITE_COLORS[(node.site as string)] ?? "#94a3b8";
+              }}
+              nodeVal={(node: Record<string, unknown>) => (node.size as number) ?? 3}
+              nodeCanvasObject={(node: Record<string, unknown>, ctx: CanvasRenderingContext2D, globalScale: number) => {
+                const x = node.x as number;
+                const y = node.y as number;
+                const size = (node.size as number) ?? 3;
+                const isTopic = node.type === "topic";
+                const color = isTopic ? "#4a7c59" : (SITE_COLORS[(node.site as string)] ?? "#94a3b8");
+
+                // Draw node circle
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, 2 * Math.PI);
+                ctx.fillStyle = color;
+                ctx.fill();
+
+                // Draw label for topics always, pages only when zoomed
+                if (isTopic || globalScale > 1.5) {
+                  const label = node.label as string;
+                  const fontSize = isTopic ? 14 / globalScale : 10 / globalScale;
+                  ctx.font = `${isTopic ? "bold " : ""}${fontSize}px sans-serif`;
+                  ctx.textAlign = "center";
+                  ctx.fillStyle = isTopic ? "#ffffff" : "#cbd5e1";
+                  ctx.fillText(label, x, y + size + fontSize + 2);
+                }
+              }}
+              linkColor={() => "rgba(255,255,255,0.08)"}
+              linkWidth={0.5}
+              backgroundColor="#030712"
+              width={selectedNode ? dimensions.w - 280 : dimensions.w}
+              height={500}
+              onNodeClick={(node: Record<string, unknown>) => setSelectedNode(node)}
+              cooldownTicks={100}
+              d3AlphaDecay={0.02}
+              d3VelocityDecay={0.3}
+            />
+          </div>
+
+          {/* Detail panel */}
+          {selectedNode && (
+            <div className="w-[280px] border-l border-t bg-gray-900 p-4 text-sm text-gray-200">
+              <div className="flex items-center justify-between">
+                <span className={`rounded px-2 py-0.5 text-xs font-medium ${
+                  selectedNode.type === "topic"
+                    ? "bg-sage-800 text-sage-200"
+                    : "bg-blue-900 text-blue-200"
+                }`}>
+                  {selectedNode.type as string}
+                </span>
+                <button
+                  onClick={() => setSelectedNode(null)}
+                  className="text-gray-500 hover:text-gray-300"
+                >
+                  close
+                </button>
+              </div>
+              <h3 className="mt-2 text-base font-semibold text-white">
+                {String(selectedNode.label)}
+              </h3>
+              {selectedNode.count ? (
+                <p className="mt-1 text-gray-400">
+                  {Number(selectedNode.count)} knowledge entries
+                </p>
+              ) : null}
+              {selectedNode.site ? (
+                <p className="mt-1 text-gray-400">
+                  Source: {String(selectedNode.site) === "gitavalley" ? "Gita Valley" : "ISKCON"}
+                </p>
+              ) : null}
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
