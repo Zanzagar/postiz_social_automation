@@ -24,7 +24,7 @@ def _call_claude(prompt: str) -> str:
         ["claude", "-p", prompt],
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=300,
     )
     return result.stdout.strip()
 
