@@ -7,7 +7,7 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { Lightbulb, Activity, ExternalLink } from "lucide-react";
+import { Lightbulb, FileText, Settings, Activity, ExternalLink } from "lucide-react";
 
 const mainItems = [
   { to: "/", label: "Home", icon: LayoutDashboard },
@@ -18,6 +18,8 @@ const mainItems = [
 
 const moreItems = [
   { to: "/suggestions", label: "Suggestions", icon: Lightbulb },
+  { to: "/templates", label: "Templates", icon: FileText },
+  { to: "/settings", label: "Settings", icon: Settings },
   { to: "/health", label: "Health", icon: Activity },
 ];
 

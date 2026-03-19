@@ -1,13 +1,18 @@
 """Tests for API route endpoints (content, generate, postiz, health, upload)."""
 
+import asyncio
 import io
+import json
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from content_engine.models import ContentPillar, ContentRow, ContentStatus, Platform, Suggestion
+from api.models import Base
+from content_engine.models import ContentPillar, Platform, Suggestion
 
 
 @pytest.fixture(autouse=True)
@@ -26,19 +31,7 @@ def _env_vars(monkeypatch):
     monkeypatch.setenv("POSTIZ_API_KEY", "test-postiz-key")
     monkeypatch.setenv("SPREADSHEET_ID", "test-spreadsheet-id")
     monkeypatch.setenv("GOOGLE_SHEETS_CREDENTIALS", "/tmp/test-creds.json")
-
-
-def _make_row(row_number=2, status=ContentStatus.PENDING_APPROVAL) -> ContentRow:
-    return ContentRow(
-        row_number=row_number,
-        date=datetime(2026, 3, 15),
-        content_pillar=ContentPillar.COW_LIFE,
-        raw_text="Beautiful morning with the cows",
-        media_url=None,
-        platforms={Platform.INSTAGRAM: True, Platform.FACEBOOK: True},
-        status=status,
-        captions={Platform.INSTAGRAM: "test caption", Platform.FACEBOOK: "fb caption"},
-    )
+    monkeypatch.setenv("DATABASE_PATH", ":memory:")
 
 
 def _make_suggestion() -> Suggestion:
@@ -52,11 +45,27 @@ def _make_suggestion() -> Suggestion:
     )
 
 
+@pytest_asyncio.fixture
+async def db_session():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session:
+        yield session
+    await engine.dispose()
+
+
+@pytest.fixture
+def repo(db_session):
+    from api.repositories.content import ContentRepository
+
+    return ContentRepository(db_session)
+
+
 @pytest.fixture
 def mock_sheets():
     mock = MagicMock()
-    mock.get_rows_by_status.return_value = [_make_row()]
-    mock.get_all_content_rows.return_value = [_make_row(), _make_row(3, ContentStatus.APPROVED)]
     mock.get_suggestions.return_value = [_make_suggestion()]
     mock.get_recent_errors.return_value = []
     return mock
@@ -84,7 +93,7 @@ def mock_generator():
 
 
 @pytest.fixture
-def client(_env_vars, mock_sheets, mock_postiz, mock_generator):
+def client(_env_vars, db_session, repo, mock_sheets, mock_postiz, mock_generator):
     from api.auth import _failed_attempts
     from api.routes.health import _health_cache
 
@@ -96,11 +105,50 @@ def client(_env_vars, mock_sheets, mock_postiz, mock_generator):
 
     app.dependency_overrides = {}
 
-    from api.dependencies import get_caption_generator, get_postiz_client, get_sheets_client
+    from api.dependencies import (
+        get_caption_generator,
+        get_content_repo,
+        get_db,
+        get_postiz_client,
+        get_sheets_client,
+    )
 
+    async def override_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_content_repo] = lambda: repo
     app.dependency_overrides[get_sheets_client] = lambda: mock_sheets
     app.dependency_overrides[get_postiz_client] = lambda: mock_postiz
     app.dependency_overrides[get_caption_generator] = lambda: mock_generator
+
+    # Seed test data
+    asyncio.get_event_loop().run_until_complete(
+        repo.create_content_row(
+            {
+                "raw_text": "Beautiful morning with the cows",
+                "status": "pending_approval",
+                "date": datetime(2026, 3, 15),
+                "pillar": "cow_life",
+                "platforms": json.dumps({"instagram": True, "facebook": True}),
+                "captions": json.dumps({"instagram": "test caption", "facebook": "fb caption"}),
+                "source": "manual",
+            }
+        )
+    )
+    asyncio.get_event_loop().run_until_complete(
+        repo.create_content_row(
+            {
+                "raw_text": "Approved farm content",
+                "status": "approved",
+                "date": datetime(2026, 3, 16),
+                "pillar": "farm_ops",
+                "platforms": json.dumps({"instagram": True}),
+                "captions": json.dumps({"instagram": "approved caption"}),
+                "source": "manual",
+            }
+        )
+    )
 
     c = TestClient(app)
     yield c
@@ -120,14 +168,16 @@ class TestDraftsEndpoint:
     def test_get_drafts_requires_auth(self, client):
         assert client.get("/api/drafts").status_code == 401
 
-    def test_get_drafts_returns_rows(self, client, mock_sheets):
+    def test_get_drafts_returns_rows(self, client):
         headers = _auth_header(client)
         response = client.get("/api/drafts", headers=headers)
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 1
-        assert data[0]["raw_text"] == "Beautiful morning with the cows"
-        mock_sheets.get_rows_by_status.assert_called_with(ContentStatus.PENDING_APPROVAL)
+        # Returns all pre-published rows (pending_approval + approved)
+        assert len(data) == 2
+        statuses = {d["status"] for d in data}
+        assert "pending_approval" in statuses
+        assert "approved" in statuses
 
 
 class TestCalendarEndpoint:
@@ -138,6 +188,7 @@ class TestCalendarEndpoint:
         data = response.json()
         assert "entries" in data
         assert "total" in data
+        assert data["total"] == 2  # pending_approval + approved
 
 
 class TestSuggestionsEndpoint:
@@ -158,9 +209,9 @@ class TestSuggestionsEndpoint:
 class TestContentRowEndpoint:
     def test_get_content_row(self, client):
         headers = _auth_header(client)
-        response = client.get("/api/content/2", headers=headers)
+        response = client.get("/api/content/1", headers=headers)
         assert response.status_code == 200
-        assert response.json()["row_number"] == 2
+        assert response.json()["row_number"] == 1
 
     def test_get_content_row_not_found(self, client):
         headers = _auth_header(client)
@@ -169,26 +220,26 @@ class TestContentRowEndpoint:
 
 
 class TestEditDraftEndpoint:
-    def test_edit_draft(self, client, mock_sheets):
+    def test_edit_draft(self, client):
         headers = _auth_header(client)
         response = client.post(
-            "/api/drafts/2/edit",
+            "/api/drafts/1/edit",
             json={"captions": {"instagram": "new caption"}},
             headers=headers,
         )
-        assert response.status_code == 200, response.json()
-        mock_sheets.update_captions.assert_called_once()
+        assert response.status_code == 200
+        data = response.json()
+        assert data["captions"]["instagram"] == "new caption"
 
 
 class TestApproveDraft:
-    def test_approve_draft(self, client, mock_sheets, mock_postiz):
+    def test_approve_draft(self, client, mock_postiz):
         headers = _auth_header(client)
-        response = client.post("/api/drafts/2/approve", headers=headers)
-        assert response.status_code == 200, response.json()
+        response = client.post("/api/drafts/1/approve", headers=headers)
+        assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         assert "postiz_ids" in data
-        mock_sheets.update_status.assert_called_once()
 
     def test_approve_nonexistent_row(self, client):
         headers = _auth_header(client)
@@ -215,7 +266,6 @@ class TestGenerateEndpoint:
             headers=headers,
         )
         assert response.status_code == 200
-        # SSE responses contain data: lines
         assert "done" in response.text
 
 

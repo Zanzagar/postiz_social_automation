@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     spreadsheet_id: str
     google_sheets_credentials: str = "credentials.json"
 
+    # Database
+    database_path: str = "data/gvsa.db"
+
     # Demo
     demo_mode: bool = False
 

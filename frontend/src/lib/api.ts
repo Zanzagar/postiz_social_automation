@@ -93,6 +93,7 @@ export interface ContentRow {
   posted_at: string | null;
   error_msg: string | null;
   source: string;
+  auto_publish_at: string | null;
 }
 
 export interface CalendarEntry {
@@ -103,6 +104,7 @@ export interface CalendarEntry {
   status: string;
   platforms: Record<string, boolean>;
   captions: Record<string, string | null>;
+  source?: string;
 }
 
 export interface CalendarResponse {
@@ -124,6 +126,7 @@ export interface GenerateRequest {
   media_url?: string | null;
   platforms: string[];
   scheduled_date: string;
+  content_pillar?: string | null;
 }
 
 export interface RepromptRequest extends GenerateRequest {
@@ -170,6 +173,95 @@ export interface ApproveResponse {
   postiz_ids: string[];
 }
 
+// --- Iteration Types ---
+
+export interface IterateRequest {
+  content_row_id: number;
+  platform: string;
+  instruction: string;
+  mode?: string;
+}
+
+export interface IterateResponse {
+  caption: string;
+  iteration_id: number;
+}
+
+export interface IterationRecord {
+  id: number;
+  content_row_id: number;
+  platform: string;
+  old_caption: string | null;
+  new_caption: string;
+  refinement_instruction: string | null;
+  mode: string;
+  created_by: number | null;
+  created_at: string;
+}
+
+// --- Pillar Types ---
+
+export interface Pillar {
+  id: number;
+  name: string;
+  description: string | null;
+  color: string | null;
+  is_active: boolean;
+  sort_order: number;
+}
+
+// --- Template Types ---
+
+export interface TemplateVariable {
+  name: string;
+  type: string;
+}
+
+export interface Template {
+  id: number;
+  name: string;
+  pillar: string | null;
+  platform_instructions: Record<string, string>;
+  raw_text_template: string | null;
+  variables: TemplateVariable[];
+  schedule_pattern: string | null;
+  schedule_time: string | null;
+  default_segment_id: number | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface CreateTemplateRequest {
+  name: string;
+  pillar?: string;
+  platform_instructions?: Record<string, string>;
+  raw_text_template: string;
+  variables?: TemplateVariable[];
+  schedule_pattern?: string;
+  schedule_time?: string;
+  default_segment_id?: number;
+}
+
+export interface GenerateFromTemplateRequest {
+  variable_values: Record<string, string>;
+  platforms: string[];
+  scheduled_date: string;
+  scheduled_time?: string;
+}
+
+// --- Publish Config Types ---
+
+export interface PlatformPublishConfig {
+  platform: string;
+  enabled: boolean;
+  delay_hours: number;
+  pillar_overrides: Record<string, boolean>;
+}
+
+export interface PublishConfigResponse {
+  platforms: PlatformPublishConfig[];
+}
+
 // --- API Functions ---
 
 export const api = {
@@ -203,10 +295,16 @@ export const api = {
     return request<ContentRow>(`/api/content/${rowNumber}`);
   },
 
-  editDraft(rowNumber: number, captions: Record<string, string>) {
+  editDraft(
+    rowNumber: number,
+    captions: Record<string, string>,
+    platforms?: Record<string, boolean>,
+  ) {
+    const body: { captions: Record<string, string>; platforms?: Record<string, boolean> } = { captions };
+    if (platforms) body.platforms = platforms;
     return request<ContentRow>(`/api/drafts/${rowNumber}/edit`, {
       method: "POST",
-      body: JSON.stringify({ captions }),
+      body: JSON.stringify(body),
     });
   },
 
@@ -248,6 +346,105 @@ export const api = {
     return request<UploadResponse>("/api/upload", {
       method: "POST",
       body: formData,
+    });
+  },
+
+  // Iteration
+  iterate(data: IterateRequest) {
+    return request<IterateResponse>("/api/iterate", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  getIterations(contentId: number) {
+    return request<IterationRecord[]>(`/api/iterations/${contentId}`);
+  },
+
+  // Templates
+  getTemplates() {
+    return request<Template[]>("/api/templates");
+  },
+
+  getTemplate(templateId: number) {
+    return request<Template>(`/api/templates/${templateId}`);
+  },
+
+  createTemplate(data: CreateTemplateRequest) {
+    return request<Template>("/api/templates", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateTemplate(templateId: number, data: CreateTemplateRequest) {
+    return request<Template>(`/api/templates/${templateId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteTemplate(templateId: number) {
+    return request<{ deleted: boolean }>(`/api/templates/${templateId}`, {
+      method: "DELETE",
+    });
+  },
+
+  generateFromTemplate(templateId: number, data: GenerateFromTemplateRequest) {
+    return request<ContentRow>(`/api/templates/${templateId}/generate`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  batchGenerateFromTemplate(
+    templateId: number,
+    data: { variable_values: Record<string, string>; platforms: string[]; weeks: number },
+  ) {
+    return request<{ created: number; drafts: ContentRow[] }>(
+      `/api/templates/${templateId}/generate-batch`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    );
+  },
+
+  // Pillars
+  getPillars(activeOnly = false) {
+    const params = activeOnly ? "?active_only=true" : "";
+    return request<Pillar[]>(`/api/pillars${params}`);
+  },
+
+  createPillar(data: { name: string; description?: string; color?: string; sort_order?: number }) {
+    return request<Pillar>("/api/pillars", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  updatePillar(id: number, data: { name?: string; description?: string; color?: string; is_active?: boolean; sort_order?: number }) {
+    return request<Pillar>(`/api/pillars/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deletePillar(id: number) {
+    return request<{ detail: string }>(`/api/pillars/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  // Publish Config
+  getPublishConfig() {
+    return request<PublishConfigResponse>("/api/settings/publish");
+  },
+
+  updatePublishConfig(platforms: PlatformPublishConfig[]) {
+    return request<PublishConfigResponse>("/api/settings/publish", {
+      method: "PUT",
+      body: JSON.stringify({ platforms }),
     });
   },
 };

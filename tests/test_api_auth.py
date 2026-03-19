@@ -1,6 +1,5 @@
 """Tests for JWT authentication endpoints and middleware."""
 
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -58,20 +57,14 @@ class TestLogin:
 
     def test_lockout_after_max_attempts(self, client):
         for _ in range(5):
-            client.post(
-                "/api/auth/login",
-                json={"password": "wrong"},
-                headers={"X-Forwarded-For": "1.2.3.4"},
-            )
+            client.post("/api/auth/login", json={"password": "wrong"})
 
-        response = client.post(
-            "/api/auth/login",
-            json={"password": "correctpassword"},
-            headers={"X-Forwarded-For": "1.2.3.4"},
-        )
+        # Even correct password is rejected during lockout
+        response = client.post("/api/auth/login", json={"password": "correctpassword"})
         assert response.status_code == 429
 
-    def test_different_ips_independent(self, client):
+    def test_xff_header_ignored(self, client):
+        """X-Forwarded-For is ignored — rate limit uses socket IP only."""
         for _ in range(5):
             client.post(
                 "/api/auth/login",
@@ -79,13 +72,13 @@ class TestLogin:
                 headers={"X-Forwarded-For": "1.2.3.4"},
             )
 
-        # Different IP should still work
+        # Spoofing a different X-Forwarded-For should NOT bypass lockout
         response = client.post(
             "/api/auth/login",
             json={"password": "correctpassword"},
             headers={"X-Forwarded-For": "5.6.7.8"},
         )
-        assert response.status_code == 200
+        assert response.status_code == 429
 
 
 class TestProtectedEndpoints:

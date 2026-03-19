@@ -3,19 +3,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type ContentRow } from "@/lib/api";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ContentEditor } from "@/components/content/ContentEditor";
+import { AutoPublishCountdown } from "@/components/content/AutoPublishCountdown";
 import { CheckCircle, Loader2 } from "lucide-react";
-
-const platformLabels: Record<string, string> = {
-  instagram: "IG",
-  facebook: "FB",
-  tiktok: "TT",
-  threads: "TH",
-  linkedin: "LI",
-};
+import { format, parseISO } from "date-fns";
 
 export function DraftsPage() {
   const queryClient = useQueryClient();
@@ -24,13 +18,16 @@ export function DraftsPage() {
     queryFn: () => api.getDrafts(),
   });
 
-  const drafts = allDrafts?.filter((d) => d.status === "draft") ?? [];
+  const drafts = [...(allDrafts ?? [])].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+  );
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [editedCaptions, setEditedCaptions] = useState<
     Record<number, Record<string, string>>
   >({});
   const [isApproving, setIsApproving] = useState(false);
+  const [selectedDraft, setSelectedDraft] = useState<ContentRow | null>(null);
 
   function toggleSelect(rowNumber: number) {
     setSelected((prev) => {
@@ -49,41 +46,35 @@ export function DraftsPage() {
     }
   }
 
-  function updateCaption(
-    rowNumber: number,
-    platform: string,
-    value: string,
-    original: Record<string, string | null>,
-  ) {
-    setEditedCaptions((prev) => ({
-      ...prev,
-      [rowNumber]: {
-        ...Object.fromEntries(
-          Object.entries(original).map(([k, v]) => [k, v ?? ""]),
-        ),
-        ...prev[rowNumber],
-        [platform]: value,
-      },
-    }));
-  }
+  const [approveError, setApproveError] = useState("");
 
   async function handleBatchApprove() {
     setIsApproving(true);
-    try {
-      // Save any edits first, then approve
-      for (const rowNumber of selected) {
+    setApproveError("");
+    const failed: number[] = [];
+    for (const rowNumber of selected) {
+      try {
         const edits = editedCaptions[rowNumber];
         if (edits) {
           await api.editDraft(rowNumber, edits);
         }
         await api.approveDraft(rowNumber);
+      } catch {
+        failed.push(rowNumber);
       }
-      setSelected(new Set());
-      setEditedCaptions({});
-      queryClient.invalidateQueries({ queryKey: ["drafts"] });
-    } finally {
-      setIsApproving(false);
     }
+    const succeeded = new Set([...selected].filter((r) => !failed.includes(r)));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const r of succeeded) next.delete(r);
+      return next;
+    });
+    setEditedCaptions({});
+    queryClient.invalidateQueries({ queryKey: ["drafts"] });
+    if (failed.length > 0) {
+      setApproveError(`${succeeded.size} approved, ${failed.length} failed`);
+    }
+    setIsApproving(false);
   }
 
   if (isLoading) {
@@ -128,12 +119,26 @@ export function DraftsPage() {
           draft={draft}
           isSelected={selected.has(draft.row_number)}
           onToggleSelect={() => toggleSelect(draft.row_number)}
-          editedCaptions={editedCaptions[draft.row_number]}
-          onUpdateCaption={(platform, value) =>
-            updateCaption(draft.row_number, platform, value, draft.captions)
-          }
+          onClick={() => setSelectedDraft(draft)}
         />
       ))}
+
+      {/* ContentEditor modal */}
+      <ContentEditor
+        contentRow={selectedDraft}
+        mode="refine"
+        isOpen={!!selectedDraft}
+        onClose={() => setSelectedDraft(null)}
+        onSave={() => {
+          queryClient.invalidateQueries({ queryKey: ["drafts"] });
+          setSelectedDraft(null);
+        }}
+      />
+
+      {/* Approve error */}
+      {approveError && (
+        <p className="text-sm text-destructive" role="alert">{approveError}</p>
+      )}
 
       {/* Batch actions bar */}
       {selected.size > 0 && (
@@ -157,67 +162,81 @@ export function DraftsPage() {
   );
 }
 
+const platformLabels: Record<string, string> = {
+  instagram: "IG",
+  facebook: "FB",
+  tiktok: "TT",
+  threads: "TH",
+  linkedin: "LI",
+};
+
 function DraftCard({
   draft,
   isSelected,
   onToggleSelect,
-  editedCaptions,
-  onUpdateCaption,
+  onClick,
 }: {
   draft: ContentRow;
   isSelected: boolean;
   onToggleSelect: () => void;
-  editedCaptions?: Record<string, string>;
-  onUpdateCaption: (platform: string, value: string) => void;
+  onClick: () => void;
 }) {
   const platforms = Object.entries(draft.platforms)
     .filter(([, v]) => v)
     .map(([k]) => k);
 
   return (
-    <Card className={isSelected ? "ring-2 ring-sage-400" : ""}>
+    <Card className={`cursor-pointer transition-colors hover:bg-muted/30 ${isSelected ? "ring-2 ring-sage-400" : ""}`}>
       <CardHeader className="flex flex-row items-start gap-3 pb-2">
         <Checkbox
           checked={isSelected}
           onCheckedChange={onToggleSelect}
           className="mt-1"
         />
-        <div className="flex-1 space-y-1">
+        <div
+          className="flex-1 space-y-1"
+          onClick={onClick}
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onClick()}
+          role="button"
+          tabIndex={0}
+        >
           <p className="text-sm font-medium leading-tight">
             {draft.raw_text.length > 100
               ? draft.raw_text.slice(0, 100) + "..."
               : draft.raw_text}
           </p>
-          <div className="flex gap-2 text-xs text-muted-foreground">
-            <span>{draft.date}</span>
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <span>{format(parseISO(draft.date), "MMM d, h:mm a")}</span>
+            <Badge
+              variant={draft.status === "approved" ? "default" : draft.status === "pending_approval" ? "secondary" : "outline"}
+              className="text-xs px-1.5 py-0"
+            >
+              {draft.status.replace("_", " ")}
+            </Badge>
             {draft.content_pillar && (
-              <span className="rounded bg-muted px-1.5">{draft.content_pillar}</span>
+              <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                {draft.content_pillar}
+              </Badge>
+            )}
+            {draft.source === "template" && (
+              <Badge variant="outline" className="text-xs px-1.5 py-0">
+                Template
+              </Badge>
             )}
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        {platforms.length > 0 && (
-          <Tabs defaultValue={platforms[0]} className="w-full">
-            <TabsList className="w-full">
-              {platforms.map((p) => (
-                <TabsTrigger key={p} value={p} className="flex-1 text-xs">
-                  {platformLabels[p] ?? p}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            {platforms.map((p) => (
-              <TabsContent key={p} value={p}>
-                <Textarea
-                  value={editedCaptions?.[p] ?? draft.captions[p] ?? ""}
-                  onChange={(e) => onUpdateCaption(p, e.target.value)}
-                  rows={3}
-                  className="resize-y text-sm"
-                />
-              </TabsContent>
-            ))}
-          </Tabs>
-        )}
+      <CardContent onClick={onClick}>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {platforms.map((p) => (
+            <Badge key={p} variant="secondary" className="text-xs">
+              {platformLabels[p] ?? p}
+            </Badge>
+          ))}
+          {draft.auto_publish_at && (
+            <AutoPublishCountdown publishAt={draft.auto_publish_at} />
+          )}
+        </div>
       </CardContent>
     </Card>
   );

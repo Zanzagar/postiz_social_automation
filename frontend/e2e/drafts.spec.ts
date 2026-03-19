@@ -67,23 +67,24 @@ test.describe("Drafts Page", () => {
     await expect(page.getByText("Farm & Community")).toBeVisible();
   });
 
-  test("inline caption editing in draft card", async ({ page }) => {
+  test("draft cards are clickable", async ({ page }) => {
     await setupAuth(page);
     await setupApiMocks(page);
     await page.goto("/drafts");
 
-    const textarea = page.locator("textarea").first();
-    await expect(textarea).toBeVisible();
-    await textarea.fill("Edited caption text");
-    await expect(textarea).toHaveValue("Edited caption text");
+    // Draft cards have clickable content areas with button role
+    const firstCard = page.locator("[role='button']").first();
+    await expect(firstCard).toBeVisible();
+    await expect(firstCard).toContainText(/morning kirtan/i);
   });
 
-  test("shows date on draft cards", async ({ page }) => {
+  test("shows formatted date on draft cards", async ({ page }) => {
     await setupAuth(page);
     await setupApiMocks(page);
     await page.goto("/drafts");
 
-    await expect(page.getByText("2026-03-20")).toBeVisible();
-    await expect(page.getByText("2026-03-21")).toBeVisible();
+    // Dates are formatted as "MMM d, h:mm a" — "2026-03-20" → "Mar 20"
+    await expect(page.getByText(/Mar 20/i).first()).toBeVisible();
+    await expect(page.getByText(/Mar 21/i).first()).toBeVisible();
   });
 });

@@ -11,6 +11,8 @@ vi.mock("@/lib/api", () => ({
     getDrafts: vi.fn(),
     approveDraft: vi.fn(),
     editDraft: vi.fn(),
+    iterate: vi.fn(),
+    getIterations: vi.fn(),
   },
   ApiError: class extends Error {
     status: number;
@@ -42,6 +44,7 @@ const sampleDrafts: ContentRow[] = [
     posted_at: null,
     error_msg: null,
     source: "manual",
+    auto_publish_at: null,
   },
   {
     row_number: 3,
@@ -57,6 +60,7 @@ const sampleDrafts: ContentRow[] = [
     posted_at: null,
     error_msg: null,
     source: "manual",
+    auto_publish_at: null,
   },
 ];
 
@@ -131,6 +135,53 @@ describe("DraftsPage", () => {
 
     await waitFor(() => {
       expect(mockApproveDraft).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // --- ContentEditor modal integration ---
+
+  it("opens ContentEditor in refine mode when draft card is clicked", async () => {
+    const user = userEvent.setup();
+    mockGetDrafts.mockResolvedValue(sampleDrafts);
+    vi.mocked(api.getIterations).mockResolvedValue([]);
+    renderDrafts();
+
+    await waitFor(() => {
+      expect(screen.getByText(/morning meditation/i)).toBeInTheDocument();
+    });
+
+    // Click the draft text to open editor
+    await user.click(screen.getByText(/morning meditation/i));
+
+    await waitFor(() => {
+      expect(screen.getByText(/refine content/i)).toBeInTheDocument();
+    });
+  });
+
+  it("closes ContentEditor modal and refreshes drafts on save", async () => {
+    const user = userEvent.setup();
+    mockGetDrafts.mockResolvedValue(sampleDrafts);
+    vi.mocked(api.getIterations).mockResolvedValue([]);
+    vi.mocked(api.editDraft).mockResolvedValue(sampleDrafts[0]);
+    renderDrafts();
+
+    await waitFor(() => {
+      expect(screen.getByText(/morning meditation/i)).toBeInTheDocument();
+    });
+
+    // Open editor
+    await user.click(screen.getByText(/morning meditation/i));
+
+    await waitFor(() => {
+      expect(screen.getByText(/refine content/i)).toBeInTheDocument();
+    });
+
+    // Close via the close buttons (footer one)
+    const closeButtons = screen.getAllByRole("button", { name: /close/i });
+    await user.click(closeButtons[closeButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/refine content/i)).not.toBeInTheDocument();
     });
   });
 });

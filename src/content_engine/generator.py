@@ -153,6 +153,29 @@ class CaptionGenerator:
             )
             return ContentPillar.COW_LIFE
 
+    def iterate_single_caption(
+        self,
+        original_caption: str | None,
+        platform: str,
+        instruction: str,
+        raw_text: str,
+        pillar: str | None,
+    ) -> str:
+        """Regenerate a single platform caption based on user instruction."""
+        platform_rules = PLATFORM_INSTRUCTIONS.get(Platform(platform), "")
+        prompt = (
+            f"{BRAND_RULES}\n\n"
+            f"ORIGINAL CAPTION ({platform}):\n"
+            f"{original_caption or '(none)'}\n\n"
+            f"ORIGINAL POST IDEA:\n{raw_text}\n\n"
+            f"{'CONTENT PILLAR: ' + pillar if pillar else ''}\n\n"
+            f"USER INSTRUCTION:\n{instruction}\n\n"
+            f"PLATFORM RULES FOR {platform.upper()}:\n{platform_rules}\n\n"
+            f"Generate an improved caption for {platform} based on the user instruction.\n"
+            f"Respond with ONLY the caption text, no explanations."
+        )
+        return _call_claude(prompt)
+
     def _build_prompt(self, row: ContentRow, platforms: list[Platform]) -> str:
         """Build the full caption generation prompt."""
         parts = [BRAND_RULES, ""]
