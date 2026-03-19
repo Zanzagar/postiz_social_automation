@@ -6,7 +6,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from content_engine.models import ContentPillar
+from content_engine.pillars import get_active_pillar_names
 from content_engine.postiz import PostizClient
 from content_engine.sheets import SheetsClient
 
@@ -14,14 +14,25 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
-TARGET_PILLAR_WEIGHTS: dict[ContentPillar, float] = {
-    ContentPillar.COW_LIFE: 0.40,
-    ContentPillar.FARM_OPS: 0.25,
-    ContentPillar.COMMUNITY: 0.15,
-    ContentPillar.KITCHEN: 0.10,
-    ContentPillar.SPIRITUAL: 0.05,
-    ContentPillar.CTA: 0.05,
+# Default pillar weights — used when dynamic pillars are not available.
+TARGET_PILLAR_WEIGHTS: dict[str, float] = {
+    "Cow Life": 0.40,
+    "Farm Ops": 0.25,
+    "Community": 0.15,
+    "Kitchen": 0.10,
+    "Spiritual": 0.05,
+    "CTA": 0.05,
 }
+
+
+def get_pillar_weights(db_path: Path | None = None) -> dict[str, float]:
+    """Load pillar weights — dynamic pillars get equal weights, fallback uses TARGET_PILLAR_WEIGHTS."""
+    pillars = get_active_pillar_names(db_path)
+    if set(pillars) == set(TARGET_PILLAR_WEIGHTS.keys()):
+        return dict(TARGET_PILLAR_WEIGHTS)
+    # Dynamic pillars with equal distribution
+    weight = round(1.0 / len(pillars), 4) if pillars else 0.0
+    return {p: weight for p in pillars}
 
 
 class ContentIntelligence:
@@ -60,10 +71,10 @@ class ContentIntelligence:
 
         return gaps
 
-    def analyze_pillar_balance(self, days_back: int = 30) -> dict[ContentPillar, dict]:
+    def analyze_pillar_balance(self, days_back: int = 30) -> dict[str, dict]:
         """Compare actual pillar distribution to targets over recent period.
 
-        Returns dict mapping each pillar to {'actual': float, 'target': float, 'deviation': float}.
+        Returns dict mapping each pillar name to {'actual': float, 'target': float, 'deviation': float}.
         """
         cutoff = datetime.now() - timedelta(days=days_back)
         all_rows = self.sheets.get_all_content_rows()
@@ -77,9 +88,8 @@ class ContentIntelligence:
             counts[row.content_pillar] += 1
 
         result = {}
-        for pillar in ContentPillar:
+        for pillar, target in TARGET_PILLAR_WEIGHTS.items():
             actual = counts[pillar] / total if total > 0 else 0.0
-            target = TARGET_PILLAR_WEIGHTS[pillar]
             result[pillar] = {
                 "actual": round(actual, 2),
                 "target": target,
