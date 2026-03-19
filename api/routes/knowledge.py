@@ -1,12 +1,18 @@
 """Knowledge base API endpoints — crawl triggers, status, search."""
 
 import json
+import logging
 import sqlite3
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 
 from api.auth import get_current_user
+
+logger = logging.getLogger(__name__)
+
+# In-memory crawl progress (simple approach for single-process FastAPI)
+_crawl_progress: dict = {"running": False, "source": "", "current": 0, "total": 0, "phase": ""}
 
 router = APIRouter(
     prefix="/api/knowledge", tags=["knowledge"], dependencies=[Depends(get_current_user)]
@@ -142,6 +148,17 @@ async def search_knowledge(
 
 
 # ------------------------------------------------------------------
+# GET /progress — poll crawl progress
+# ------------------------------------------------------------------
+
+
+@router.get("/progress")
+async def get_crawl_progress():
+    """Return current crawl/import progress."""
+    return _crawl_progress
+
+
+# ------------------------------------------------------------------
 # POST /crawl — trigger website re-crawl (background task)
 # ------------------------------------------------------------------
 
@@ -149,39 +166,98 @@ async def search_knowledge(
 @router.post("/crawl")
 async def trigger_crawl(background_tasks: BackgroundTasks):
     """Trigger a re-crawl of configured websites. Runs in background."""
+    if _crawl_progress["running"]:
+        return {"status": "already_running", "message": "A crawl is already in progress"}
     background_tasks.add_task(_run_web_crawl)
     return {"status": "started", "message": "Web crawl started in background"}
 
 
+def _is_content_unchanged(db_path: str, url: str, site: str, new_hash: str) -> bool:
+    """Check if a page's content_hash matches what's already stored."""
+    conn = sqlite3.connect(db_path)
+    row = conn.execute(
+        "SELECT content_hash FROM web_pages WHERE url = ? AND site = ?", (url, site)
+    ).fetchone()
+    conn.close()
+    return row is not None and row[0] == new_hash
+
+
 async def _run_web_crawl():
-    """Background task: crawl gitavalley.com and iskcongitanagari.org."""
+    """Background task: crawl gitavalley.org and iskcongitanagari.org."""
+    global _crawl_progress
     from content_engine.crawlers.web_scraper import WebScraper
     from content_engine.crawlers.wordpress_crawler import WordPressCrawler
     from content_engine.pillars import get_active_pillar_names
 
     db_path = get_db_path()
     pillars = get_active_pillar_names()
+    _crawl_progress = {"running": True, "source": "", "current": 0, "total": 0, "phase": "starting"}
 
-    # WordPress crawler
-    wp = WordPressCrawler()
     try:
-        pages = await wp.crawl_all()
-        for page in pages:
-            pillar = wp.classify_pillar(page["title"], page["body_text"], pillars)
-            page_id = wp.store_page_sync(db_path, page, pillar=pillar)
-            knowledge = wp.extract_knowledge(page["title"], page["body_text"])
-            wp.store_knowledge_sync(db_path, page_id, knowledge, pillar=pillar)
-    finally:
-        await wp.close()
+        # --- WordPress crawler (gitavalley.org) ---
+        wp = WordPressCrawler()
+        try:
+            _crawl_progress.update(source="gitavalley.org", phase="fetching pages")
+            pages = await wp.crawl_all()
+            _crawl_progress["total"] = len(pages)
 
-    # BeautifulSoup scraper
-    scraper = WebScraper("https://iskcongitanagari.org", "iskcon")
-    try:
-        pages = await scraper.crawl_site()
-        for page in pages:
-            scraper.store_page_sync(db_path, page)
+            for i, page in enumerate(pages):
+                _crawl_progress.update(current=i + 1, phase=f"processing: {page['title'][:30]}")
+
+                # Skip if content unchanged
+                if _is_content_unchanged(db_path, page["url"], page["site"], page["content_hash"]):
+                    continue
+
+                try:
+                    pillar = wp.classify_pillar(page["title"], page["body_text"], pillars)
+                    page_id = wp.store_page_sync(db_path, page, pillar=pillar)
+                    knowledge = wp.extract_knowledge(page["title"], page["body_text"])
+                    if knowledge:
+                        wp.store_knowledge_sync(db_path, page_id, knowledge, pillar=pillar)
+                except Exception:
+                    logger.exception("Error processing page %s", page["url"])
+                    wp.store_page_sync(db_path, page, pillar=None)
+        finally:
+            await wp.close()
+
+        # --- BeautifulSoup scraper (iskcongitanagari.org) ---
+        scraper = WebScraper("https://iskcongitanagari.org", "iskcon")
+        try:
+            _crawl_progress.update(
+                source="iskcongitanagari.org", phase="crawling site", current=0, total=0
+            )
+            pages = await scraper.crawl_site()
+            _crawl_progress["total"] = len(pages)
+
+            for i, page in enumerate(pages):
+                _crawl_progress.update(current=i + 1, phase=f"processing: {page['title'][:30]}")
+
+                if _is_content_unchanged(db_path, page["url"], page["site"], page["content_hash"]):
+                    continue
+
+                try:
+                    scraper.store_page_sync(db_path, page)
+                    # Extract knowledge using WordPress crawler's Claude methods
+                    if page["body_text"] and len(page["body_text"]) > 100:
+                        knowledge = wp.extract_knowledge(page["title"], page["body_text"])
+                        if knowledge:
+                            conn = sqlite3.connect(db_path)
+                            pid = conn.execute(
+                                "SELECT id FROM web_pages WHERE url = ? AND site = ?",
+                                (page["url"], page["site"]),
+                            ).fetchone()
+                            conn.close()
+                            if pid:
+                                wp.store_knowledge_sync(db_path, pid[0], knowledge)
+                except Exception:
+                    logger.exception("Error processing ISKCON page %s", page["url"])
+        except Exception:
+            logger.exception("ISKCON scraper failed")
+
+        _crawl_progress.update(phase="complete", running=False)
     except Exception:
-        pass  # Error handling in Task 9
+        logger.exception("Crawl task failed")
+        _crawl_progress.update(phase="error", running=False)
 
 
 # ------------------------------------------------------------------

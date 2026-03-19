@@ -235,16 +235,18 @@ class WordPressCrawler:
     ) -> None:
         """Store extracted knowledge entries for a page."""
         conn = sqlite3.connect(db_path)
+        now = datetime.now(timezone.utc).isoformat()
         for fact in knowledge:
             conn.execute(
-                """INSERT INTO web_knowledge (web_page_id, fact_type, content, pillar, keywords)
-                   VALUES (?, ?, ?, ?, ?)""",
+                """INSERT INTO web_knowledge (web_page_id, fact_type, content, pillar, keywords, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
                 (
                     page_id,
                     fact["fact_type"],
                     fact["content"],
                     pillar,
                     json.dumps(fact.get("keywords", [])),
+                    now,
                 ),
             )
         conn.commit()

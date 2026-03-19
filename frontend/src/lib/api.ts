@@ -519,6 +519,12 @@ export const api = {
     return request<{ status: string }>("/api/knowledge/import-social", { method: "POST" });
   },
 
+  getCrawlProgress() {
+    return request<{ running: boolean; source: string; current: number; total: number; phase: string }>(
+      "/api/knowledge/progress",
+    );
+  },
+
   searchKnowledge(q: string, pillar?: string) {
     const params = new URLSearchParams({ q });
     if (pillar) params.set("pillar", pillar);
