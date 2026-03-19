@@ -234,8 +234,11 @@ async def browse_knowledge(
         conditions.append("wk.pillar = ?")
         params.append(pillar)
     if topic:
-        conditions.append("wk.topic = ?")
-        params.append(topic)
+        if topic == "Unclassified":
+            conditions.append("wk.topic IS NULL")
+        else:
+            conditions.append("wk.topic = ?")
+            params.append(topic)
     if fact_type:
         conditions.append("wk.fact_type = ?")
         params.append(fact_type)

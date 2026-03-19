@@ -46,6 +46,7 @@ export function KnowledgePage() {
   const [filterType, setFilterType] = useState("");
   const [filterSite, setFilterSite] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [showGaps, setShowGaps] = useState(false);
   const [searchText, setSearchText] = useState("");
 
   const stats = useQuery({
@@ -145,17 +146,52 @@ export function KnowledgePage() {
             </CardContent>
           </Card>
           {s.coverage_gaps.length > 0 && (
-            <Card className="border-amber-200 bg-amber-50">
-              <CardContent className="flex items-center gap-3 p-4">
-                <AlertTriangle className="h-8 w-8 text-amber-500" />
-                <div>
-                  <p className="text-2xl font-bold">{s.coverage_gaps.length}</p>
-                  <p className="text-xs text-amber-700">Coverage Gaps</p>
-                </div>
-              </CardContent>
-            </Card>
+            <button onClick={() => setShowGaps(!showGaps)} className="text-left">
+              <Card className="border-amber-200 bg-amber-50 transition-all hover:shadow-md">
+                <CardContent className="flex items-center gap-3 p-4">
+                  <AlertTriangle className="h-8 w-8 text-amber-500" />
+                  <div>
+                    <p className="text-2xl font-bold">{s.coverage_gaps.length}</p>
+                    <p className="text-xs text-amber-700">Coverage Gaps — click to see</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </button>
           )}
         </div>
+      )}
+
+      {/* Coverage gaps detail */}
+      {showGaps && s && s.coverage_gaps.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base text-amber-800">
+              <AlertTriangle className="h-4 w-4" />
+              Pages With No Extracted Knowledge
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-sm text-amber-700">
+              These pages have content but no facts have been extracted yet.
+              Re-running "Crawl Websites" will process them.
+            </p>
+            <div className="space-y-1">
+              {s.coverage_gaps.map((gap) => (
+                <div key={gap.url} className="flex items-center justify-between rounded border border-amber-200 bg-white p-2 text-sm">
+                  <div>
+                    <span className="font-medium">{gap.title}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">{gap.site}</span>
+                  </div>
+                  <a href={gap.url} target="_blank" rel="noreferrer"
+                     className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                    <ExternalLink className="h-3 w-3" />
+                    view
+                  </a>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Fact type breakdown */}
