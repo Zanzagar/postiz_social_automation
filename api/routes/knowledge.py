@@ -49,13 +49,17 @@ async def get_status(db_path: str = Depends(get_db_path)):
            FROM social_history GROUP BY platform"""
     ).fetchall()
 
-    # Knowledge entry count
+    # Knowledge entry counts by source
     knowledge_count = conn.execute("SELECT COUNT(*) FROM web_knowledge").fetchone()[0]
+    knowledge_from_social = conn.execute(
+        "SELECT COUNT(*) FROM web_knowledge WHERE web_page_id IS NULL"
+    ).fetchone()[0]
 
     conn.close()
 
     sources = []
     for row in web_stats:
+        # Count knowledge entries for this site
         sources.append(
             {
                 "name": row["site"],
@@ -70,6 +74,7 @@ async def get_status(db_path: str = Depends(get_db_path)):
                 "name": row["platform"],
                 "type": "social",
                 "post_count": row["post_count"],
+                "knowledge_count": knowledge_from_social if row["platform"] == "facebook" else 0,
                 "last_imported": row["last_imported"],
             }
         )
