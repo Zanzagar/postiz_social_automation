@@ -90,19 +90,24 @@ class MetaGraphImporter:
     # ------------------------------------------------------------------
 
     async def fetch_facebook_posts(self) -> list[dict]:
-        """Fetch all posts from the configured Facebook page."""
+        """Fetch all posts from the configured Facebook page.
+
+        Uses light fields for pagination (engagement summaries cause 403 on page 2+),
+        then fetches engagement per-post in batches.
+        """
         if not self.page_id:
             logger.warning("No page_id configured, skipping Facebook")
             return []
 
+        # Phase 1: Fetch all posts with light fields
         url = f"{self.base_url}/{self.page_id}/posts"
         params = {
-            "fields": "id,message,created_time,shares,likes.summary(true),comments.summary(true)",
+            "fields": "id,message,created_time,shares",
             "access_token": self.access_token,
-            "limit": 25,
+            "limit": 100,
         }
 
-        all_posts: list[dict] = []
+        raw_posts: list[dict] = []
         while url:
             resp = await self._client.get(url, params=params)
             if resp.status_code != 200:
@@ -110,18 +115,38 @@ class MetaGraphImporter:
                 break
 
             data = resp.json()
-            for post in data.get("data", []):
-                all_posts.append(self.parse_facebook_post(post))
+            raw_posts.extend(data.get("data", []))
 
-            # Pagination
             next_url = data.get("paging", {}).get("next")
             if next_url:
                 url = next_url
-                params = {}  # next URL includes all params
+                params = {}
             else:
                 break
 
-        logger.info("Fetched %d Facebook posts", len(all_posts))
+        logger.info("Fetched %d raw Facebook posts, getting engagement...", len(raw_posts))
+
+        # Phase 2: Batch-fetch engagement (likes + comments count) in groups of 50
+        for i in range(0, len(raw_posts), 50):
+            batch = raw_posts[i : i + 50]
+            ids = ",".join(p["id"] for p in batch)
+            eng_resp = await self._client.get(
+                f"{self.base_url}/",
+                params={
+                    "ids": ids,
+                    "fields": "likes.summary(true),comments.summary(true)",
+                    "access_token": self.access_token,
+                },
+            )
+            if eng_resp.status_code == 200:
+                eng_data = eng_resp.json()
+                for post in batch:
+                    eng = eng_data.get(post["id"], {})
+                    post["likes"] = eng.get("likes", {}).get("summary", {})
+                    post["comments"] = eng.get("comments", {}).get("summary", {})
+
+        all_posts = [self.parse_facebook_post(p) for p in raw_posts]
+        logger.info("Fetched %d Facebook posts with engagement", len(all_posts))
         return all_posts
 
     async def fetch_instagram_posts(self) -> list[dict]:
