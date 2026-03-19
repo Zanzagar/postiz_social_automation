@@ -115,22 +115,21 @@ class WordPressCrawler:
     # High-level
     # ------------------------------------------------------------------
 
+    # Content types to crawl from the WordPress REST API
+    CONTENT_TYPES = ["posts", "pages", "product"]
+
     async def crawl_all(self) -> list[dict]:
-        """Crawl both posts and pages, return parsed page dicts."""
-        raw_posts = await self.fetch_all_items("posts")
-        raw_pages = await self.fetch_all_items("pages")
-
+        """Crawl posts, pages, and products — return parsed page dicts."""
         results = []
-        for item in raw_posts + raw_pages:
-            results.append(self.parse_wp_item(item))
+        counts = {}
+        for content_type in self.CONTENT_TYPES:
+            raw = await self.fetch_all_items(content_type)
+            counts[content_type] = len(raw)
+            for item in raw:
+                results.append(self.parse_wp_item(item))
 
-        logger.info(
-            "Crawled %d items from %s (%d posts, %d pages)",
-            len(results),
-            self.base_url,
-            len(raw_posts),
-            len(raw_pages),
-        )
+        parts = ", ".join(f"{v} {k}" for k, v in counts.items() if v > 0)
+        logger.info("Crawled %d items from %s (%s)", len(results), self.base_url, parts)
         return results
 
     # ------------------------------------------------------------------
@@ -140,32 +139,44 @@ class WordPressCrawler:
     # Pages too short or clearly non-content
     MIN_CONTENT_LENGTH = 200
 
-    # Max chars to send to Claude (balances cost vs coverage)
+    # Max chars per chunk sent to Claude
+    CHUNK_SIZE = 6000
+
+    # Max chars for pillar classification (just needs enough to understand the topic)
     MAX_CLASSIFY_CHARS = 2000
-    MAX_EXTRACT_CHARS = 8000
 
     @staticmethod
-    def _sample_content(text: str, max_chars: int) -> str:
-        """Smart content sampling for large pages.
+    def _chunk_text(text: str, chunk_size: int) -> list[str]:
+        """Split text into chunks, breaking at paragraph boundaries when possible."""
+        if len(text) <= chunk_size:
+            return [text]
 
-        For short text: use all of it.
-        For long text: take the first third, middle section, and last section
-        to capture intro, body, and conclusion.
-        """
-        if len(text) <= max_chars:
-            return text
+        chunks = []
+        remaining = text
+        while remaining:
+            if len(remaining) <= chunk_size:
+                chunks.append(remaining)
+                break
 
-        chunk = max_chars // 3
-        start = text[:chunk]
-        mid_point = len(text) // 2
-        middle = text[mid_point - chunk // 2 : mid_point + chunk // 2]
-        end = text[-chunk:]
-        return f"{start}\n\n[...]\n\n{middle}\n\n[...]\n\n{end}"
+            # Try to break at a paragraph boundary
+            cut = remaining[:chunk_size].rfind("\n\n")
+            if cut < chunk_size // 2:
+                # No good paragraph break — try sentence boundary
+                cut = remaining[:chunk_size].rfind(". ")
+                if cut < chunk_size // 2:
+                    cut = chunk_size  # Hard cut
+                else:
+                    cut += 1  # Include the period
+
+            chunks.append(remaining[:cut].strip())
+            remaining = remaining[cut:].strip()
+
+        return chunks
 
     def classify_pillar(self, title: str, body_text: str, pillars: list[str]) -> str:
         """Use Claude CLI to classify a page into one of the known pillars."""
         pillar_list = ", ".join(pillars)
-        content = self._sample_content(body_text, self.MAX_CLASSIFY_CHARS)
+        content = body_text[: self.MAX_CLASSIFY_CHARS]
         prompt = (
             f"Classify this web page into exactly one of these categories: {pillar_list}\n\n"
             f"Title: {title}\n"
@@ -178,22 +189,21 @@ class WordPressCrawler:
         logger.warning("Unrecognised pillar %r, using first pillar", raw)
         return pillars[0] if pillars else "General"
 
-    def extract_knowledge(self, title: str, body_text: str) -> list[dict]:
-        """Use Claude CLI to extract structured facts from page content."""
-        if len(body_text) < self.MIN_CONTENT_LENGTH:
-            return []
-
-        content = self._sample_content(body_text, self.MAX_EXTRACT_CHARS)
+    def _extract_chunk(
+        self, title: str, chunk: str, chunk_num: int, total_chunks: int
+    ) -> list[dict]:
+        """Extract knowledge from a single chunk of text."""
+        context = f" (chunk {chunk_num}/{total_chunks})" if total_chunks > 1 else ""
         prompt = (
-            "Extract key facts from this web page as a JSON array. "
+            "Extract key facts from this web page content as a JSON array. "
             "Each item must have: fact_type (one of: program, event, quote, link, description), "
             "content (the fact text — be specific with names, numbers, dates), "
             "keywords (list of strings).\n\n"
             "Focus on: programs offered, events, notable quotes, specific facts about "
             "the farm/community, and descriptions of activities or initiatives.\n"
-            "Skip generic marketing language.\n\n"
-            f"Title: {title}\n"
-            f"Content ({len(body_text)} chars total):\n{content}\n\n"
+            "Skip generic marketing language and boilerplate.\n\n"
+            f"Title: {title}{context}\n"
+            f"Content:\n{chunk}\n\n"
             "Reply with ONLY valid JSON, no markdown fences."
         )
         raw = _call_claude(prompt)
@@ -206,7 +216,6 @@ class WordPressCrawler:
             facts = json.loads(text)
             if not isinstance(facts, list):
                 return []
-            # Validate fact_types
             return [
                 f
                 for f in facts
@@ -215,8 +224,39 @@ class WordPressCrawler:
                 and f.get("content")
             ]
         except (json.JSONDecodeError, TypeError):
-            logger.warning("Failed to parse knowledge extraction response")
+            logger.warning("Failed to parse extraction response for chunk %d", chunk_num)
             return []
+
+    def extract_knowledge(self, title: str, body_text: str) -> list[dict]:
+        """Extract structured facts from page content, chunking large pages."""
+        if len(body_text) < self.MIN_CONTENT_LENGTH:
+            return []
+
+        chunks = self._chunk_text(body_text, self.CHUNK_SIZE)
+        all_facts: list[dict] = []
+
+        for i, chunk in enumerate(chunks, 1):
+            facts = self._extract_chunk(title, chunk, i, len(chunks))
+            all_facts.extend(facts)
+
+        if len(chunks) > 1:
+            logger.info(
+                "Extracted %d facts from %d chunks of '%s'",
+                len(all_facts),
+                len(chunks),
+                title[:40],
+            )
+
+        # Deduplicate facts with identical content
+        seen_content: set[str] = set()
+        unique_facts = []
+        for f in all_facts:
+            key = f["content"].strip().lower()
+            if key not in seen_content:
+                seen_content.add(key)
+                unique_facts.append(f)
+
+        return unique_facts
 
     # ------------------------------------------------------------------
     # Database storage (sync, uses sqlite3 directly)

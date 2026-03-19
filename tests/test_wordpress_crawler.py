@@ -156,25 +156,25 @@ class TestFetchPages:
 
 @pytest.mark.asyncio
 class TestCrawlAll:
-    async def test_crawl_all_combines_posts_and_pages(self):
+    async def test_crawl_all_combines_posts_pages_products(self):
         crawler = WordPressCrawler()
 
         with patch.object(crawler, "fetch_all_items", new_callable=AsyncMock) as mock_fetch:
-            mock_fetch.side_effect = [[SAMPLE_POST], [SAMPLE_PAGE]]
+            mock_fetch.side_effect = [[SAMPLE_POST], [SAMPLE_PAGE], []]
             pages = await crawler.crawl_all()
 
         assert len(pages) == 2
-        assert mock_fetch.call_count == 2
-        # Should call for both "posts" and "pages"
+        assert mock_fetch.call_count == 3
         call_args = [c.args[0] for c in mock_fetch.call_args_list]
         assert "posts" in call_args
         assert "pages" in call_args
+        assert "product" in call_args
 
     async def test_crawl_all_returns_parsed_dicts(self):
         crawler = WordPressCrawler()
 
         with patch.object(crawler, "fetch_all_items", new_callable=AsyncMock) as mock_fetch:
-            mock_fetch.side_effect = [[SAMPLE_POST], []]
+            mock_fetch.side_effect = [[SAMPLE_POST], [], []]
             pages = await crawler.crawl_all()
 
         assert len(pages) == 1
@@ -276,6 +276,37 @@ class TestExtractKnowledge:
                 "Events", "Sunday Feast every week at Gita Valley. " * 10
             )
         assert facts[0]["fact_type"] in ("program", "event", "quote", "link", "description")
+
+    def test_extract_chunks_large_content(self):
+        crawler = WordPressCrawler()
+        # Create content larger than CHUNK_SIZE
+        large_text = "Gita Valley cow protection program details. " * 300  # ~13500 chars
+        chunks = crawler._chunk_text(large_text, crawler.CHUNK_SIZE)
+        assert len(chunks) >= 2
+        # All content should be covered
+        total_chars = sum(len(c) for c in chunks)
+        assert total_chars >= len(large_text) * 0.95  # allow minor whitespace trimming
+
+    def test_extract_deduplicates_facts(self):
+        crawler = WordPressCrawler()
+        fact_json = json.dumps(
+            [
+                {"fact_type": "program", "content": "85 cows on the farm", "keywords": ["cows"]},
+            ]
+        )
+        # Simulate 2 chunks returning the same fact
+        with patch(
+            "content_engine.crawlers.wordpress_crawler._call_claude",
+            return_value=fact_json,
+        ):
+            facts = crawler.extract_knowledge("Cows", "A" * 300)
+        # Should deduplicate even though _call_claude is called once for single chunk
+        assert len(facts) == 1
+
+    def test_skips_short_pages(self):
+        crawler = WordPressCrawler()
+        facts = crawler.extract_knowledge("Test", "short")
+        assert facts == []
 
 
 # --- Subtask 5.5: Database storage ---
