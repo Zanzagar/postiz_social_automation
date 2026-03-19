@@ -356,6 +356,32 @@ export function CreatePage() {
     }
   }
 
+  // Tab switch confirmation
+  const [pendingMode, setPendingMode] = useState<CreateMode | null>(null);
+
+  function handleTabSwitch(newMode: string) {
+    const target = newMode as CreateMode;
+    if (target === mode) return;
+    const hasContent = rawText.trim() || captions;
+    if (hasContent) {
+      setPendingMode(target);
+    } else {
+      resetForm();
+      setMode(target);
+    }
+  }
+
+  function confirmSwitch() {
+    if (!pendingMode) return;
+    resetForm();
+    setMode(pendingMode);
+    setPendingMode(null);
+  }
+
+  function cancelSwitch() {
+    setPendingMode(null);
+  }
+
   const formData: GenerateRequest = {
     raw_text: rawText,
     media_url: mediaUrl || null,
@@ -370,26 +396,35 @@ export function CreatePage() {
 
       {/* Workflow toggle */}
       {templates.length > 0 && (
-        <Tabs
-          value={mode}
-          onValueChange={(v) => {
-            const hasContent = rawText.trim() || captions;
-            if (hasContent) {
-              if (!window.confirm("You have unsaved content. Discard and switch?")) return;
-            }
-            resetForm();
-            setMode(v as CreateMode);
-          }}
-        >
-          <TabsList className="w-full">
-            <TabsTrigger value="freeform" className="flex-1">
-              Write from Scratch
-            </TabsTrigger>
-            <TabsTrigger value="template" className="flex-1">
-              Use a Template
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="space-y-2">
+          <Tabs value={mode} onValueChange={handleTabSwitch}>
+            <TabsList className="w-full">
+              <TabsTrigger value="freeform" className="flex-1">
+                Write from Scratch
+              </TabsTrigger>
+              <TabsTrigger value="template" className="flex-1">
+                Use a Template
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {/* Inline switch confirmation */}
+          {pendingMode && (
+            <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5">
+              <p className="text-sm text-amber-800">
+                You have unsaved content. Discard and switch?
+              </p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="ghost" onClick={cancelSwitch}>
+                  Keep Editing
+                </Button>
+                <Button size="sm" variant="destructive" onClick={confirmSwitch}>
+                  Discard
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* MODE: Template */}
