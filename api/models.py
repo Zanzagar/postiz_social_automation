@@ -134,6 +134,7 @@ class WebKnowledge(Base):
         String(50), nullable=False
     )  # "program", "event", "quote", "link", "description"
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    topic: Mapped[str | None] = mapped_column(String(100), nullable=True)
     pillar: Mapped[str | None] = mapped_column(String(50), nullable=True)
     keywords: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))

@@ -42,7 +42,7 @@ type ViewMode = "table" | "graph";
 
 export function KnowledgePage() {
   const [viewMode, setViewMode] = useState<ViewMode>("table");
-  const [filterPillar, setFilterPillar] = useState("");
+  const [filterTopic, setFilterTopic] = useState("");
   const [filterType, setFilterType] = useState("");
   const [filterSite, setFilterSite] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -54,18 +54,18 @@ export function KnowledgePage() {
   });
 
   const browse = useQuery({
-    queryKey: ["knowledge", "browse", filterPillar, filterType, filterSite, currentPage],
+    queryKey: ["knowledge", "browse", filterTopic, filterType, filterSite, currentPage],
     queryFn: () =>
       api.browseKnowledge({
-        pillar: filterPillar || undefined,
+        topic: filterTopic || undefined,
         fact_type: filterType || undefined,
         site: filterSite || undefined,
         page: currentPage,
       }),
   });
 
-  const handlePillarClick = useCallback((pillar: string) => {
-    setFilterPillar((prev) => (prev === pillar ? "" : pillar));
+  const handleTopicClick = useCallback((topic: string) => {
+    setFilterTopic((prev) => (prev === topic ? "" : topic));
     setCurrentPage(1);
   }, []);
 
@@ -180,21 +180,21 @@ export function KnowledgePage() {
         </div>
       )}
 
-      {/* Pillar cards */}
-      {s && s.by_pillar.length > 0 && (
+      {/* Topic cards */}
+      {s && s.by_topic.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {s.by_pillar.map((p, i) => (
+          {s.by_topic.map((t, i) => (
             <button
-              key={p.pillar}
-              onClick={() => handlePillarClick(p.pillar)}
+              key={t.topic}
+              onClick={() => handleTopicClick(t.topic)}
               className={`rounded-xl border p-4 text-left transition-all hover:shadow-md ${
-                filterPillar === p.pillar
+                filterTopic === t.topic
                   ? PILLAR_COLORS[i % PILLAR_COLORS.length] + " ring-2 ring-offset-1"
                   : "border-gray-200 hover:border-gray-300"
               }`}
             >
-              <p className="text-lg font-bold">{p.count}</p>
-              <p className="text-sm font-medium">{p.pillar}</p>
+              <p className="text-lg font-bold">{t.count}</p>
+              <p className="text-sm font-medium">{t.topic}</p>
               <p className="text-xs text-muted-foreground">knowledge entries</p>
             </button>
           ))}
@@ -305,9 +305,9 @@ function KnowledgeTable({
                   </span>
                 </div>
                 <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-                  {entry.pillar && (
+                  {entry.topic && (
                     <span className="rounded bg-sage-50 px-1.5 py-0.5 font-medium">
-                      {entry.pillar}
+                      {entry.topic}
                     </span>
                   )}
                   {entry.site && (
@@ -391,7 +391,7 @@ function KnowledgeGraph() {
   }, []);
 
   const nodeColors: Record<string, string> = {
-    pillar: "#4a7c59",
+    topic: "#4a7c59",
     page: "#3b82f6",
     program: "#2563eb",
     event: "#7c3aed",

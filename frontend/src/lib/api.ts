@@ -313,6 +313,7 @@ export interface KnowledgeStats {
   pages_with_knowledge: number;
   pages_without_knowledge: number;
   by_type: Array<{ type: string; count: number }>;
+  by_topic: Array<{ topic: string; count: number }>;
   by_pillar: Array<{ pillar: string; count: number }>;
   coverage_gaps: Array<{ title: string; site: string; url: string; fact_count: number }>;
 }
@@ -321,6 +322,7 @@ export interface KnowledgeEntry {
   id: number;
   fact_type: string;
   content: string;
+  topic: string;
   pillar: string;
   keywords: string[];
   page_title: string;
@@ -557,9 +559,10 @@ export const api = {
     return request<KnowledgeStats>("/api/knowledge/stats");
   },
 
-  browseKnowledge(params: { pillar?: string; fact_type?: string; site?: string; page?: number }) {
+  browseKnowledge(params: { pillar?: string; topic?: string; fact_type?: string; site?: string; page?: number }) {
     const searchParams = new URLSearchParams();
     if (params.pillar) searchParams.set("pillar", params.pillar);
+    if (params.topic) searchParams.set("topic", params.topic);
     if (params.fact_type) searchParams.set("fact_type", params.fact_type);
     if (params.site) searchParams.set("site", params.site);
     if (params.page) searchParams.set("page", String(params.page));

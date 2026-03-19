@@ -107,6 +107,12 @@ async def get_stats(db_path: str = Depends(get_db_path)):
            FROM web_knowledge GROUP BY pillar ORDER BY count DESC"""
     ).fetchall()
 
+    # By topic
+    by_topic = conn.execute(
+        """SELECT COALESCE(topic, 'Unclassified') as topic, COUNT(*) as count
+           FROM web_knowledge GROUP BY topic ORDER BY count DESC"""
+    ).fetchall()
+
     # Coverage: pages with most/least knowledge
     coverage = conn.execute(
         """SELECT wp.title, wp.site, wp.url, COUNT(wk.id) as fact_count
@@ -127,6 +133,7 @@ async def get_stats(db_path: str = Depends(get_db_path)):
         "pages_without_knowledge": pages_without,
         "by_type": [{"type": r["fact_type"], "count": r["count"]} for r in by_type],
         "by_pillar": [{"pillar": r["pillar"], "count": r["count"]} for r in by_pillar],
+        "by_topic": [{"topic": r["topic"], "count": r["count"]} for r in by_topic],
         "coverage_gaps": [
             {"title": r["title"], "site": r["site"], "url": r["url"], "fact_count": r["fact_count"]}
             for r in coverage
@@ -149,18 +156,18 @@ async def get_graph_data(db_path: str = Depends(get_db_path)):
     nodes = []
     links = []
 
-    # Pillar nodes (large)
-    pillars = conn.execute(
-        """SELECT COALESCE(pillar, 'Unclassified') as pillar, COUNT(*) as count
-           FROM web_knowledge GROUP BY pillar"""
+    # Topic nodes (large) — primary grouping
+    topics = conn.execute(
+        """SELECT COALESCE(topic, 'Unclassified') as topic, COUNT(*) as count
+           FROM web_knowledge GROUP BY topic"""
     ).fetchall()
-    for p in pillars:
+    for t in topics:
         nodes.append(
             {
-                "id": f"pillar:{p['pillar']}",
-                "label": p["pillar"],
-                "type": "pillar",
-                "size": 8 + p["count"] // 2,
+                "id": f"topic:{t['topic']}",
+                "label": t["topic"],
+                "type": "topic",
+                "size": 8 + t["count"] // 3,
             }
         )
 
@@ -184,7 +191,7 @@ async def get_graph_data(db_path: str = Depends(get_db_path)):
 
     # Fact nodes (small) + edges
     facts = conn.execute(
-        """SELECT wk.id, wk.fact_type, wk.content, wk.pillar, wk.web_page_id
+        """SELECT wk.id, wk.fact_type, wk.content, wk.topic, wk.web_page_id
            FROM web_knowledge wk LIMIT 200"""
     ).fetchall()
     for f in facts:
@@ -193,9 +200,9 @@ async def get_graph_data(db_path: str = Depends(get_db_path)):
         # Link fact → page
         if f["web_page_id"]:
             links.append({"source": f"page:{f['web_page_id']}", "target": fact_id})
-        # Link fact → pillar
-        pillar_key = f["pillar"] or "Unclassified"
-        links.append({"source": f"pillar:{pillar_key}", "target": fact_id})
+        # Link fact → topic
+        topic_key = f["topic"] or "Unclassified"
+        links.append({"source": f"topic:{topic_key}", "target": fact_id})
 
     conn.close()
     return {"nodes": nodes, "links": links}
@@ -209,6 +216,7 @@ async def get_graph_data(db_path: str = Depends(get_db_path)):
 @router.get("/browse")
 async def browse_knowledge(
     pillar: str | None = Query(default=None),
+    topic: str | None = Query(default=None),
     fact_type: str | None = Query(default=None),
     site: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -225,6 +233,9 @@ async def browse_knowledge(
     if pillar:
         conditions.append("wk.pillar = ?")
         params.append(pillar)
+    if topic:
+        conditions.append("wk.topic = ?")
+        params.append(topic)
     if fact_type:
         conditions.append("wk.fact_type = ?")
         params.append(fact_type)
@@ -242,7 +253,7 @@ async def browse_knowledge(
 
     offset = (page - 1) * per_page
     rows = conn.execute(
-        f"""SELECT wk.id, wk.fact_type, wk.content, wk.pillar, wk.keywords,
+        f"""SELECT wk.id, wk.fact_type, wk.content, wk.topic, wk.pillar, wk.keywords,
                    wp.title as page_title, wp.url as page_url, wp.site
             FROM web_knowledge wk
             LEFT JOIN web_pages wp ON wk.web_page_id = wp.id
@@ -267,6 +278,7 @@ async def browse_knowledge(
                 "id": row["id"],
                 "fact_type": row["fact_type"],
                 "content": row["content"],
+                "topic": row["topic"],
                 "pillar": row["pillar"],
                 "keywords": keywords,
                 "page_title": row["page_title"],
@@ -318,7 +330,7 @@ async def search_knowledge(
     params.append(limit)
 
     rows = conn.execute(
-        f"""SELECT wk.id, wk.fact_type, wk.content, wk.pillar, wk.keywords,
+        f"""SELECT wk.id, wk.fact_type, wk.content, wk.topic, wk.pillar, wk.keywords,
                    wp.title as page_title, wp.url as page_url, wp.site
             FROM web_knowledge wk
             LEFT JOIN web_pages wp ON wk.web_page_id = wp.id
@@ -343,6 +355,7 @@ async def search_knowledge(
                 "id": row["id"],
                 "fact_type": row["fact_type"],
                 "content": row["content"],
+                "topic": row["topic"],
                 "pillar": row["pillar"],
                 "keywords": keywords,
                 "page_title": row["page_title"],

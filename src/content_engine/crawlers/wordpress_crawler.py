@@ -194,11 +194,18 @@ class WordPressCrawler:
     ) -> list[dict]:
         """Extract knowledge from a single chunk of text."""
         context = f" (chunk {chunk_num}/{total_chunks})" if total_chunks > 1 else ""
+        topics = (
+            "Cow Protection, Ahimsa Dairy, Farm Products, Sustainability, "
+            "Retreats & Visits, People & Team, Education & Programs, "
+            "History & Mission, Fundraising, General Information"
+        )
         prompt = (
             "Extract key facts from this web page content as a JSON array. "
-            "Each item must have: fact_type (one of: program, event, quote, link, description), "
-            "content (the fact text — be specific with names, numbers, dates), "
-            "keywords (list of strings).\n\n"
+            "Each item must have:\n"
+            "- fact_type (one of: program, event, quote, link, description)\n"
+            "- content (the fact text — be specific with names, numbers, dates)\n"
+            "- topic (one of: " + topics + ")\n"
+            "- keywords (list of strings)\n\n"
             "Focus on: programs offered, events, notable quotes, specific facts about "
             "the farm/community, and descriptions of activities or initiatives.\n"
             "Skip generic marketing language and boilerplate.\n\n"
@@ -317,12 +324,13 @@ class WordPressCrawler:
         now = datetime.now(timezone.utc).isoformat()
         for fact in knowledge:
             conn.execute(
-                """INSERT INTO web_knowledge (web_page_id, fact_type, content, pillar, keywords, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO web_knowledge (web_page_id, fact_type, content, topic, pillar, keywords, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
                     page_id,
                     fact["fact_type"],
                     fact["content"],
+                    fact.get("topic"),
                     pillar,
                     json.dumps(fact.get("keywords", [])),
                     now,
