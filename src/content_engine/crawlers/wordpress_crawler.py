@@ -339,6 +339,75 @@ class WordPressCrawler:
         conn.commit()
         conn.close()
 
+    # ------------------------------------------------------------------
+    # Post-extraction topic classification
+    # ------------------------------------------------------------------
+
+    KNOWN_TOPICS = [
+        "Cow Protection",
+        "Ahimsa Dairy",
+        "Farm Products",
+        "Sustainability",
+        "Retreats & Visits",
+        "People & Team",
+        "Education & Programs",
+        "History & Mission",
+        "Fundraising",
+        "Spiritual Life",
+        "Events & Festivals",
+        "General Information",
+    ]
+
+    def classify_topic(self, fact_content: str) -> str:
+        """Classify a single fact into a topic using a focused Claude call."""
+        topic_list = ", ".join(self.KNOWN_TOPICS)
+        prompt = (
+            f"Classify this fact into exactly one topic: {topic_list}\n\n"
+            f"Fact: {fact_content[:500]}\n\n"
+            f"Reply with ONLY the topic name, nothing else."
+        )
+        raw = _call_claude(prompt).strip()
+        if raw in self.KNOWN_TOPICS:
+            return raw
+        # Fuzzy match — Claude sometimes adds/drops words
+        raw_lower = raw.lower()
+        for topic in self.KNOWN_TOPICS:
+            if topic.lower() in raw_lower or raw_lower in topic.lower():
+                return topic
+        logger.warning("Could not classify topic %r, using General Information", raw)
+        return "General Information"
+
+    def classify_unclassified_sync(self, db_path: str) -> int:
+        """Find all knowledge entries with NULL topic and classify them.
+
+        Returns the number of entries classified.
+        """
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT id, content FROM web_knowledge WHERE topic IS NULL").fetchall()
+
+        if not rows:
+            conn.close()
+            return 0
+
+        logger.info("Classifying %d unclassified knowledge entries", len(rows))
+        classified = 0
+        for row in rows:
+            try:
+                topic = self.classify_topic(row["content"])
+                conn.execute(
+                    "UPDATE web_knowledge SET topic = ? WHERE id = ?",
+                    (topic, row["id"]),
+                )
+                classified += 1
+            except Exception:
+                logger.warning("Failed to classify entry %d", row["id"])
+
+        conn.commit()
+        conn.close()
+        logger.info("Classified %d/%d entries", classified, len(rows))
+        return classified
+
     async def close(self):
         """Close the underlying HTTP client."""
         await self._client.aclose()

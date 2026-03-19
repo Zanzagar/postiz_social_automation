@@ -484,9 +484,20 @@ async def _run_web_crawl():
         finally:
             await iskcon.close()
 
-        logger.info("Crawl complete: %d processed, %d skipped (unchanged)", processed, skipped)
+        # Post-extraction: classify any entries that Claude missed topic on
+        _crawl_progress.update(phase="classifying unclassified entries...")
+        classifier = WordPressCrawler()
+        num_classified = classifier.classify_unclassified_sync(db_path)
+
+        logger.info(
+            "Crawl complete: %d processed, %d skipped, %d topics fixed",
+            processed,
+            skipped,
+            num_classified,
+        )
         _crawl_progress.update(
-            phase=f"complete — {processed} updated, {skipped} unchanged", running=False
+            phase=f"complete — {processed} updated, {skipped} unchanged, {num_classified} topics fixed",
+            running=False,
         )
     except Exception:
         logger.exception("Crawl task failed")
