@@ -97,5 +97,22 @@ def get_knowledge_context(
     except sqlite3.OperationalError:
         pass
 
+    # --- Top-performing hashtags ---
+    try:
+        hashtag_rows = conn.execute(
+            """SELECT hashtag, avg_engagement
+               FROM hashtag_performance
+               ORDER BY avg_engagement DESC LIMIT 10"""
+        ).fetchall()
+
+        if hashtag_rows:
+            tags = [f"#{r['hashtag']} (avg {r['avg_engagement']:.0f})" for r in hashtag_rows]
+            line = "SUGGESTED HASHTAGS: " + ", ".join(tags)
+            if char_count + len(line) <= max_chars:
+                parts.append(line)
+                parts.append("")
+    except sqlite3.OperationalError:
+        pass
+
     conn.close()
     return "\n".join(parts)

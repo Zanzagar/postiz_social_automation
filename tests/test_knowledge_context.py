@@ -49,6 +49,21 @@ def context_db(tmp_path):
         VALUES ('facebook', 'fb_1', 'Our cows enjoying the morning sun #CowProtection', 45, 8, 12, 'Cow Life');
         INSERT INTO social_history (platform, external_id, post_text, likes, comments, shares, pillar)
         VALUES ('instagram', 'ig_1', 'Farm life #GitaValley', 60, 5, 0, 'Farm Ops');
+        CREATE TABLE hashtag_performance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            hashtag TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            times_used INTEGER DEFAULT 0,
+            total_engagement INTEGER DEFAULT 0,
+            avg_engagement REAL DEFAULT 0.0,
+            trend TEXT DEFAULT 'stable',
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(hashtag, platform)
+        );
+        INSERT INTO hashtag_performance (hashtag, platform, times_used, total_engagement, avg_engagement)
+        VALUES ('GitaValley', 'instagram', 5, 500, 100.0);
+        INSERT INTO hashtag_performance (hashtag, platform, times_used, total_engagement, avg_engagement)
+        VALUES ('CowProtection', 'instagram', 3, 300, 100.0);
     """)
     conn.commit()
     conn.close()
@@ -85,3 +100,8 @@ class TestGetKnowledgeContext:
     def test_respects_token_limit(self, context_db):
         result = get_knowledge_context(str(context_db), max_chars=50)
         assert len(result) <= 200  # some overhead for headers
+
+    def test_includes_hashtag_suggestions(self, context_db):
+        result = get_knowledge_context(str(context_db))
+        assert "SUGGESTED HASHTAGS" in result
+        assert "#GitaValley" in result
