@@ -1,5 +1,13 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -356,14 +364,30 @@ export function CreatePage() {
     }
   }
 
+  // Unsaved content detection
+  const isDirty = useMemo(
+    () => !!(rawText.trim() || captions),
+    [rawText, captions],
+  );
+
+  // Warn on browser tab close / refresh when dirty
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
+
   // Tab switch confirmation
   const [pendingMode, setPendingMode] = useState<CreateMode | null>(null);
+  const showDiscardDialog = pendingMode !== null;
 
   function handleTabSwitch(newMode: string) {
     const target = newMode as CreateMode;
     if (target === mode) return;
-    const hasContent = rawText.trim() || captions;
-    if (hasContent) {
+    if (isDirty) {
       setPendingMode(target);
     } else {
       resetForm();
@@ -371,14 +395,15 @@ export function CreatePage() {
     }
   }
 
-  function confirmSwitch() {
-    if (!pendingMode) return;
-    resetForm();
-    setMode(pendingMode);
-    setPendingMode(null);
+  function confirmDiscard() {
+    if (pendingMode) {
+      resetForm();
+      setMode(pendingMode);
+      setPendingMode(null);
+    }
   }
 
-  function cancelSwitch() {
+  function cancelDiscard() {
     setPendingMode(null);
   }
 
@@ -396,35 +421,16 @@ export function CreatePage() {
 
       {/* Workflow toggle */}
       {templates.length > 0 && (
-        <div className="space-y-2">
-          <Tabs value={mode} onValueChange={handleTabSwitch}>
-            <TabsList className="w-full">
-              <TabsTrigger value="freeform" className="flex-1">
-                Write from Scratch
-              </TabsTrigger>
-              <TabsTrigger value="template" className="flex-1">
-                Use a Template
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          {/* Inline switch confirmation */}
-          {pendingMode && (
-            <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5">
-              <p className="text-sm text-amber-800">
-                You have unsaved content. Discard and switch?
-              </p>
-              <div className="flex gap-2">
-                <Button size="sm" variant="ghost" onClick={cancelSwitch}>
-                  Keep Editing
-                </Button>
-                <Button size="sm" variant="destructive" onClick={confirmSwitch}>
-                  Discard
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
+        <Tabs value={mode} onValueChange={handleTabSwitch}>
+          <TabsList className="w-full">
+            <TabsTrigger value="freeform" className="flex-1">
+              Write from Scratch
+            </TabsTrigger>
+            <TabsTrigger value="template" className="flex-1">
+              Use a Template
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       )}
 
       {/* MODE: Template */}
@@ -846,6 +852,26 @@ export function CreatePage() {
           </div>
         </div>
       )}
+
+      {/* Unsaved changes dialog */}
+      <Dialog open={showDiscardDialog} onOpenChange={(open) => !open && cancelDiscard()}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Unsaved Content</DialogTitle>
+            <DialogDescription>
+              You have content that hasn&apos;t been saved. What would you like to do?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={cancelDiscard} className="flex-1">
+              Keep Editing
+            </Button>
+            <Button variant="destructive" onClick={confirmDiscard} className="flex-1">
+              Discard
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
