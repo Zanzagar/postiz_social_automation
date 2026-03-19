@@ -193,20 +193,31 @@ async def _run_web_crawl():
     pillars = get_active_pillar_names()
     _crawl_progress = {"running": True, "source": "", "current": 0, "total": 0, "phase": "starting"}
 
+    skipped = 0
+    processed = 0
     try:
         # --- WordPress crawler (gitavalley.org) ---
         wp = WordPressCrawler()
         try:
-            _crawl_progress.update(source="gitavalley.org", phase="fetching pages")
+            _crawl_progress.update(source="gitavalley.org", phase="fetching pages from API")
             pages = await wp.crawl_all()
             _crawl_progress["total"] = len(pages)
 
             for i, page in enumerate(pages):
-                _crawl_progress.update(current=i + 1, phase=f"processing: {page['title'][:30]}")
-
-                # Skip if content unchanged
+                # Skip if content unchanged (SHA-256 match)
                 if _is_content_unchanged(db_path, page["url"], page["site"], page["content_hash"]):
+                    skipped += 1
+                    _crawl_progress.update(
+                        current=i + 1,
+                        phase=f"skipped (unchanged): {page['title'][:30]}",
+                    )
                     continue
+
+                processed += 1
+                _crawl_progress.update(
+                    current=i + 1,
+                    phase=f"extracting: {page['title'][:30]}",
+                )
 
                 try:
                     pillar = wp.classify_pillar(page["title"], page["body_text"], pillars)
@@ -230,15 +241,20 @@ async def _run_web_crawl():
             _crawl_progress["total"] = len(pages)
 
             for i, page in enumerate(pages):
-                _crawl_progress.update(current=i + 1, phase=f"processing: {page['title'][:30]}")
-
                 if _is_content_unchanged(db_path, page["url"], page["site"], page["content_hash"]):
+                    skipped += 1
+                    _crawl_progress.update(
+                        current=i + 1,
+                        phase=f"skipped (unchanged): {page['title'][:30]}",
+                    )
                     continue
+
+                processed += 1
+                _crawl_progress.update(current=i + 1, phase=f"extracting: {page['title'][:30]}")
 
                 try:
                     scraper.store_page_sync(db_path, page)
-                    # Extract knowledge using WordPress crawler's Claude methods
-                    if page["body_text"] and len(page["body_text"]) > 100:
+                    if page["body_text"] and len(page["body_text"]) > 200:
                         knowledge = wp.extract_knowledge(page["title"], page["body_text"])
                         if knowledge:
                             conn = sqlite3.connect(db_path)
@@ -254,7 +270,10 @@ async def _run_web_crawl():
         except Exception:
             logger.exception("ISKCON scraper failed")
 
-        _crawl_progress.update(phase="complete", running=False)
+        logger.info("Crawl complete: %d processed, %d skipped (unchanged)", processed, skipped)
+        _crawl_progress.update(
+            phase=f"complete — {processed} updated, {skipped} unchanged", running=False
+        )
     except Exception:
         logger.exception("Crawl task failed")
         _crawl_progress.update(phase="error", running=False)
