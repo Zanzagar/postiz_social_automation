@@ -19,7 +19,7 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from content_engine.models import ContentPillar, ContentRow, ContentStatus, Platform, Suggestion
+from content_engine.models import ContentRow, ContentStatus, Platform, Suggestion
 
 logger = logging.getLogger(__name__)
 
@@ -98,10 +98,7 @@ def _parse_content_row(row: list, row_number: int) -> ContentRow | None:
         pillar_str = _safe_get(row, 1)
         content_pillar = None
         if pillar_str:
-            try:
-                content_pillar = ContentPillar(pillar_str)
-            except ValueError:
-                logger.warning("Unknown pillar '%s' in row %d", pillar_str, row_number)
+            content_pillar = pillar_str
 
         raw_text = _safe_get(row, 2)
         media_url = _safe_get(row, 3) or None
@@ -311,7 +308,7 @@ class SheetsClient:
         values = [
             suggestion.suggested_date.isoformat(),
             suggestion.content_idea,
-            suggestion.suggested_pillar.value,
+            suggestion.suggested_pillar,
             suggestion.rationale,
             suggestion.media_suggestion,
             suggestion.status,
@@ -351,7 +348,7 @@ class SheetsClient:
                     Suggestion(
                         suggested_date=datetime.fromisoformat(_safe_get(row, 0)),
                         content_idea=_safe_get(row, 1),
-                        suggested_pillar=ContentPillar(_safe_get(row, 2)),
+                        suggested_pillar=_safe_get(row, 2),
                         rationale=_safe_get(row, 3),
                         media_suggestion=_safe_get(row, 4),
                         status=row_status,

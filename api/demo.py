@@ -6,7 +6,7 @@ Enable with DEMO_MODE=true in .env. No Google Sheets, Postiz, or Claude needed.
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
-from content_engine.models import ContentPillar, ContentRow, ContentStatus, Platform
+from content_engine.models import ContentRow, ContentStatus, Platform
 
 
 class DemoSheetsClient:
@@ -36,7 +36,7 @@ class DemoSheetsClient:
             ContentRow(
                 row_number=1,
                 date=today + timedelta(days=1),
-                content_pillar=ContentPillar.COW_LIFE,
+                content_pillar="Cow Life",
                 raw_text="Morning at the barn — Lakshmi and her calf enjoying the sunrise over the pasture. Our herd of 85 cows produces 400 gallons of ahimsa milk weekly.",
                 media_url="https://drive.google.com/demo/lakshmi-sunrise.jpg",
                 platforms={
@@ -55,7 +55,7 @@ class DemoSheetsClient:
             ContentRow(
                 row_number=2,
                 date=today + timedelta(days=2),
-                content_pillar=ContentPillar.FARM_OPS,
+                content_pillar="Farm Ops",
                 raw_text="Spring planting season begins! Our USDA-certified organic garden is expanding with new herb beds. Volunteers welcome every Saturday morning.",
                 platforms={
                     Platform.INSTAGRAM: True,
@@ -74,7 +74,7 @@ class DemoSheetsClient:
             ContentRow(
                 row_number=3,
                 date=today + timedelta(days=4),
-                content_pillar=ContentPillar.KITCHEN,
+                content_pillar="Kitchen",
                 raw_text="This week's CSA box: fresh lettuce, spring onions, radishes, and our famous paneer made from ahimsa milk.",
                 platforms={Platform.INSTAGRAM: True, Platform.FACEBOOK: True},
                 status=ContentStatus.PENDING_APPROVAL,
@@ -88,7 +88,7 @@ class DemoSheetsClient:
             ContentRow(
                 row_number=4,
                 date=today,
-                content_pillar=ContentPillar.COMMUNITY,
+                content_pillar="Community",
                 raw_text="Sunday Love Feast — every Sunday at 5pm. Free vegetarian meal, kirtan, and community gathering. All are welcome!",
                 platforms={Platform.INSTAGRAM: True, Platform.FACEBOOK: True},
                 status=ContentStatus.SCHEDULED,
@@ -102,7 +102,7 @@ class DemoSheetsClient:
             ContentRow(
                 row_number=5,
                 date=today - timedelta(days=2),
-                content_pillar=ContentPillar.SPIRITUAL,
+                content_pillar="Spiritual",
                 raw_text="Bhagavad Gita verse of the week: 'Whatever you do, whatever you eat, whatever you offer or give away — do it as an offering to Me.' (9.27)",
                 platforms={Platform.INSTAGRAM: True},
                 status=ContentStatus.POSTED,
@@ -115,7 +115,7 @@ class DemoSheetsClient:
             ContentRow(
                 row_number=6,
                 date=today - timedelta(days=5),
-                content_pillar=ContentPillar.COW_LIFE,
+                content_pillar="Cow Life",
                 raw_text="Meet Dennis the ox! He's been at Gita Valley for 12 years and loves belly rubs.",
                 platforms={Platform.INSTAGRAM: True, Platform.TIKTOK: True},
                 status=ContentStatus.POSTED,

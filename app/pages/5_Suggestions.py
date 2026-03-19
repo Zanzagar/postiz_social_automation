@@ -4,8 +4,6 @@ import os
 
 import streamlit as st
 
-from content_engine.models import ContentPillar
-
 st.set_page_config(page_title="Suggestions", page_icon="\U0001f4a1", layout="wide")
 
 from app.auth import check_password  # noqa: E402
@@ -43,7 +41,8 @@ if "sheets_client" not in st.session_state:
 
 col1, col2 = st.columns([1, 1])
 with col1:
-    pillar_options = ["All"] + [p.value for p in ContentPillar]
+    # Dynamic pillars would come from API; fallback to common set
+    pillar_options = ["All", "Cow Life", "Farm Ops", "Community", "Kitchen", "Spiritual", "CTA"]
     pillar_filter = st.selectbox("Filter by pillar", pillar_options)
 with col2:
     status_filter = st.selectbox("Status", ["suggested", "accepted", "dismissed"])
@@ -66,7 +65,7 @@ if st.session_state.sheets_client:
         else:
             for i, suggestion in enumerate(suggestions):
                 with st.container():
-                    st.markdown(f"### {suggestion.suggested_pillar.value}")
+                    st.markdown(f"### {suggestion.suggested_pillar}")
                     st.write(suggestion.content_idea)
                     st.caption(f"Suggested for: {suggestion.suggested_date.strftime('%Y-%m-%d')}")
                     st.caption(f"Rationale: {suggestion.rationale}")

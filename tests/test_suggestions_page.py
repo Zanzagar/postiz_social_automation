@@ -10,7 +10,7 @@ Tests verify:
 from datetime import datetime
 from pathlib import Path
 
-from content_engine.models import ContentPillar, Suggestion
+from content_engine.models import Suggestion
 
 
 class TestSuggestionsPageExists:
@@ -27,7 +27,7 @@ class TestFilterSuggestions:
             Suggestion(
                 suggested_date=datetime(2026, 3, 1),
                 content_idea="Morning milking photo",
-                suggested_pillar=ContentPillar.COW_LIFE,
+                suggested_pillar="Cow Life",
                 rationale="Cow Life underrepresented",
                 media_suggestion="Photo of cows",
                 status="suggested",
@@ -35,7 +35,7 @@ class TestFilterSuggestions:
             Suggestion(
                 suggested_date=datetime(2026, 3, 2),
                 content_idea="Farm tour video",
-                suggested_pillar=ContentPillar.FARM_OPS,
+                suggested_pillar="Farm Ops",
                 rationale="Engage visitors",
                 media_suggestion="Short reel",
                 status="suggested",
@@ -43,7 +43,7 @@ class TestFilterSuggestions:
             Suggestion(
                 suggested_date=datetime(2026, 3, 3),
                 content_idea="Community potluck",
-                suggested_pillar=ContentPillar.COMMUNITY,
+                suggested_pillar="Community",
                 rationale="Build engagement",
                 media_suggestion="Group photo",
                 status="accepted",
@@ -63,7 +63,7 @@ class TestFilterSuggestions:
         suggestions = self._make_suggestions()
         result = filter_suggestions(suggestions, pillar_filter="Cow Life", status_filter=None)
         assert len(result) == 1
-        assert result[0].suggested_pillar == ContentPillar.COW_LIFE
+        assert result[0].suggested_pillar == "Cow Life"
 
     def test_filter_by_status(self) -> None:
         from app.helpers.suggestions_helpers import filter_suggestions
@@ -81,7 +81,7 @@ class TestFilterSuggestions:
             suggestions, pillar_filter="Community", status_filter="accepted"
         )
         assert len(result) == 1
-        assert result[0].suggested_pillar == ContentPillar.COMMUNITY
+        assert result[0].suggested_pillar == "Community"
 
     def test_filter_returns_empty_when_no_match(self) -> None:
         from app.helpers.suggestions_helpers import filter_suggestions
@@ -100,12 +100,12 @@ class TestPrepareAcceptData:
         suggestion = Suggestion(
             suggested_date=datetime(2026, 3, 1),
             content_idea="Morning milking photo",
-            suggested_pillar=ContentPillar.COW_LIFE,
+            suggested_pillar="Cow Life",
             rationale="Cow Life underrepresented",
             media_suggestion="Photo of cows",
         )
         data = prepare_accept_data(suggestion)
         assert data["prefill_caption"] == "Morning milking photo"
-        assert data["prefill_pillar"] == ContentPillar.COW_LIFE
+        assert data["prefill_pillar"] == "Cow Life"
         assert data["prefill_date"] == datetime(2026, 3, 1)
         assert data["prefill_media_suggestion"] == "Photo of cows"

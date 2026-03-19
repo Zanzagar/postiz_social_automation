@@ -13,7 +13,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from content_engine.models import ContentPillar, ContentRow, Platform, Suggestion
+from content_engine.models import ContentRow, Platform, Suggestion
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ class CaptionGenerator:
                     Suggestion(
                         suggested_date=datetime.fromisoformat(item["date"]),
                         content_idea=item["idea"],
-                        suggested_pillar=ContentPillar(item["pillar"]),
+                        suggested_pillar=item["pillar"],
                         rationale=item["rationale"],
                         media_suggestion=item["media"],
                     )
@@ -135,9 +135,17 @@ class CaptionGenerator:
                 logger.warning("Skipping malformed suggestion: %s", e)
         return suggestions
 
-    def infer_pillar(self, raw_text: str) -> ContentPillar:
-        """AI-infer content pillar from caption text."""
-        pillar_values = ", ".join(p.value for p in ContentPillar)
+    def infer_pillar(self, raw_text: str, known_pillars: list[str] | None = None) -> str:
+        """AI-infer content pillar from caption text.
+
+        Args:
+            raw_text: The post text to classify.
+            known_pillars: Dynamic pillar names from the database. Falls back to
+                a default set if not provided.
+        """
+        if not known_pillars:
+            known_pillars = ["Cow Life", "Farm Ops", "Community", "Kitchen", "Spiritual", "CTA"]
+        pillar_values = ", ".join(known_pillars)
         prompt = (
             f"Classify this social media post into exactly one of these categories: "
             f"{pillar_values}\n\n"
@@ -145,13 +153,11 @@ class CaptionGenerator:
             f"Reply with ONLY the category name, nothing else."
         )
         raw = _call_claude(prompt)
-        try:
-            return ContentPillar(raw.strip())
-        except ValueError:
-            logger.warning(
-                "Unrecognised pillar %r from Claude, defaulting to COW_LIFE", raw.strip()
-            )
-            return ContentPillar.COW_LIFE
+        result = raw.strip()
+        if result in known_pillars:
+            return result
+        logger.warning("Unrecognised pillar %r from Claude, using first pillar", result)
+        return known_pillars[0] if known_pillars else "General"
 
     def iterate_single_caption(
         self,
@@ -190,7 +196,7 @@ class CaptionGenerator:
         parts.append("CONTENT TO POST:")
         parts.append(f"- Raw text: {row.raw_text}")
         if row.content_pillar:
-            parts.append(f"- Content pillar: {row.content_pillar.value}")
+            parts.append(f"- Content pillar: {row.content_pillar}")
         if row.media_url:
             parts.append("- Has media: yes (photo/video)")
         parts.append("")

@@ -2749,7 +2749,7 @@
   "phase1-content-creation": {
     "tasks": [
       {
-        "id": "1",
+        "id": 1,
         "title": "Set up SQLite database with Alembic migrations",
         "description": "Initialize SQLite database infrastructure at data/gvsa.db with Alembic for schema management. Create content_rows, users, content_iterations, templates, and publish_config tables.",
         "details": "1. Add aiosqlite and SQLAlchemy to pyproject.toml dependencies\n2. Initialize Alembic with `alembic init alembic`\n3. Configure alembic.ini for SQLite at data/gvsa.db\n4. Create SQLAlchemy models in api/models.py:\n\n```python\nfrom sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON, ForeignKey, Text\nfrom sqlalchemy.ext.declarative import declarative_base\nfrom sqlalchemy.orm import relationship\nfrom datetime import datetime\n\nBase = declarative_base()\n\nclass User(Base):\n    __tablename__ = 'users'\n    id = Column(Integer, primary_key=True)\n    username = Column(String(100), unique=True, nullable=False)\n    display_name = Column(String(200))\n    password_hash = Column(String(255), nullable=False)\n    created_at = Column(DateTime, default=datetime.utcnow)\n\nclass ContentRow(Base):\n    __tablename__ = 'content_rows'\n    id = Column(Integer, primary_key=True)\n    date = Column(DateTime, nullable=False)\n    pillar = Column(String(50))\n    raw_text = Column(Text, nullable=False)\n    media_url = Column(String(500))\n    platforms = Column(JSON, default={})\n    status = Column(String(50), default='draft')\n    captions = Column(JSON, default={})\n    postiz_ids = Column(JSON, default=[])\n    posted_at = Column(DateTime)\n    feedback = Column(Text)\n    source = Column(String(50), default='staff')\n    template_id = Column(Integer, ForeignKey('templates.id'), nullable=True)\n    created_by = Column(Integer, ForeignKey('users.id'))\n    media_catalog_ids = Column(JSON, nullable=True)  # Phase 3\n    audience_segment_id = Column(Integer, nullable=True)  # Phase 4\n    require_manual_approval = Column(Boolean, default=False)\n    auto_publish_at = Column(DateTime, nullable=True)\n    created_at = Column(DateTime, default=datetime.utcnow)\n    updated_at = Column(DateTime, onupdate=datetime.utcnow)\n\nclass ContentIteration(Base):\n    __tablename__ = 'content_iterations'\n    id = Column(Integer, primary_key=True)\n    content_row_id = Column(Integer, ForeignKey('content_rows.id'), nullable=False)\n    platform = Column(String(50), nullable=False)\n    old_caption = Column(Text)\n    new_caption = Column(Text, nullable=False)\n    refinement_instruction = Column(Text)\n    mode = Column(String(20))  # create/refine/repurpose\n    created_by = Column(Integer, ForeignKey('users.id'))\n    created_at = Column(DateTime, default=datetime.utcnow)\n\nclass Template(Base):\n    __tablename__ = 'templates'\n    id = Column(Integer, primary_key=True)\n    name = Column(String(200), nullable=False)\n    pillar = Column(String(50))\n    platform_instructions = Column(JSON, default={})\n    raw_text_template = Column(Text, nullable=False)  # with {{variables}}\n    variables = Column(JSON, default=[])  # [{name, type}]\n    schedule_pattern = Column(String(100))  # weekly:sunday, manual\n    default_segment_id = Column(Integer, nullable=True)\n    created_by = Column(Integer, ForeignKey('users.id'))\n    created_at = Column(DateTime, default=datetime.utcnow)\n    updated_at = Column(DateTime, onupdate=datetime.utcnow)\n\nclass PublishConfig(Base):\n    __tablename__ = 'publish_config'\n    id = Column(Integer, primary_key=True)\n    platform = Column(String(50), unique=True, nullable=False)\n    enabled = Column(Boolean, default=False)\n    delay_hours = Column(Integer, default=2)\n    pillar_overrides = Column(JSON, default={})  # {pillar: enabled}\n    updated_by = Column(Integer, ForeignKey('users.id'))\n    updated_at = Column(DateTime, onupdate=datetime.utcnow)\n```\n\n5. Create initial migration: `alembic revision --autogenerate -m 'initial_schema'`\n6. Seed starter templates in migration upgrade() for: Sunday Feast, Weekly Verse, Farm Update, Event Promotion\n7. Add database connection helpers in api/database.py using aiosqlite",
@@ -2824,7 +2824,7 @@
         "updatedAt": "2026-03-17T19:30:56.816Z"
       },
       {
-        "id": "2",
+        "id": 2,
         "title": "Create database repository layer",
         "description": "Build an async SQLite repository layer that mirrors the existing SheetsClient interface, enabling seamless transition from Google Sheets to SQLite.",
         "details": "Create api/repositories/content.py:\n\n```python\nfrom sqlalchemy.ext.asyncio import AsyncSession, create_async_engine\nfrom sqlalchemy.orm import sessionmaker\nfrom sqlalchemy import select, update, delete\nfrom api.models import ContentRow, ContentIteration, Template, PublishConfig, User\nfrom content_engine.models import ContentStatus, Platform\nfrom typing import Optional\nfrom datetime import datetime\n\nclass ContentRepository:\n    def __init__(self, session: AsyncSession):\n        self.session = session\n\n    async def get_rows_by_status(self, status: ContentStatus) -> list[ContentRow]:\n        result = await self.session.execute(\n            select(ContentRow).where(ContentRow.status == status.value)\n        )\n        return result.scalars().all()\n\n    async def get_all_content_rows(self) -> list[ContentRow]:\n        result = await self.session.execute(select(ContentRow))\n        return result.scalars().all()\n\n    async def get_content_row(self, row_id: int) -> Optional[ContentRow]:\n        return await self.session.get(ContentRow, row_id)\n\n    async def create_content_row(self, data: dict) -> ContentRow:\n        row = ContentRow(**data)\n        self.session.add(row)\n        await self.session.commit()\n        await self.session.refresh(row)\n        return row\n\n    async def update_captions(self, row_id: int, captions: dict) -> None:\n        await self.session.execute(\n            update(ContentRow)\n            .where(ContentRow.id == row_id)\n            .values(captions=captions, updated_at=datetime.utcnow())\n        )\n        await self.session.commit()\n\n    async def update_status(self, row_id: int, status: ContentStatus, error_msg: str = None) -> None:\n        values = {'status': status.value, 'updated_at': datetime.utcnow()}\n        if error_msg:\n            values['error_msg'] = error_msg\n        await self.session.execute(\n            update(ContentRow).where(ContentRow.id == row_id).values(**values)\n        )\n        await self.session.commit()\n\n    # Iteration methods\n    async def add_iteration(self, data: dict) -> ContentIteration:\n        iteration = ContentIteration(**data)\n        self.session.add(iteration)\n        await self.session.commit()\n        await self.session.refresh(iteration)\n        return iteration\n\n    async def get_iterations(self, content_row_id: int) -> list[ContentIteration]:\n        result = await self.session.execute(\n            select(ContentIteration)\n            .where(ContentIteration.content_row_id == content_row_id)\n            .order_by(ContentIteration.created_at)\n        )\n        return result.scalars().all()\n\n    # Template methods\n    async def get_templates(self) -> list[Template]:\n        result = await self.session.execute(select(Template))\n        return result.scalars().all()\n\n    async def get_template(self, template_id: int) -> Optional[Template]:\n        return await self.session.get(Template, template_id)\n\n    async def create_template(self, data: dict) -> Template:\n        template = Template(**data)\n        self.session.add(template)\n        await self.session.commit()\n        await self.session.refresh(template)\n        return template\n\n    async def update_template(self, template_id: int, data: dict) -> Optional[Template]:\n        await self.session.execute(\n            update(Template).where(Template.id == template_id).values(**data)\n        )\n        await self.session.commit()\n        return await self.get_template(template_id)\n\n    async def delete_template(self, template_id: int) -> bool:\n        await self.session.execute(delete(Template).where(Template.id == template_id))\n        await self.session.commit()\n        return True\n```\n\nUpdate api/dependencies.py to add async database session dependency",
@@ -2841,7 +2841,7 @@
         "updatedAt": "2026-03-17T19:33:36.781Z"
       },
       {
-        "id": "3",
+        "id": 3,
         "title": "Build Google Sheets import/export adapter",
         "description": "Create a bidirectional adapter that polls Google Sheets for new READY rows, imports them to SQLite, and exports status updates back to Sheets.",
         "details": "Create api/adapters/sheets_sync.py:\n\n```python\nimport asyncio\nfrom datetime import datetime\nfrom typing import Optional\nfrom content_engine.sheets import SheetsClient\nfrom api.repositories.content import ContentRepository\nfrom content_engine.models import ContentStatus, Platform\nimport logging\n\nlogger = logging.getLogger(__name__)\n\nclass SheetsSyncAdapter:\n    \"\"\"Syncs content between Google Sheets and SQLite.\n    \n    Import: Poll Sheet for rows with status='READY', insert into SQLite,\n            mark as 'imported' in Sheet.\n    Export: Push status changes back to Sheet for rows that originated from import.\n    \"\"\"\n    \n    def __init__(self, sheets_client: SheetsClient, repo: ContentRepository):\n        self.sheets = sheets_client\n        self.repo = repo\n    \n    async def import_ready_rows(self) -> list[int]:\n        \"\"\"Import all READY rows from Sheet to SQLite.\"\"\"\n        rows = self.sheets.get_rows_by_status(ContentStatus.READY)\n        imported_ids = []\n        \n        for row in rows:\n            # Check if already imported (by row_number + source=sheet)\n            existing = await self.repo.find_by_sheet_row(row.row_number)\n            if existing:\n                continue\n                \n            # Insert into SQLite\n            content_row = await self.repo.create_content_row({\n                'date': row.date,\n                'pillar': row.content_pillar.value if row.content_pillar else None,\n                'raw_text': row.raw_text,\n                'media_url': str(row.media_url) if row.media_url else None,\n                'platforms': {p.value: v for p, v in row.platforms.items()},\n                'status': ContentStatus.DRAFT.value,\n                'captions': {p.value: v for p, v in row.captions.items()},\n                'source': 'sheet',\n                'sheet_row_number': row.row_number,  # Track origin\n            })\n            \n            # Mark as imported in Sheet\n            self.sheets.update_status(row.row_number, ContentStatus.DRAFT)\n            imported_ids.append(content_row.id)\n            \n        return imported_ids\n    \n    async def export_status_updates(self) -> int:\n        \"\"\"Push status changes to Sheet for sheet-originated rows.\"\"\"\n        # Get all SQLite rows with source='sheet' that have status changes\n        rows = await self.repo.get_rows_needing_sheet_sync()\n        synced = 0\n        \n        for row in rows:\n            if row.sheet_row_number:\n                self.sheets.update_status(\n                    row.sheet_row_number,\n                    ContentStatus(row.status),\n                    row.error_msg\n                )\n                if row.postiz_ids:\n                    self.sheets.update_postiz_ids(\n                        row.sheet_row_number,\n                        ','.join(row.postiz_ids),\n                        row.posted_at\n                    )\n                # Mark as synced\n                await self.repo.mark_sheet_synced(row.id)\n                synced += 1\n                \n        return synced\n\n# Background task runner\nasync def run_sheets_sync_loop(adapter: SheetsSyncAdapter, interval_seconds: int = 60):\n    while True:\n        try:\n            imported = await adapter.import_ready_rows()\n            if imported:\n                logger.info(f'Imported {len(imported)} rows from Sheet')\n            exported = await adapter.export_status_updates()\n            if exported:\n                logger.info(f'Exported {exported} status updates to Sheet')\n        except Exception as e:\n            logger.exception('Sheet sync error')\n        await asyncio.sleep(interval_seconds)\n```\n\nAdd sheet_row_number and sheet_synced_at columns to content_rows table via Alembic migration.",
@@ -2921,7 +2921,7 @@
         "updatedAt": "2026-03-18T01:26:08.231Z"
       },
       {
-        "id": "4",
+        "id": 4,
         "title": "Update FastAPI endpoints to use SQLite",
         "description": "Migrate all existing FastAPI endpoints from Google Sheets to SQLite while maintaining backward-compatible response shapes.",
         "details": "Update api/dependencies.py:\n```python\nfrom sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker\nfrom api.models import Base\n\n_engine = None\n_session_factory = None\n\nasync def get_db() -> AsyncSession:\n    global _engine, _session_factory\n    if _engine is None:\n        settings = get_settings()\n        _engine = create_async_engine(f'sqlite+aiosqlite:///{settings.database_path}')\n        _session_factory = async_sessionmaker(_engine, expire_on_commit=False)\n    async with _session_factory() as session:\n        yield session\n\ndef get_content_repo(session: AsyncSession = Depends(get_db)):\n    return ContentRepository(session)\n```\n\nUpdate api/routes/content.py:\n```python\n@router.get('/drafts', response_model=list[ContentRowResponse])\nasync def get_drafts(repo=Depends(get_content_repo)):\n    rows = await repo.get_rows_by_status(ContentStatus.PENDING_APPROVAL)\n    return [_row_to_response(r) for r in rows]\n\n@router.get('/calendar', response_model=CalendarResponse)\nasync def get_calendar(repo=Depends(get_content_repo)):\n    entries = []\n    for status in [ContentStatus.APPROVED, ContentStatus.SCHEDULED, ContentStatus.POSTED]:\n        rows = await repo.get_rows_by_status(status)\n        entries.extend([_entry_from_row(r) for r in rows])\n    entries.sort(key=lambda e: e.date)\n    return CalendarResponse(entries=entries, total=len(entries))\n```\n\nSimilar updates for all endpoints in content.py, generate.py, maintaining exact response schemas.\n\nAdd database_path to api/config.py Settings class with default 'data/gvsa.db'",
@@ -2986,7 +2986,7 @@
         "updatedAt": "2026-03-18T01:36:09.717Z"
       },
       {
-        "id": "5",
+        "id": 5,
         "title": "Implement AI content iteration backend",
         "description": "Build POST /api/iterate endpoint that regenerates a single platform caption based on user instruction, and GET /api/iterations/{content_id} for iteration history.",
         "details": "Add to api/schemas.py:\n```python\nclass IterateRequest(BaseModel):\n    content_row_id: int\n    platform: str  # instagram, facebook, etc.\n    instruction: str  # 'Make it more casual', 'Add a call to action'\n    mode: str = 'refine'  # create, refine, repurpose\n\nclass IterationResponse(BaseModel):\n    id: int\n    content_row_id: int\n    platform: str\n    old_caption: str | None\n    new_caption: str\n    refinement_instruction: str\n    mode: str\n    created_by: int | None\n    created_at: datetime\n\nclass IterateResponse(BaseModel):\n    caption: str\n    iteration_id: int\n```\n\nCreate api/routes/iterate.py:\n```python\nfrom fastapi import APIRouter, Depends, HTTPException\nfrom api.auth import get_current_user\nfrom api.dependencies import get_content_repo, get_caption_generator\nfrom api.schemas import IterateRequest, IterateResponse, IterationResponse\nfrom content_engine.models import Platform\n\nrouter = APIRouter(prefix='/api', tags=['iterate'], dependencies=[Depends(get_current_user)])\n\n@router.post('/iterate', response_model=IterateResponse)\nasync def iterate_caption(\n    req: IterateRequest,\n    repo=Depends(get_content_repo),\n    generator=Depends(get_caption_generator),\n    user=Depends(get_current_user)\n):\n    # Get existing content row\n    row = await repo.get_content_row(req.content_row_id)\n    if not row:\n        raise HTTPException(404, 'Content row not found')\n    \n    # Get current caption for platform\n    platform = Platform(req.platform)\n    old_caption = row.captions.get(req.platform)\n    \n    # Build iteration prompt and call Claude\n    new_caption = await iterate_single_caption(\n        generator,\n        original_caption=old_caption,\n        platform=platform,\n        instruction=req.instruction,\n        raw_text=row.raw_text,\n        pillar=row.pillar\n    )\n    \n    # Save iteration history\n    iteration = await repo.add_iteration({\n        'content_row_id': req.content_row_id,\n        'platform': req.platform,\n        'old_caption': old_caption,\n        'new_caption': new_caption,\n        'refinement_instruction': req.instruction,\n        'mode': req.mode,\n        'created_by': user.id if hasattr(user, 'id') else None\n    })\n    \n    # Update content row with new caption\n    updated_captions = {**row.captions, req.platform: new_caption}\n    await repo.update_captions(req.content_row_id, updated_captions)\n    \n    return IterateResponse(caption=new_caption, iteration_id=iteration.id)\n\n@router.get('/iterations/{content_id}', response_model=list[IterationResponse])\nasync def get_iterations(content_id: int, repo=Depends(get_content_repo)):\n    iterations = await repo.get_iterations(content_id)\n    return [IterationResponse(\n        id=i.id,\n        content_row_id=i.content_row_id,\n        platform=i.platform,\n        old_caption=i.old_caption,\n        new_caption=i.new_caption,\n        refinement_instruction=i.refinement_instruction,\n        mode=i.mode,\n        created_by=i.created_by,\n        created_at=i.created_at\n    ) for i in iterations]\n```\n\nAdd iterate_single_caption() to content_engine/generator.py:\n```python\ndef iterate_single_caption(\n    self,\n    original_caption: str | None,\n    platform: Platform,\n    instruction: str,\n    raw_text: str,\n    pillar: str | None\n) -> str:\n    prompt = f\"\"\"{BRAND_RULES}\n\nORIGINAL CAPTION ({platform.value}):\n{original_caption or '(none)'}\n\nORIGINAL POST IDEA:\n{raw_text}\n\n{'CONTENT PILLAR: ' + pillar if pillar else ''}\n\nUSER INSTRUCTION:\n{instruction}\n\nPLATFORM RULES FOR {platform.value.upper()}:\n{PLATFORM_INSTRUCTIONS.get(platform, '')}\n\nGenerate an improved caption for {platform.value} based on the user instruction.\nRespond with ONLY the caption text, no explanations.\n\"\"\"\n    return _call_claude(prompt)\n```",
@@ -3051,7 +3051,7 @@
         "updatedAt": "2026-03-18T01:39:09.189Z"
       },
       {
-        "id": "6",
+        "id": 6,
         "title": "Implement content templates CRUD API",
         "description": "Build complete CRUD endpoints for templates: GET/POST/PUT/DELETE /api/templates and POST /api/templates/{id}/generate for variable substitution and caption generation.",
         "details": "Add to api/schemas.py:\n```python\nclass TemplateVariable(BaseModel):\n    name: str\n    type: str  # text, date, etc.\n\nclass TemplateCreateRequest(BaseModel):\n    name: str\n    pillar: str | None = None\n    platform_instructions: dict[str, str] = {}\n    raw_text_template: str  # with {{variables}}\n    variables: list[TemplateVariable]\n    schedule_pattern: str | None = None  # weekly:sunday, manual\n    default_segment_id: int | None = None\n\nclass TemplateResponse(BaseModel):\n    id: int\n    name: str\n    pillar: str | None\n    platform_instructions: dict[str, str]\n    raw_text_template: str\n    variables: list[TemplateVariable]\n    schedule_pattern: str | None\n    default_segment_id: int | None\n    created_at: datetime\n    updated_at: datetime | None\n\nclass GenerateFromTemplateRequest(BaseModel):\n    variable_values: dict[str, str]  # {variable_name: value}\n    platforms: list[str]\n    scheduled_date: str\n```\n\nCreate api/routes/templates.py:\n```python\nimport re\nfrom fastapi import APIRouter, Depends, HTTPException\nfrom api.auth import get_current_user\nfrom api.dependencies import get_content_repo, get_caption_generator\nfrom api.schemas import (\n    TemplateCreateRequest, TemplateResponse, \n    GenerateFromTemplateRequest, ContentRowResponse\n)\n\nrouter = APIRouter(prefix='/api/templates', tags=['templates'], dependencies=[Depends(get_current_user)])\n\n@router.get('', response_model=list[TemplateResponse])\nasync def list_templates(repo=Depends(get_content_repo)):\n    templates = await repo.get_templates()\n    return [_template_to_response(t) for t in templates]\n\n@router.post('', response_model=TemplateResponse)\nasync def create_template(req: TemplateCreateRequest, repo=Depends(get_content_repo), user=Depends(get_current_user)):\n    template = await repo.create_template({\n        'name': req.name,\n        'pillar': req.pillar,\n        'platform_instructions': req.platform_instructions,\n        'raw_text_template': req.raw_text_template,\n        'variables': [v.model_dump() for v in req.variables],\n        'schedule_pattern': req.schedule_pattern,\n        'default_segment_id': req.default_segment_id,\n        'created_by': user.id if hasattr(user, 'id') else None\n    })\n    return _template_to_response(template)\n\n@router.get('/{template_id}', response_model=TemplateResponse)\nasync def get_template(template_id: int, repo=Depends(get_content_repo)):\n    template = await repo.get_template(template_id)\n    if not template:\n        raise HTTPException(404, 'Template not found')\n    return _template_to_response(template)\n\n@router.put('/{template_id}', response_model=TemplateResponse)\nasync def update_template(template_id: int, req: TemplateCreateRequest, repo=Depends(get_content_repo)):\n    template = await repo.update_template(template_id, req.model_dump())\n    if not template:\n        raise HTTPException(404, 'Template not found')\n    return _template_to_response(template)\n\n@router.delete('/{template_id}')\nasync def delete_template(template_id: int, repo=Depends(get_content_repo)):\n    await repo.delete_template(template_id)\n    return {'deleted': True}\n\n@router.post('/{template_id}/generate', response_model=ContentRowResponse)\nasync def generate_from_template(\n    template_id: int,\n    req: GenerateFromTemplateRequest,\n    repo=Depends(get_content_repo),\n    generator=Depends(get_caption_generator),\n    user=Depends(get_current_user)\n):\n    template = await repo.get_template(template_id)\n    if not template:\n        raise HTTPException(404, 'Template not found')\n    \n    # Variable substitution\n    raw_text = template.raw_text_template\n    for var_name, var_value in req.variable_values.items():\n        raw_text = raw_text.replace(f'{{{{{var_name}}}}}', var_value)\n    \n    # Verify all variables substituted\n    remaining = re.findall(r'\\{\\{(\\w+)\\}\\}', raw_text)\n    if remaining:\n        raise HTTPException(400, f'Missing variables: {remaining}')\n    \n    # Create content row\n    from datetime import datetime\n    content_row = await repo.create_content_row({\n        'date': datetime.fromisoformat(req.scheduled_date),\n        'pillar': template.pillar,\n        'raw_text': raw_text,\n        'platforms': {p: True for p in req.platforms},\n        'status': 'draft',\n        'captions': {},\n        'source': 'template',\n        'template_id': template_id,\n        'created_by': user.id if hasattr(user, 'id') else None\n    })\n    \n    # Generate captions\n    captions = await asyncio.to_thread(\n        generator.generate_captions,\n        _row_to_engine_model(content_row)\n    )\n    await repo.update_captions(content_row.id, {k.value: v for k, v in captions.items()})\n    \n    return _row_to_response(await repo.get_content_row(content_row.id))\n```",
@@ -3115,7 +3115,7 @@
         "updatedAt": "2026-03-18T01:43:25.294Z"
       },
       {
-        "id": "7",
+        "id": 7,
         "title": "Implement auto-publish configuration API",
         "description": "Build GET/PUT /api/settings/publish endpoints for configuring per-platform auto-publish with delay windows and pillar overrides.",
         "details": "Add to api/schemas.py:\n```python\nclass PlatformPublishConfig(BaseModel):\n    platform: str\n    enabled: bool = False\n    delay_hours: int = 2\n    pillar_overrides: dict[str, bool] = {}  # {pillar: enabled}\n\nclass PublishConfigResponse(BaseModel):\n    platforms: list[PlatformPublishConfig]\n\nclass UpdatePublishConfigRequest(BaseModel):\n    platforms: list[PlatformPublishConfig]\n```\n\nCreate api/routes/settings.py:\n```python\nfrom fastapi import APIRouter, Depends\nfrom api.auth import get_current_user\nfrom api.dependencies import get_content_repo\nfrom api.schemas import PublishConfigResponse, UpdatePublishConfigRequest, PlatformPublishConfig\nfrom content_engine.models import Platform\n\nrouter = APIRouter(prefix='/api/settings', tags=['settings'], dependencies=[Depends(get_current_user)])\n\n@router.get('/publish', response_model=PublishConfigResponse)\nasync def get_publish_config(repo=Depends(get_content_repo)):\n    configs = await repo.get_publish_configs()\n    # Ensure all platforms have entries\n    platform_map = {c.platform: c for c in configs}\n    result = []\n    for platform in Platform:\n        if platform.value in platform_map:\n            c = platform_map[platform.value]\n            result.append(PlatformPublishConfig(\n                platform=c.platform,\n                enabled=c.enabled,\n                delay_hours=c.delay_hours,\n                pillar_overrides=c.pillar_overrides or {}\n            ))\n        else:\n            result.append(PlatformPublishConfig(platform=platform.value))\n    return PublishConfigResponse(platforms=result)\n\n@router.put('/publish', response_model=PublishConfigResponse)\nasync def update_publish_config(\n    req: UpdatePublishConfigRequest,\n    repo=Depends(get_content_repo),\n    user=Depends(get_current_user)\n):\n    for config in req.platforms:\n        await repo.upsert_publish_config(\n            platform=config.platform,\n            enabled=config.enabled,\n            delay_hours=config.delay_hours,\n            pillar_overrides=config.pillar_overrides,\n            updated_by=user.id if hasattr(user, 'id') else None\n        )\n    return await get_publish_config(repo)\n```\n\nAdd auto-publish logic to approval flow in api/routes/content.py:\n```python\n@router.post('/drafts/{row_id}/approve', response_model=ApproveResponse)\nasync def approve_draft(\n    row_id: int,\n    repo=Depends(get_content_repo),\n    postiz=Depends(get_postiz_client)\n):\n    row = await repo.get_content_row(row_id)\n    if not row:\n        raise HTTPException(404, 'Row not found')\n    \n    # Check auto-publish config\n    if not row.require_manual_approval:\n        configs = await repo.get_publish_configs()\n        config_map = {c.platform: c for c in configs}\n        \n        auto_publish_at = None\n        for platform, enabled in row.platforms.items():\n            if not enabled:\n                continue\n            config = config_map.get(platform)\n            if config and config.enabled:\n                # Check pillar override\n                if row.pillar and config.pillar_overrides.get(row.pillar) is False:\n                    continue\n                # Calculate auto-publish time\n                delay = timedelta(hours=config.delay_hours)\n                publish_time = datetime.utcnow() + delay\n                if auto_publish_at is None or publish_time > auto_publish_at:\n                    auto_publish_at = publish_time\n        \n        if auto_publish_at:\n            await repo.update_auto_publish_at(row_id, auto_publish_at)\n    \n    await repo.update_status(row_id, ContentStatus.APPROVED)\n    # ... rest of Postiz integration\n```",
@@ -3132,7 +3132,7 @@
         "updatedAt": "2026-03-18T01:48:28.362Z"
       },
       {
-        "id": "8",
+        "id": 8,
         "title": "Add frontend API client methods for new endpoints",
         "description": "Extend frontend/src/lib/api.ts with typed methods for iterate, iterations, templates CRUD, and publish settings endpoints.",
         "details": "Add to frontend/src/lib/api.ts:\n```typescript\n// --- Iteration Types ---\nexport interface IterateRequest {\n  content_row_id: number;\n  platform: string;\n  instruction: string;\n  mode: 'create' | 'refine' | 'repurpose';\n}\n\nexport interface IterationResponse {\n  id: number;\n  content_row_id: number;\n  platform: string;\n  old_caption: string | null;\n  new_caption: string;\n  refinement_instruction: string;\n  mode: string;\n  created_by: number | null;\n  created_at: string;\n}\n\nexport interface IterateResponse {\n  caption: string;\n  iteration_id: number;\n}\n\n// --- Template Types ---\nexport interface TemplateVariable {\n  name: string;\n  type: string;\n}\n\nexport interface Template {\n  id: number;\n  name: string;\n  pillar: string | null;\n  platform_instructions: Record<string, string>;\n  raw_text_template: string;\n  variables: TemplateVariable[];\n  schedule_pattern: string | null;\n  created_at: string;\n  updated_at: string | null;\n}\n\nexport interface CreateTemplateRequest {\n  name: string;\n  pillar?: string;\n  platform_instructions?: Record<string, string>;\n  raw_text_template: string;\n  variables: TemplateVariable[];\n  schedule_pattern?: string;\n}\n\nexport interface GenerateFromTemplateRequest {\n  variable_values: Record<string, string>;\n  platforms: string[];\n  scheduled_date: string;\n}\n\n// --- Publish Config Types ---\nexport interface PlatformPublishConfig {\n  platform: string;\n  enabled: boolean;\n  delay_hours: number;\n  pillar_overrides: Record<string, boolean>;\n}\n\nexport interface PublishConfigResponse {\n  platforms: PlatformPublishConfig[];\n}\n\n// --- API Functions ---\nexport const api = {\n  // ... existing methods ...\n\n  // Iteration\n  iterate(data: IterateRequest) {\n    return request<IterateResponse>('/api/iterate', {\n      method: 'POST',\n      body: JSON.stringify(data),\n    });\n  },\n\n  getIterations(contentId: number) {\n    return request<IterationResponse[]>(`/api/iterations/${contentId}`);\n  },\n\n  // Templates\n  getTemplates() {\n    return request<Template[]>('/api/templates');\n  },\n\n  getTemplate(templateId: number) {\n    return request<Template>(`/api/templates/${templateId}`);\n  },\n\n  createTemplate(data: CreateTemplateRequest) {\n    return request<Template>('/api/templates', {\n      method: 'POST',\n      body: JSON.stringify(data),\n    });\n  },\n\n  updateTemplate(templateId: number, data: CreateTemplateRequest) {\n    return request<Template>(`/api/templates/${templateId}`, {\n      method: 'PUT',\n      body: JSON.stringify(data),\n    });\n  },\n\n  deleteTemplate(templateId: number) {\n    return request<{ deleted: boolean }>(`/api/templates/${templateId}`, {\n      method: 'DELETE',\n    });\n  },\n\n  generateFromTemplate(templateId: number, data: GenerateFromTemplateRequest) {\n    return request<ContentRow>(`/api/templates/${templateId}/generate`, {\n      method: 'POST',\n      body: JSON.stringify(data),\n    });\n  },\n\n  // Publish Settings\n  getPublishConfig() {\n    return request<PublishConfigResponse>('/api/settings/publish');\n  },\n\n  updatePublishConfig(platforms: PlatformPublishConfig[]) {\n    return request<PublishConfigResponse>('/api/settings/publish', {\n      method: 'PUT',\n      body: JSON.stringify({ platforms }),\n    });\n  },\n};\n```",
@@ -3151,7 +3151,7 @@
         "updatedAt": "2026-03-18T01:57:26.108Z"
       },
       {
-        "id": "9",
+        "id": 9,
         "title": "Build unified ContentEditor modal component",
         "description": "Create a shared React modal component for viewing and iterating on content across all pages, with three modes: create, refine, and repurpose.",
         "details": "Create frontend/src/components/content/ContentEditor.tsx using Magic MCP + frontend-design pipeline:\n\n1. First run frontend-design skill to get creative direction\n2. Use Magic MCP component_inspiration for modal/editor patterns\n3. Use component_builder to generate initial component\n4. Use component_refiner to iterate\n\nComponent requirements:\n```typescript\ninterface ContentEditorProps {\n  contentRow: ContentRow | null;  // null for create mode from suggestion\n  mode: 'create' | 'refine' | 'repurpose';\n  suggestion?: Suggestion;  // for create mode from suggestion\n  isOpen: boolean;\n  onClose: () => void;\n  onSave: (updatedRow: ContentRow) => void;\n}\n```\n\nFeatures:\n- Modal overlay with backdrop\n- Per-platform caption cards (Instagram, Facebook, TikTok, Threads, LinkedIn)\n- Each caption card has:\n  - Current caption text (editable Textarea)\n  - Refinement instruction input below\n  - 'Iterate' button that calls POST /api/iterate\n  - Loading state during iteration\n- Iteration history panel (collapsible):\n  - GET /api/iterations/{content_id} on open\n  - Click any previous version to restore that caption\n- Template badge if content.template_id is set\n- Auto-publish countdown if content.auto_publish_at is set\n- Mode-specific behaviors:\n  - create: Shows 'Generate' button, creates new content_row\n  - refine: Shows 'Update' button, updates existing captions\n  - repurpose: Shows 'Create New' button, creates linked content_row\n- Responsive: full-screen on mobile, centered modal on desktop\n\nStyling: Use shadcn/ui Dialog, Tabs, Card, Button, Textarea, Input, Badge components",
@@ -3239,7 +3239,7 @@
         "updatedAt": "2026-03-18T02:06:13.670Z"
       },
       {
-        "id": "10",
+        "id": 10,
         "title": "Rebuild Create page with template selector and inline ContentEditor",
         "description": "Rebuild the Create page through Magic MCP pipeline, adding template selector dropdown and inline refinement inputs after generation.",
         "details": "Rebuild frontend/src/pages/CreatePage.tsx:\n\n1. Run frontend-design skill for Create page creative direction\n2. Use Magic MCP component_inspiration, component_builder, component_refiner\n\nNew features to add:\n- Template selector dropdown at top:\n  - Fetches templates via useQuery(['templates'], api.getTemplates)\n  - On select, pre-fills raw_text with template.raw_text_template\n  - Shows variable inputs for each template.variables\n  - 'Use Template' generates with filled variables\n- After generation:\n  - Show per-platform caption cards using ContentEditor inline (not modal)\n  - Each card has refinement input and 'Iterate' button\n  - Can iterate individual platform captions\n- Maintain existing features:\n  - Media upload/Google Drive URL\n  - Raw text input (pre-filled from template or manual)\n  - Platform checkboxes\n  - Schedule date picker\n  - Generate button with loading state\n  - Send to Postiz action\n\n```typescript\nfunction CreatePage() {\n  const { data: templates } = useQuery(['templates'], api.getTemplates);\n  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);\n  const [variableValues, setVariableValues] = useState<Record<string, string>>({});\n  \n  // ... existing state ...\n  \n  const handleTemplateSelect = (templateId: number) => {\n    const template = templates?.find(t => t.id === templateId);\n    setSelectedTemplate(template);\n    setRawText(template?.raw_text_template || '');\n    // Initialize variable values\n    setVariableValues(\n      Object.fromEntries(template?.variables.map(v => [v.name, '']) || [])\n    );\n  };\n  \n  const handleGenerateFromTemplate = async () => {\n    if (!selectedTemplate) return;\n    const result = await api.generateFromTemplate(selectedTemplate.id, {\n      variable_values: variableValues,\n      platforms: selectedPlatforms,\n      scheduled_date: scheduledDate\n    });\n    setCaptions(result.captions);\n    setContentRowId(result.id);  // For iteration tracking\n  };\n  \n  // ... render ...\n}\n```",
@@ -3317,7 +3317,7 @@
         "updatedAt": "2026-03-18T02:12:35.368Z"
       },
       {
-        "id": "11",
+        "id": 11,
         "title": "Rebuild Drafts page with ContentEditor modal integration",
         "description": "Rebuild the Drafts page through Magic MCP pipeline with card-based layout, clicking items opens ContentEditor modal in refine mode.",
         "details": "Rebuild frontend/src/pages/DraftsPage.tsx:\n\n1. Run frontend-design skill for Drafts page\n2. Use Magic MCP component_inspiration, component_builder, component_refiner\n\nNew design:\n- Card-based layout (not list)\n- Each card shows:\n  - Raw text preview (truncated)\n  - Status badge (draft, pending_approval, etc.)\n  - Platform icons for enabled platforms\n  - Creation date\n  - Template badge if applicable (template.name)\n  - Auto-publish countdown if applicable\n- Click card → opens ContentEditor modal in 'refine' mode\n- Batch select with checkbox overlay\n- Batch actions bar at bottom (approve selected)\n- Filter dropdown: All / Pending / Auto-publishing\n\n```typescript\nfunction DraftsPage() {\n  const [selectedDraft, setSelectedDraft] = useState<ContentRow | null>(null);\n  const [filter, setFilter] = useState<'all' | 'pending' | 'auto-publishing'>('all');\n  \n  const { data: drafts } = useQuery(['drafts', filter], () => \n    api.getDrafts({ filter })\n  );\n  \n  return (\n    <div>\n      <FilterDropdown value={filter} onChange={setFilter} />\n      \n      <div className=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n        {drafts?.map(draft => (\n          <DraftCard \n            key={draft.id}\n            draft={draft}\n            onClick={() => setSelectedDraft(draft)}\n            isSelected={selectedIds.has(draft.id)}\n            onToggleSelect={() => toggleSelect(draft.id)}\n          />\n        ))}\n      </div>\n      \n      <ContentEditor\n        contentRow={selectedDraft}\n        mode=\"refine\"\n        isOpen={!!selectedDraft}\n        onClose={() => setSelectedDraft(null)}\n        onSave={(updated) => {\n          queryClient.invalidateQueries(['drafts']);\n          setSelectedDraft(null);\n        }}\n      />\n      \n      {/* Batch actions bar */}\n    </div>\n  );\n}\n```",
@@ -3381,7 +3381,7 @@
         "updatedAt": "2026-03-18T02:16:29.577Z"
       },
       {
-        "id": "12",
+        "id": 12,
         "title": "Rebuild Calendar page with monthly/weekly/list views",
         "description": "Rebuild the Calendar page through Magic MCP pipeline with three view modes: monthly grid, weekly columns, and existing list view.",
         "details": "Rebuild frontend/src/pages/CalendarPage.tsx:\n\n1. Run frontend-design skill for Calendar page\n2. Use Magic MCP component_inspiration for calendar patterns\n3. Use component_builder and component_refiner\n\nNew features:\n- View toggle tabs: Monthly | Weekly | List\n- Monthly view:\n  - 7x5-6 grid (Sun-Sat columns, week rows)\n  - Day cells show pillar-colored dots/thumbnails for content\n  - Click cell → expands to show content list for that day\n  - Click content item → opens ContentEditor modal\n- Weekly view:\n  - 7 day columns (current week)\n  - Time slots (optional, or just stacked cards per day)\n  - Content cards with platform icons, status\n  - Drag-and-drop to reschedule (optional future)\n- List view (existing, enhanced):\n  - Grouped by date\n  - Cards with full details\n  - Good for bulk actions\n- ContentEditor integration:\n  - Scheduled content → refine mode\n  - Posted content → repurpose mode\n- Auto-publish countdown timer on cards where applicable\n\n```typescript\ntype CalendarView = 'monthly' | 'weekly' | 'list';\n\nfunction CalendarPage() {\n  const [view, setView] = useState<CalendarView>('monthly');\n  const [selectedContent, setSelectedContent] = useState<CalendarEntry | null>(null);\n  const [selectedDate, setSelectedDate] = useState(new Date());\n  \n  const { data: calendar } = useQuery(['calendar'], api.getCalendar);\n  \n  const mode = selectedContent?.status === 'posted' ? 'repurpose' : 'refine';\n  \n  return (\n    <div>\n      <Tabs value={view} onValueChange={(v) => setView(v as CalendarView)}>\n        <TabsList>\n          <TabsTrigger value=\"monthly\">Monthly</TabsTrigger>\n          <TabsTrigger value=\"weekly\">Weekly</TabsTrigger>\n          <TabsTrigger value=\"list\">List</TabsTrigger>\n        </TabsList>\n      </Tabs>\n      \n      {view === 'monthly' && (\n        <MonthlyGrid \n          entries={calendar?.entries}\n          selectedDate={selectedDate}\n          onDateChange={setSelectedDate}\n          onContentClick={setSelectedContent}\n        />\n      )}\n      {view === 'weekly' && (\n        <WeeklyView \n          entries={calendar?.entries}\n          currentWeek={selectedDate}\n          onContentClick={setSelectedContent}\n        />\n      )}\n      {view === 'list' && (\n        <ListView \n          entries={calendar?.entries}\n          onContentClick={setSelectedContent}\n        />\n      )}\n      \n      <ContentEditor\n        contentRow={selectedContent ? contentRowFromEntry(selectedContent) : null}\n        mode={mode}\n        isOpen={!!selectedContent}\n        onClose={() => setSelectedContent(null)}\n        onSave={() => {\n          queryClient.invalidateQueries(['calendar']);\n          setSelectedContent(null);\n        }}\n      />\n    </div>\n  );\n}\n```\n\nHelper components:\n- MonthlyGrid: date-fns for month math, pillar colors mapped\n- WeeklyView: 7 columns, startOfWeek/endOfWeek from date-fns\n- ListView: existing grouped view (keep current implementation)",
@@ -3471,7 +3471,7 @@
         "updatedAt": "2026-03-18T02:20:00.603Z"
       },
       {
-        "id": "13",
+        "id": 13,
         "title": "Update Suggestions page with ContentEditor create mode",
         "description": "Update the Suggestions page so clicking a suggestion opens ContentEditor in create mode, generating captions in-place without navigation.",
         "details": "Update frontend/src/pages/SuggestionsPage.tsx:\n\n1. Run frontend-design skill for minor updates\n2. Use Magic MCP component_refiner for iteration\n\nChanges:\n- Add onClick handler to suggestion cards\n- Clicking opens ContentEditor modal in 'create' mode\n- Pass suggestion data to ContentEditor\n- ContentEditor in create mode:\n  - Pre-fills raw_text from suggestion.content_idea\n  - Pre-selects pillar from suggestion.suggested_pillar\n  - Pre-selects date from suggestion.suggested_date\n  - Platform checkboxes (default all enabled)\n  - 'Generate' button creates content_row and generates captions\n  - After generation, switches to refine mode for iteration\n\n```typescript\nfunction SuggestionsPage() {\n  const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);\n  const queryClient = useQueryClient();\n  \n  const { data: suggestions } = useQuery(['suggestions'], api.getSuggestions);\n  \n  return (\n    <div className=\"space-y-4 p-6\">\n      <h1 className=\"text-2xl font-bold\">Content Suggestions</h1>\n      \n      {suggestions?.map((s, i) => (\n        <Card \n          key={i} \n          className=\"cursor-pointer hover:shadow-md transition-shadow\"\n          onClick={() => setSelectedSuggestion(s)}\n        >\n          {/* ... existing card content ... */}\n        </Card>\n      ))}\n      \n      <ContentEditor\n        contentRow={null}  // null triggers create mode\n        mode=\"create\"\n        suggestion={selectedSuggestion}\n        isOpen={!!selectedSuggestion}\n        onClose={() => setSelectedSuggestion(null)}\n        onSave={(newRow) => {\n          queryClient.invalidateQueries(['suggestions']);\n          queryClient.invalidateQueries(['drafts']);\n          setSelectedSuggestion(null);\n          // Optionally navigate to drafts or show success toast\n        }}\n      />\n    </div>\n  );\n}\n```\n\nContentEditor create mode logic:\n```typescript\n// In ContentEditor.tsx\nif (mode === 'create' && suggestion) {\n  // Initialize form with suggestion data\n  const [rawText, setRawText] = useState(suggestion.content_idea);\n  const [pillar, setPillar] = useState(suggestion.suggested_pillar);\n  const [scheduledDate, setScheduledDate] = useState(suggestion.suggested_date);\n  const [platforms, setPlatforms] = useState(['instagram', 'facebook', 'tiktok', 'threads', 'linkedin']);\n  \n  const handleGenerate = async () => {\n    const result = await api.generateSync({\n      raw_text: rawText,\n      platforms,\n      scheduled_date: scheduledDate\n    });\n    // ... set captions, switch to refine-like UI\n  };\n}\n```",
@@ -3488,7 +3488,7 @@
         "updatedAt": "2026-03-18T02:23:04.265Z"
       },
       {
-        "id": "14",
+        "id": 14,
         "title": "Build template manager page in dashboard",
         "description": "Create a new Templates page for listing, creating, editing, deleting, and previewing content templates.",
         "details": "Create frontend/src/pages/TemplatesPage.tsx:\n\n1. Run frontend-design skill for Templates page\n2. Use Magic MCP component_inspiration, component_builder, component_refiner\n\nFeatures:\n- List all templates in card grid\n- Each card shows:\n  - Template name\n  - Pillar badge\n  - Schedule pattern (weekly:sunday, manual)\n  - Variable count\n  - Edit/Delete buttons\n- 'Create Template' button → opens template editor modal\n- Template editor modal:\n  - Name input\n  - Pillar dropdown\n  - Raw text template with {{variable}} syntax\n  - Variable definition (add/remove, name + type)\n  - Platform-specific instructions (optional override)\n  - Schedule pattern (dropdown: manual, weekly:day, monthly:date)\n  - Preview pane showing resolved template\n- Edit mode: pre-fills form, shows update button\n- Delete confirmation dialog\n\n```typescript\nfunction TemplatesPage() {\n  const [isEditorOpen, setIsEditorOpen] = useState(false);\n  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);\n  \n  const { data: templates } = useQuery(['templates'], api.getTemplates);\n  const createMutation = useMutation(api.createTemplate, {\n    onSuccess: () => queryClient.invalidateQueries(['templates'])\n  });\n  const updateMutation = useMutation(\n    (data: { id: number; template: CreateTemplateRequest }) => \n      api.updateTemplate(data.id, data.template),\n    { onSuccess: () => queryClient.invalidateQueries(['templates']) }\n  );\n  const deleteMutation = useMutation(api.deleteTemplate, {\n    onSuccess: () => queryClient.invalidateQueries(['templates'])\n  });\n  \n  return (\n    <div className=\"p-6\">\n      <div className=\"flex justify-between items-center mb-6\">\n        <h1 className=\"text-2xl font-bold\">Content Templates</h1>\n        <Button onClick={() => { setEditingTemplate(null); setIsEditorOpen(true); }}>\n          Create Template\n        </Button>\n      </div>\n      \n      <div className=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4\">\n        {templates?.map(template => (\n          <TemplateCard\n            key={template.id}\n            template={template}\n            onEdit={() => { setEditingTemplate(template); setIsEditorOpen(true); }}\n            onDelete={() => deleteMutation.mutate(template.id)}\n          />\n        ))}\n      </div>\n      \n      <TemplateEditorModal\n        template={editingTemplate}\n        isOpen={isEditorOpen}\n        onClose={() => setIsEditorOpen(false)}\n        onSave={(data) => {\n          if (editingTemplate) {\n            updateMutation.mutate({ id: editingTemplate.id, template: data });\n          } else {\n            createMutation.mutate(data);\n          }\n          setIsEditorOpen(false);\n        }}\n      />\n    </div>\n  );\n}\n```\n\nAdd to navigation in AppShell.tsx",
@@ -3566,7 +3566,7 @@
         "updatedAt": "2026-03-18T02:32:31.069Z"
       },
       {
-        "id": "15",
+        "id": 15,
         "title": "Add auto-publish settings section to Settings page",
         "description": "Add a settings section for configuring per-platform auto-publish rules with delay windows and pillar overrides.",
         "details": "Create or update frontend/src/pages/SettingsPage.tsx:\n\n1. Run frontend-design skill for Settings page section\n2. Use Magic MCP component_builder, component_refiner\n\nAuto-publish settings section:\n- Accordion/expandable section per platform\n- Each platform section:\n  - Enable/disable toggle\n  - Delay hours input (1-24)\n  - Pillar overrides:\n    - Checkbox per pillar to enable/disable auto-publish\n    - Disabled pillars require manual approval\n- Save button at bottom\n\n```typescript\nfunction AutoPublishSettings() {\n  const { data: config, isLoading } = useQuery(['publishConfig'], api.getPublishConfig);\n  const [localConfig, setLocalConfig] = useState<PlatformPublishConfig[]>([]);\n  const updateMutation = useMutation(api.updatePublishConfig, {\n    onSuccess: () => {\n      queryClient.invalidateQueries(['publishConfig']);\n      toast.success('Auto-publish settings saved');\n    }\n  });\n  \n  useEffect(() => {\n    if (config) setLocalConfig(config.platforms);\n  }, [config]);\n  \n  const updatePlatform = (platform: string, updates: Partial<PlatformPublishConfig>) => {\n    setLocalConfig(prev => prev.map(p => \n      p.platform === platform ? { ...p, ...updates } : p\n    ));\n  };\n  \n  return (\n    <Card>\n      <CardHeader>\n        <CardTitle>Auto-Publish Configuration</CardTitle>\n        <p className=\"text-muted-foreground\">\n          Configure automatic publishing with optional delay window for staff review.\n        </p>\n      </CardHeader>\n      <CardContent className=\"space-y-4\">\n        {localConfig.map(platform => (\n          <Accordion key={platform.platform}>\n            <AccordionTrigger>\n              <div className=\"flex items-center gap-2\">\n                <Switch\n                  checked={platform.enabled}\n                  onCheckedChange={(enabled) => updatePlatform(platform.platform, { enabled })}\n                />\n                <span>{platform.platform}</span>\n              </div>\n            </AccordionTrigger>\n            <AccordionContent className=\"space-y-4\">\n              <div>\n                <Label>Delay before publishing (hours)</Label>\n                <Input\n                  type=\"number\"\n                  min=\"0\"\n                  max=\"24\"\n                  value={platform.delay_hours}\n                  onChange={(e) => updatePlatform(platform.platform, { \n                    delay_hours: parseInt(e.target.value) \n                  })}\n                />\n                <p className=\"text-xs text-muted-foreground\">\n                  Content waits this long after approval before auto-publishing.\n                </p>\n              </div>\n              \n              <div>\n                <Label>Pillar overrides</Label>\n                {Object.values(ContentPillar).map(pillar => (\n                  <label key={pillar} className=\"flex items-center gap-2\">\n                    <Checkbox\n                      checked={platform.pillar_overrides[pillar] !== false}\n                      onCheckedChange={(checked) => updatePlatform(platform.platform, {\n                        pillar_overrides: {\n                          ...platform.pillar_overrides,\n                          [pillar]: checked\n                        }\n                      })}\n                    />\n                    {pillar}\n                  </label>\n                ))}\n              </div>\n            </AccordionContent>\n          </Accordion>\n        ))}\n        \n        <Button \n          onClick={() => updateMutation.mutate(localConfig)}\n          disabled={updateMutation.isLoading}\n        >\n          Save Changes\n        </Button>\n      </CardContent>\n    </Card>\n  );\n}\n```\n\nAdd SettingsPage to router if not exists. Add navigation link in sidebar.",
@@ -3583,7 +3583,7 @@
         "updatedAt": "2026-03-18T02:36:24.796Z"
       },
       {
-        "id": "16",
+        "id": 16,
         "title": "Add auto-publish countdown display to Drafts/Calendar",
         "description": "Display auto-publish countdown timers on content cards in Drafts and Calendar views when auto_publish_at is set.",
         "details": "Create frontend/src/components/content/AutoPublishCountdown.tsx:\n```typescript\nimport { useState, useEffect } from 'react';\nimport { formatDistanceToNow, differenceInSeconds, isPast } from 'date-fns';\nimport { Clock, AlertCircle } from 'lucide-react';\n\ninterface AutoPublishCountdownProps {\n  publishAt: string;  // ISO datetime\n  onExpired?: () => void;\n}\n\nexport function AutoPublishCountdown({ publishAt, onExpired }: AutoPublishCountdownProps) {\n  const [timeLeft, setTimeLeft] = useState('');\n  const [isExpired, setIsExpired] = useState(false);\n  \n  useEffect(() => {\n    const updateCountdown = () => {\n      const target = new Date(publishAt);\n      if (isPast(target)) {\n        setIsExpired(true);\n        setTimeLeft('Publishing...');\n        onExpired?.();\n        return;\n      }\n      \n      const seconds = differenceInSeconds(target, new Date());\n      if (seconds < 3600) {\n        // Show minutes\n        const minutes = Math.ceil(seconds / 60);\n        setTimeLeft(`${minutes}m`);\n      } else {\n        // Show hours:minutes\n        const hours = Math.floor(seconds / 3600);\n        const mins = Math.floor((seconds % 3600) / 60);\n        setTimeLeft(`${hours}h ${mins}m`);\n      }\n    };\n    \n    updateCountdown();\n    const interval = setInterval(updateCountdown, 60000); // Update every minute\n    \n    return () => clearInterval(interval);\n  }, [publishAt, onExpired]);\n  \n  if (!publishAt) return null;\n  \n  return (\n    <div className={\n      `flex items-center gap-1 text-xs px-2 py-1 rounded-full ` +\n      (isExpired \n        ? 'bg-orange-100 text-orange-700' \n        : 'bg-blue-100 text-blue-700')\n    }>\n      {isExpired ? <AlertCircle className=\"h-3 w-3\" /> : <Clock className=\"h-3 w-3\" />}\n      <span>Auto-publish {isExpired ? 'now' : `in ${timeLeft}`}</span>\n    </div>\n  );\n}\n```\n\nIntegrate into DraftCard and CalendarCard components:\n```typescript\n// In DraftCard\n{draft.auto_publish_at && (\n  <AutoPublishCountdown \n    publishAt={draft.auto_publish_at}\n    onExpired={() => queryClient.invalidateQueries(['drafts'])}\n  />\n)}\n```\n\nAdd auto_publish_at to ContentRow and CalendarEntry types in api.ts",
@@ -3601,7 +3601,7 @@
         "updatedAt": "2026-03-18T02:40:22.329Z"
       },
       {
-        "id": "17",
+        "id": 17,
         "title": "Write backend tests for new endpoints",
         "description": "Add pytest tests for all new API endpoints: iterate, iterations, templates CRUD, and publish settings.",
         "details": "Create tests/api/test_iterate.py:\n```python\nimport pytest\nfrom httpx import AsyncClient\nfrom api.main import app\nfrom api.models import ContentRow, ContentIteration\n\n@pytest.fixture\nasync def test_content_row(db_session):\n    row = ContentRow(\n        date=datetime.now(),\n        raw_text='Test post',\n        platforms={'instagram': True},\n        status='draft',\n        captions={'instagram': 'Original caption'}\n    )\n    db_session.add(row)\n    await db_session.commit()\n    return row\n\n@pytest.mark.asyncio\nasync def test_iterate_caption(client: AsyncClient, test_content_row, auth_headers):\n    response = await client.post('/api/iterate', json={\n        'content_row_id': test_content_row.id,\n        'platform': 'instagram',\n        'instruction': 'Make it more casual',\n        'mode': 'refine'\n    }, headers=auth_headers)\n    assert response.status_code == 200\n    data = response.json()\n    assert 'caption' in data\n    assert 'iteration_id' in data\n\n@pytest.mark.asyncio\nasync def test_get_iterations(client: AsyncClient, test_content_row, auth_headers):\n    # First create an iteration\n    await client.post('/api/iterate', json={\n        'content_row_id': test_content_row.id,\n        'platform': 'instagram',\n        'instruction': 'Test',\n        'mode': 'refine'\n    }, headers=auth_headers)\n    \n    response = await client.get(f'/api/iterations/{test_content_row.id}', headers=auth_headers)\n    assert response.status_code == 200\n    data = response.json()\n    assert len(data) >= 1\n\n@pytest.mark.asyncio\nasync def test_iterate_404(client: AsyncClient, auth_headers):\n    response = await client.post('/api/iterate', json={\n        'content_row_id': 99999,\n        'platform': 'instagram',\n        'instruction': 'Test',\n        'mode': 'refine'\n    }, headers=auth_headers)\n    assert response.status_code == 404\n```\n\nCreate tests/api/test_templates.py:\n```python\n@pytest.mark.asyncio\nasync def test_template_crud(client: AsyncClient, auth_headers):\n    # Create\n    response = await client.post('/api/templates', json={\n        'name': 'Test Template',\n        'raw_text_template': 'Hello {{name}}!',\n        'variables': [{'name': 'name', 'type': 'text'}]\n    }, headers=auth_headers)\n    assert response.status_code == 200\n    template_id = response.json()['id']\n    \n    # Read\n    response = await client.get(f'/api/templates/{template_id}', headers=auth_headers)\n    assert response.status_code == 200\n    assert response.json()['name'] == 'Test Template'\n    \n    # Update\n    response = await client.put(f'/api/templates/{template_id}', json={\n        'name': 'Updated Template',\n        'raw_text_template': 'Hi {{name}}!',\n        'variables': [{'name': 'name', 'type': 'text'}]\n    }, headers=auth_headers)\n    assert response.status_code == 200\n    assert response.json()['name'] == 'Updated Template'\n    \n    # Delete\n    response = await client.delete(f'/api/templates/{template_id}', headers=auth_headers)\n    assert response.status_code == 200\n\n@pytest.mark.asyncio\nasync def test_generate_from_template(client: AsyncClient, auth_headers, test_template):\n    response = await client.post(f'/api/templates/{test_template.id}/generate', json={\n        'variable_values': {'name': 'World'},\n        'platforms': ['instagram'],\n        'scheduled_date': '2024-01-15'\n    }, headers=auth_headers)\n    assert response.status_code == 200\n    assert response.json()['template_id'] == test_template.id\n```\n\nCreate tests/api/test_publish_config.py with similar patterns.",
@@ -3620,7 +3620,7 @@
         "updatedAt": "2026-03-18T02:43:35.271Z"
       },
       {
-        "id": "18",
+        "id": 18,
         "title": "Write frontend Playwright tests for new features",
         "description": "Add Playwright e2e tests for ContentEditor, Create page with templates, Drafts/Calendar with modal integration, and Templates page.",
         "details": "Create frontend/e2e/content-editor.spec.ts:\n```typescript\nimport { test, expect } from '@playwright/test';\n\ntest.describe('ContentEditor', () => {\n  test.beforeEach(async ({ page }) => {\n    // Login\n    await page.goto('/login');\n    await page.fill('[name=\"password\"]', 'test-password');\n    await page.click('button[type=\"submit\"]');\n    await page.waitForURL('/dashboard');\n  });\n  \n  test('refine mode opens from drafts', async ({ page }) => {\n    await page.goto('/drafts');\n    await page.click('[data-testid=\"draft-card\"]:first-child');\n    await expect(page.locator('[data-testid=\"content-editor-modal\"]')).toBeVisible();\n    await expect(page.locator('[data-testid=\"mode-badge\"]')).toHaveText('Refine');\n  });\n  \n  test('iterate caption updates correctly', async ({ page }) => {\n    await page.goto('/drafts');\n    await page.click('[data-testid=\"draft-card\"]:first-child');\n    \n    const instagramTab = page.locator('[data-testid=\"platform-tab-instagram\"]');\n    await instagramTab.click();\n    \n    const instructionInput = page.locator('[data-testid=\"refinement-input-instagram\"]');\n    await instructionInput.fill('Make it more casual');\n    await page.click('[data-testid=\"iterate-button-instagram\"]');\n    \n    // Wait for iteration to complete\n    await expect(page.locator('[data-testid=\"caption-instagram\"]')).not.toHaveText('');\n  });\n  \n  test('iteration history shows previous versions', async ({ page }) => {\n    // ... test history panel\n  });\n});\n```\n\nCreate frontend/e2e/create-page.spec.ts:\n```typescript\ntest.describe('Create Page', () => {\n  test('template selector pre-fills form', async ({ page }) => {\n    await page.goto('/create');\n    \n    await page.click('[data-testid=\"template-selector\"]');\n    await page.click('[data-testid=\"template-option\"]:first-child');\n    \n    // Check raw text is pre-filled\n    const rawText = page.locator('[data-testid=\"raw-text-input\"]');\n    await expect(rawText).not.toHaveValue('');\n    \n    // Check variable inputs appear\n    await expect(page.locator('[data-testid=\"variable-input\"]')).toBeVisible();\n  });\n  \n  test('generate from template creates content', async ({ page }) => {\n    // ... test full flow\n  });\n});\n```\n\nCreate frontend/e2e/templates-page.spec.ts:\n```typescript\ntest.describe('Templates Page', () => {\n  test('create new template', async ({ page }) => {\n    await page.goto('/templates');\n    await page.click('[data-testid=\"create-template-button\"]');\n    \n    await page.fill('[data-testid=\"template-name\"]', 'E2E Test Template');\n    await page.fill('[data-testid=\"template-text\"]', 'Hello {{name}}!');\n    await page.click('[data-testid=\"add-variable-button\"]');\n    await page.fill('[data-testid=\"variable-name-0\"]', 'name');\n    await page.click('[data-testid=\"save-template-button\"]');\n    \n    await expect(page.locator('text=E2E Test Template')).toBeVisible();\n  });\n});\n```\n\nAdd to frontend/package.json:\n```json\n\"scripts\": {\n  \"test:e2e\": \"playwright test\",\n  \"test:e2e:ui\": \"playwright test --ui\"\n}\n```",
@@ -3641,7 +3641,7 @@
         "updatedAt": "2026-03-18T02:43:39.904Z"
       },
       {
-        "id": "19",
+        "id": 19,
         "title": "Update navigation and routing for new pages",
         "description": "Add Templates and Settings pages to the application navigation, update router configuration, and ensure mobile bottom nav is updated.",
         "details": "Update frontend/src/App.tsx:\n```typescript\nimport { TemplatesPage } from '@/pages/TemplatesPage';\nimport { SettingsPage } from '@/pages/SettingsPage';\n\n// In router configuration\nconst router = createBrowserRouter([\n  // ... existing routes ...\n  {\n    path: 'templates',\n    element: <ProtectedRoute><TemplatesPage /></ProtectedRoute>,\n  },\n  {\n    path: 'settings',\n    element: <ProtectedRoute><SettingsPage /></ProtectedRoute>,\n  },\n]);\n```\n\nUpdate frontend/src/components/layout/Sidebar.tsx:\n```typescript\nconst navItems = [\n  { icon: Home, label: 'Dashboard', path: '/dashboard' },\n  { icon: PlusCircle, label: 'Create', path: '/create' },\n  { icon: FileText, label: 'Drafts', path: '/drafts' },\n  { icon: Calendar, label: 'Calendar', path: '/calendar' },\n  { icon: Lightbulb, label: 'Suggestions', path: '/suggestions' },\n  { icon: Layout, label: 'Templates', path: '/templates' },  // New\n  { icon: Heart, label: 'Health', path: '/health' },\n  { icon: Settings, label: 'Settings', path: '/settings' },  // New\n];\n```\n\nUpdate frontend/src/components/layout/BottomNav.tsx for mobile:\n```typescript\n// Show 5 main items on mobile, rest in 'More' menu\nconst mainItems = [\n  { icon: Home, label: 'Home', path: '/dashboard' },\n  { icon: PlusCircle, label: 'Create', path: '/create' },\n  { icon: FileText, label: 'Drafts', path: '/drafts' },\n  { icon: Calendar, label: 'Calendar', path: '/calendar' },\n  { icon: MoreHorizontal, label: 'More', action: 'menu' },\n];\n\nconst moreItems = [\n  { icon: Lightbulb, label: 'Suggestions', path: '/suggestions' },\n  { icon: Layout, label: 'Templates', path: '/templates' },\n  { icon: Heart, label: 'Health', path: '/health' },\n  { icon: Settings, label: 'Settings', path: '/settings' },\n];\n```\n\nAdd 'More' dropdown menu component for mobile overflow.",
@@ -3659,7 +3659,7 @@
         "updatedAt": "2026-03-18T02:42:20.703Z"
       },
       {
-        "id": "20",
+        "id": 20,
         "title": "Run full test suite and verify backward compatibility",
         "description": "Run all existing tests (111 backend + frontend), verify no regressions, and ensure API response shapes are unchanged for existing endpoints.",
         "details": "1. Run backend tests:\n```bash\ncd /home/cjh5690/projects/ISKCON-GN/postiz_social_automation\npytest tests/ -v --cov=api --cov=content_engine --cov-report=html\n```\n\n2. Run frontend tests:\n```bash\ncd frontend\nnpm run test\nnpm run test:e2e\n```\n\n3. Verify API backward compatibility:\n- Capture current API responses with demo mode\n- Compare response shapes after migration\n- Key endpoints to verify:\n  - GET /api/drafts\n  - GET /api/calendar\n  - GET /api/suggestions\n  - POST /api/generate-sync\n  - POST /api/reprompt\n  - POST /api/drafts/{id}/approve\n\n4. Manual testing checklist:\n- [ ] Login works\n- [ ] Dashboard loads\n- [ ] Create page generates captions\n- [ ] Drafts page shows pending content\n- [ ] Calendar shows scheduled content\n- [ ] Suggestions load\n- [ ] Health page shows service status\n- [ ] Template CRUD works\n- [ ] Iteration works in ContentEditor\n- [ ] Auto-publish settings save correctly\n\n5. Performance check:\n- Run load test with locust or similar\n- Compare SQLite vs Sheets latency\n- Verify async database operations don't block\n\n6. Document any breaking changes in CHANGELOG.md",
@@ -3684,6 +3684,902 @@
       "completedCount": 20,
       "tags": [
         "phase1-content-creation"
+      ],
+      "created": "2026-03-19T01:00:18.451Z",
+      "description": "Tasks for phase1-content-creation context"
+    }
+  },
+  "phase2-intelligence": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Phase 1 Cleanup: Remove ContentPillar Enum",
+        "description": "Remove the hardcoded ContentPillar enum from src/content_engine/models.py and update all references to use dynamic pillars from the database via GET /api/pillars.",
+        "details": "1. Delete the ContentPillar StrEnum class from src/content_engine/models.py (lines 19-26)\n2. Update ContentRow model to use str type for content_pillar instead of ContentPillar | None\n3. Update Suggestion model to use str for suggested_pillar\n4. Update PostPerformance model to use str for pillar\n5. In generator.py, update infer_pillar() to return a string instead of ContentPillar enum\n6. In generator.py, update generate_suggestions() to use string pillars\n7. In api/routes/generate.py, remove the ContentPillar import and validation (lines 33-37)\n8. Update any tests that reference ContentPillar enum values\n\nThe pillar values should now be fetched from GET /api/pillars endpoint which returns the dynamic pillars from the database.",
+        "testStrategy": "1. Run existing test suite to ensure no regressions\n2. Verify GET /api/pillars returns dynamic pillars\n3. Test content generation with a pillar name string\n4. Test infer_pillar() returns valid pillar strings\n5. Verify ContentEditor displays pillar dropdown correctly",
+        "priority": "high",
+        "dependencies": [],
+        "status": "in-progress",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down the ContentPillar enum removal into: 1) Remove enum from src/content_engine/models.py and update ContentRow/Suggestion/PostPerformance to use str, 2) Update generator.py infer_pillar() and generate_suggestions() to use string pillars, 3) Update api/routes/generate.py and tests to remove ContentPillar validation",
+        "updatedAt": "2026-03-19T01:44:08.399Z"
+      },
+      {
+        "id": "2",
+        "title": "Phase 1 Cleanup: Fix auto_publish_at Schema Mismatch",
+        "description": "Resolve the mismatch between ContentRowResponse schema having auto_publish_at field but no corresponding database column.",
+        "details": "Option A (recommended - add column):\n1. Create Alembic migration: alembic revision -m 'add_auto_publish_at_to_content_rows'\n2. Add column: op.add_column('content_rows', sa.Column('auto_publish_at', sa.DateTime(), nullable=True))\n3. Update api/models.py ContentRow class to include: auto_publish_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)\n4. Update ContentRepository to handle auto_publish_at field\n\nOption B (remove from schema):\n1. Remove auto_publish_at from ContentRowResponse in api/schemas.py line 26\n\nChoose Option A since auto-publish scheduling is a Phase 1 feature that needs this field.",
+        "testStrategy": "1. Run alembic upgrade head and verify migration succeeds\n2. Test creating content with auto_publish_at value\n3. Test GET /api/content returns auto_publish_at correctly\n4. Verify frontend AutoPublishCountdown component still works",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 3,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "Add auto_publish_at column to content_rows table via Alembic migration, update ContentRow model in api/models.py, and ensure ContentRepository handles the field",
+        "updatedAt": "2026-03-19T02:01:25.934Z"
+      },
+      {
+        "id": "3",
+        "title": "Create Phase 2 Database Schema Migration",
+        "description": "Create Alembic migration for Phase 2 tables: web_pages, web_knowledge, social_history, analytics_cache, and hashtag_performance.",
+        "details": "Create migration file with:\n```python\n# web_pages table\nop.create_table('web_pages',\n    sa.Column('id', sa.Integer(), primary_key=True),\n    sa.Column('url', sa.Text(), nullable=False),\n    sa.Column('site', sa.String(50), nullable=False),  # 'gitavalley', 'iskcon'\n    sa.Column('title', sa.Text()),\n    sa.Column('body_text', sa.Text()),\n    sa.Column('pillar', sa.String(50)),\n    sa.Column('content_hash', sa.String(64)),\n    sa.Column('last_crawled', sa.DateTime()),\n    sa.Column('created_at', sa.DateTime(), default=func.now())\n)\n\n# web_knowledge table\nop.create_table('web_knowledge',\n    sa.Column('id', sa.Integer(), primary_key=True),\n    sa.Column('web_page_id', sa.Integer(), sa.ForeignKey('web_pages.id')),\n    sa.Column('fact_type', sa.String(50), nullable=False),\n    sa.Column('content', sa.Text(), nullable=False),\n    sa.Column('pillar', sa.String(50)),\n    sa.Column('keywords', sa.Text()),  # JSON\n    sa.Column('created_at', sa.DateTime())\n)\n\n# social_history table with UNIQUE constraint\nop.create_table('social_history',\n    sa.Column('id', sa.Integer(), primary_key=True),\n    sa.Column('platform', sa.String(50), nullable=False),\n    sa.Column('external_id', sa.String(100), nullable=False),\n    sa.Column('post_text', sa.Text()),\n    sa.Column('media_urls', sa.Text()),  # JSON\n    sa.Column('hashtags', sa.Text()),  # JSON\n    sa.Column('posted_at', sa.DateTime()),\n    sa.Column('likes', sa.Integer(), default=0),\n    sa.Column('comments', sa.Integer(), default=0),\n    sa.Column('shares', sa.Integer(), default=0),\n    sa.Column('reach', sa.Integer(), default=0),\n    sa.Column('pillar', sa.String(50)),\n    sa.Column('imported_at', sa.DateTime()),\n    sa.UniqueConstraint('platform', 'external_id')\n)\n\n# analytics_cache table\nop.create_table('analytics_cache',\n    sa.Column('id', sa.Integer(), primary_key=True),\n    sa.Column('content_row_id', sa.Integer(), sa.ForeignKey('content_rows.id')),\n    sa.Column('platform', sa.String(50), nullable=False),\n    sa.Column('postiz_post_id', sa.String(100)),\n    sa.Column('likes', sa.Integer(), default=0),\n    sa.Column('shares', sa.Integer(), default=0),\n    sa.Column('comments', sa.Integer(), default=0),\n    sa.Column('reach', sa.Integer(), default=0),\n    sa.Column('impressions', sa.Integer(), default=0),\n    sa.Column('fetched_at', sa.DateTime())\n)\n\n# hashtag_performance table with UNIQUE constraint\nop.create_table('hashtag_performance',\n    sa.Column('id', sa.Integer(), primary_key=True),\n    sa.Column('hashtag', sa.String(100), nullable=False),\n    sa.Column('platform', sa.String(50), nullable=False),\n    sa.Column('times_used', sa.Integer(), default=0),\n    sa.Column('total_engagement', sa.Integer(), default=0),\n    sa.Column('avg_engagement', sa.Float(), default=0),\n    sa.Column('trend', sa.String(20), default='stable'),\n    sa.Column('updated_at', sa.DateTime()),\n    sa.UniqueConstraint('hashtag', 'platform')\n)\n```",
+        "testStrategy": "1. Run alembic upgrade head\n2. Verify all 5 tables created with correct columns\n3. Test UNIQUE constraints on social_history and hashtag_performance\n4. Test foreign key constraints\n5. Run alembic downgrade and verify clean rollback",
+        "priority": "high",
+        "dependencies": [
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create migration file with web_pages and web_knowledge tables",
+            "description": "Create a new Alembic migration file that adds the web_pages table and the web_knowledge table with its foreign key reference to web_pages. These tables form the foundation of the knowledge base system.",
+            "dependencies": [],
+            "details": "1. Generate migration file using `alembic revision -m 'add_phase2_tables'`\n2. Create web_pages table with columns: id (PK), url (Text, not null), site (String 50, not null), title (Text), body_text (Text), pillar (String 50), content_hash (String 64), last_crawled (DateTime), created_at (DateTime with default)\n3. Create web_knowledge table with columns: id (PK), web_page_id (FK to web_pages.id), fact_type (String 50, not null), content (Text, not null), pillar (String 50), keywords (Text for JSON), created_at (DateTime)\n4. Add proper index on web_pages.url for lookup performance\n5. Use sa.func.now() for DateTime defaults compatible with SQLite",
+            "status": "pending",
+            "testStrategy": "1. Run `alembic upgrade head` and verify tables exist\n2. Insert test rows into web_pages and web_knowledge\n3. Verify foreign key constraint prevents invalid web_page_id\n4. Test downgrade removes both tables cleanly",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Add social_history and hashtag_performance tables with UNIQUE constraints",
+            "description": "Extend the migration to add social_history and hashtag_performance tables, both requiring compound UNIQUE constraints. SQLite requires special handling for multi-column unique constraints.",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Add social_history table: id (PK), platform (String 50, not null), external_id (String 100, not null), post_text (Text), media_urls (Text JSON), hashtags (Text JSON), posted_at (DateTime), likes/comments/shares/reach (Integer defaults 0), pillar (String 50), imported_at (DateTime)\n2. Add UniqueConstraint('platform', 'external_id', name='uq_social_history_platform_external_id')\n3. Add hashtag_performance table: id (PK), hashtag (String 100, not null), platform (String 50, not null), times_used/total_engagement (Integer defaults 0), avg_engagement (Float default 0), trend (String 20 default 'stable'), updated_at (DateTime)\n4. Add UniqueConstraint('hashtag', 'platform', name='uq_hashtag_platform')\n5. Name constraints explicitly for SQLite compatibility",
+            "status": "pending",
+            "testStrategy": "1. Run upgrade and verify tables created\n2. Test UNIQUE constraint on social_history by inserting duplicate platform+external_id (should fail)\n3. Test UNIQUE constraint on hashtag_performance by inserting duplicate hashtag+platform (should fail)\n4. Verify downgrade drops tables cleanly",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Add analytics_cache table and verify full migration",
+            "description": "Add the analytics_cache table with its foreign key to the existing content_rows table, then run comprehensive verification of all 5 new Phase 2 tables and their constraints.",
+            "dependencies": [
+              2
+            ],
+            "details": "1. Add analytics_cache table: id (PK), content_row_id (FK to content_rows.id), platform (String 50, not null), postiz_post_id (String 100), likes/shares/comments/reach/impressions (Integer defaults 0), fetched_at (DateTime)\n2. Use sa.ForeignKeyConstraint(['content_row_id'], ['content_rows.id']) for the FK\n3. Update downgrade function to drop all 5 tables in reverse order: analytics_cache, hashtag_performance, social_history, web_knowledge, web_pages\n4. Ensure downgrade order respects FK dependencies (analytics_cache before content_rows reference, web_knowledge before web_pages)\n5. Run full alembic upgrade/downgrade cycle to verify clean migration",
+            "status": "pending",
+            "testStrategy": "1. Run full `alembic upgrade head` from base revision\n2. Verify all 5 tables exist with correct columns using SQLite .schema\n3. Test analytics_cache FK constraint by inserting with invalid content_row_id\n4. Run `alembic downgrade -1` and verify tables removed\n5. Run upgrade again to confirm idempotent behavior",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Create Phase 2 schema migration in subtasks: 1) Create migration file with web_pages and web_knowledge tables including foreign key, 2) Add social_history and hashtag_performance tables with UNIQUE constraints, 3) Add analytics_cache table with foreign key to content_rows and verify all constraints work with SQLite",
+        "updatedAt": "2026-03-19T02:07:06.386Z"
+      },
+      {
+        "id": "4",
+        "title": "Add Phase 2 SQLAlchemy Models",
+        "description": "Add SQLAlchemy ORM models for the new Phase 2 tables in api/models.py.",
+        "details": "Add to api/models.py:\n```python\nclass WebPage(Base):\n    __tablename__ = 'web_pages'\n    id: Mapped[int] = mapped_column(Integer, primary_key=True)\n    url: Mapped[str] = mapped_column(Text, nullable=False)\n    site: Mapped[str] = mapped_column(String(50), nullable=False)\n    title: Mapped[str | None] = mapped_column(Text)\n    body_text: Mapped[str | None] = mapped_column(Text)\n    pillar: Mapped[str | None] = mapped_column(String(50))\n    content_hash: Mapped[str | None] = mapped_column(String(64))\n    last_crawled: Mapped[datetime | None] = mapped_column(DateTime)\n    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))\n\nclass WebKnowledge(Base):\n    __tablename__ = 'web_knowledge'\n    id: Mapped[int] = mapped_column(Integer, primary_key=True)\n    web_page_id: Mapped[int | None] = mapped_column(Integer, ForeignKey('web_pages.id'))\n    fact_type: Mapped[str] = mapped_column(String(50), nullable=False)\n    content: Mapped[str] = mapped_column(Text, nullable=False)\n    pillar: Mapped[str | None] = mapped_column(String(50))\n    keywords: Mapped[str | None] = mapped_column(Text)  # JSON\n    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))\n\nclass SocialHistory(Base):\n    __tablename__ = 'social_history'\n    __table_args__ = (UniqueConstraint('platform', 'external_id'),)\n    id: Mapped[int] = mapped_column(Integer, primary_key=True)\n    platform: Mapped[str] = mapped_column(String(50), nullable=False)\n    external_id: Mapped[str] = mapped_column(String(100), nullable=False)\n    post_text: Mapped[str | None] = mapped_column(Text)\n    media_urls: Mapped[str | None] = mapped_column(Text)  # JSON\n    hashtags: Mapped[str | None] = mapped_column(Text)  # JSON\n    posted_at: Mapped[datetime | None] = mapped_column(DateTime)\n    likes: Mapped[int] = mapped_column(Integer, default=0)\n    comments: Mapped[int] = mapped_column(Integer, default=0)\n    shares: Mapped[int] = mapped_column(Integer, default=0)\n    reach: Mapped[int] = mapped_column(Integer, default=0)\n    pillar: Mapped[str | None] = mapped_column(String(50))\n    imported_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))\n\nclass AnalyticsCache(Base):\n    __tablename__ = 'analytics_cache'\n    id: Mapped[int] = mapped_column(Integer, primary_key=True)\n    content_row_id: Mapped[int | None] = mapped_column(Integer, ForeignKey('content_rows.id'))\n    platform: Mapped[str] = mapped_column(String(50), nullable=False)\n    postiz_post_id: Mapped[str | None] = mapped_column(String(100))\n    likes: Mapped[int] = mapped_column(Integer, default=0)\n    shares: Mapped[int] = mapped_column(Integer, default=0)\n    comments: Mapped[int] = mapped_column(Integer, default=0)\n    reach: Mapped[int] = mapped_column(Integer, default=0)\n    impressions: Mapped[int] = mapped_column(Integer, default=0)\n    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))\n\nclass HashtagPerformance(Base):\n    __tablename__ = 'hashtag_performance'\n    __table_args__ = (UniqueConstraint('hashtag', 'platform'),)\n    id: Mapped[int] = mapped_column(Integer, primary_key=True)\n    hashtag: Mapped[str] = mapped_column(String(100), nullable=False)\n    platform: Mapped[str] = mapped_column(String(50), nullable=False)\n    times_used: Mapped[int] = mapped_column(Integer, default=0)\n    total_engagement: Mapped[int] = mapped_column(Integer, default=0)\n    avg_engagement: Mapped[float] = mapped_column(Float, default=0.0)\n    trend: Mapped[str] = mapped_column(String(20), default='stable')\n    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))\n```",
+        "testStrategy": "1. Import models and verify no syntax errors\n2. Test creating instances of each model\n3. Test unique constraints raise IntegrityError on duplicates\n4. Verify foreign key relationships work correctly",
+        "priority": "high",
+        "dependencies": [
+          "3"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Add Phase 2 SQLAlchemy models: 1) Add WebPage, WebKnowledge, SocialHistory models with relationships and unique constraints, 2) Add AnalyticsCache, HashtagPerformance models with foreign keys and update imports",
+        "updatedAt": "2026-03-19T02:07:11.229Z"
+      },
+      {
+        "id": "5",
+        "title": "Implement WordPress MCP Crawler for gitavalley.com",
+        "description": "Build a crawler using WordPress MCP to pull all published pages and posts from gitavalley.com, extract content, and store in web_pages table.",
+        "details": "Create src/content_engine/crawlers/wordpress_crawler.py:\n```python\nclass WordPressCrawler:\n    def __init__(self, site_name: str = 'gitavalley'):\n        self.site_name = site_name\n    \n    async def crawl_all_pages(self) -> list[dict]:\n        '''Use WordPress MCP to fetch all pages and posts'''\n        # Call mcp-cli to get pages\n        # Extract: title, body_text, URL, categories, featured_image\n        pass\n    \n    def compute_content_hash(self, body_text: str) -> str:\n        '''SHA256 hash for change detection'''\n        return hashlib.sha256(body_text.encode()).hexdigest()\n    \n    async def classify_pillar(self, title: str, body_text: str, pillars: list[str]) -> str:\n        '''Use Claude CLI to classify page into a pillar'''\n        pass\n    \n    async def extract_knowledge(self, page: dict) -> list[dict]:\n        '''Extract facts, programs, events, quotes from page content'''\n        # Use Claude to extract structured knowledge\n        # Return list of {fact_type, content, pillar, keywords}\n        pass\n    \n    async def store_page(self, session: AsyncSession, page: dict, knowledge: list[dict]):\n        '''Store page and knowledge entries in database'''\n        pass\n```\n\nIntegration points:\n- Use subprocess to call mcp-cli for WordPress MCP\n- Fetch dynamic pillar list from database before classification\n- Store content_hash for change detection on re-crawl",
+        "testStrategy": "1. Mock WordPress MCP responses for unit tests\n2. Test content_hash computation\n3. Test pillar classification with sample content\n4. Test knowledge extraction returns valid fact_types\n5. Integration test: crawl sample page and verify DB storage",
+        "priority": "high",
+        "dependencies": [
+          "4"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create base WordPressCrawler class with MCP subprocess integration",
+            "description": "Implement the foundational WordPressCrawler class with mcp-cli subprocess calls for WordPress API access, including connection setup, error handling, and response parsing.",
+            "dependencies": [],
+            "details": "Create src/content_engine/crawlers/wordpress_crawler.py with:\n1. WordPressCrawler class with site_name parameter\n2. Private method _call_mcp() that uses subprocess to invoke mcp-cli with WordPress MCP commands\n3. Parse JSON responses from mcp-cli stdout, handle stderr errors\n4. Include retry logic for transient failures (3 attempts with exponential backoff)\n5. Add proper logging using the project's logging configuration\n6. Handle MCP connection errors gracefully with descriptive exceptions\n\nReference the Claude CLI subprocess pattern from generator.py for implementation approach.",
+            "status": "pending",
+            "testStrategy": "1. Mock subprocess.run to return sample WordPress MCP responses\n2. Test _call_mcp() parses valid JSON correctly\n3. Test error handling when mcp-cli returns non-zero exit code\n4. Test retry logic triggers on transient failures\n5. Test timeout handling for hung MCP calls",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement page and post fetching with pagination support",
+            "description": "Build the crawl_all_pages() method to fetch all published pages and posts from WordPress via MCP, handling pagination for sites with many items.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement crawl_all_pages() method:\n1. Call WordPress MCP to list all published pages (wp_posts where post_status='publish' and post_type='page')\n2. Call WordPress MCP to list all published posts (post_type='post')\n3. Handle pagination using offset/limit or cursor-based approach depending on MCP API\n4. For each item, extract: title, body_text (rendered content), URL (permalink), categories, tags, featured_image URL\n5. Strip HTML from body_text using html2text or BeautifulSoup to get plain text\n6. Return list of dicts with consistent schema for downstream processing\n7. Add progress logging for large sites",
+            "status": "pending",
+            "testStrategy": "1. Mock MCP responses with paginated data (multiple pages of results)\n2. Test all pages/posts are fetched across pagination boundaries\n3. Test HTML stripping produces clean text\n4. Test extraction handles missing optional fields (no featured image, no categories)\n5. Test empty site returns empty list gracefully",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Add content hash computation and change detection logic",
+            "description": "Implement compute_content_hash() for SHA256 hashing and add change detection to identify new or modified pages during re-crawls.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement change detection:\n1. compute_content_hash(body_text: str) -> str: Return SHA256 hex digest of body_text\n2. Add async method check_for_changes(session: AsyncSession, pages: list[dict]) -> tuple[list, list, list]:\n   - Query existing web_pages for this site_name\n   - Compare content_hash values to identify: new pages, modified pages, unchanged pages\n   - Return (new_pages, modified_pages, unchanged_pages) for selective processing\n3. Only re-classify and re-extract knowledge for new/modified pages\n4. Update last_crawled timestamp for all pages checked\n5. Handle URL changes (same content, different URL) by matching on content_hash",
+            "status": "pending",
+            "testStrategy": "1. Test compute_content_hash returns consistent SHA256 for same input\n2. Test different content produces different hashes\n3. Test check_for_changes correctly categorizes new/modified/unchanged pages\n4. Test with empty database (all pages are new)\n5. Test re-crawl where some pages changed and some didn't",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Implement Claude CLI pillar classification with dynamic pillar list",
+            "description": "Build classify_pillar() method that fetches the current pillar list from the database and uses Claude CLI to classify page content into the appropriate content pillar.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement pillar classification:\n1. Add async method _get_pillars(session: AsyncSession) -> list[str]: Fetch pillar names from content_pillars table\n2. Implement classify_pillar(session: AsyncSession, title: str, body_text: str) -> str:\n   - Fetch current pillars dynamically (don't hardcode)\n   - Build prompt: 'Given these content pillars: {pillars}\\n\\nClassify this page...'\n   - Call Claude CLI via subprocess (reference generator.py pattern)\n   - Parse response to extract pillar name\n   - Validate returned pillar exists in pillar list, fallback to most general pillar if not\n3. Include page title and first 2000 chars of body_text in classification prompt\n4. Cache pillar list for session to reduce DB queries",
+            "status": "pending",
+            "testStrategy": "1. Mock database to return sample pillar list\n2. Mock Claude CLI subprocess to return classification\n3. Test classification prompt includes all pillars\n4. Test invalid pillar response falls back gracefully\n5. Test pillar caching reduces repeated DB queries",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Create knowledge extraction and database storage methods",
+            "description": "Implement extract_knowledge() for AI-powered fact extraction and store_page() for persisting pages and knowledge entries to the database.",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Implement extraction and storage:\n1. extract_knowledge(page: dict) -> list[dict]:\n   - Use Claude CLI to extract structured knowledge from page content\n   - Prompt: 'Extract facts, programs, events, and quotes from this content...'\n   - Return list of {fact_type, content, pillar, keywords} where fact_type in ('fact', 'program', 'event', 'quote', 'teaching')\n   - Parse Claude's structured response (JSON or structured text)\n2. store_page(session: AsyncSession, page: dict, knowledge: list[dict]):\n   - Upsert into web_pages table (insert or update based on URL)\n   - Store content_hash, crawled_at, pillar, site_name\n   - Insert knowledge entries into knowledge_base table linked to page\n   - Use bulk insert for efficiency with many knowledge entries\n3. Add transaction handling for atomic page+knowledge storage\n4. Handle IntegrityError for duplicate URLs gracefully",
+            "status": "pending",
+            "testStrategy": "1. Mock Claude CLI to return sample knowledge extraction\n2. Test extract_knowledge parses all fact_types correctly\n3. Test store_page inserts new page correctly\n4. Test store_page updates existing page (upsert)\n5. Integration test: crawl sample page data through full pipeline to DB",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 7,
+        "recommendedSubtasks": 5,
+        "expansionPrompt": "Build WordPress MCP crawler: 1) Create base crawler structure with mcp-cli subprocess calls for WordPress API, 2) Implement page/post fetching with pagination, 3) Add content_hash computation and change detection, 4) Implement Claude CLI pillar classification using dynamic pillar list from database, 5) Create knowledge extraction with fact_type categorization and database storage"
+      },
+      {
+        "id": "6",
+        "title": "Implement Web Scraper for iskcongitanagari.org",
+        "description": "Build a BeautifulSoup-based web scraper to crawl iskcongitanagari.org with robots.txt compliance and rate limiting.",
+        "details": "Create src/content_engine/crawlers/web_scraper.py:\n```python\nimport asyncio\nimport httpx\nfrom bs4 import BeautifulSoup\nfrom urllib.robotparser import RobotFileParser\n\nclass WebScraper:\n    def __init__(self, base_url: str, site_name: str, rate_limit: float = 1.0):\n        self.base_url = base_url\n        self.site_name = site_name\n        self.rate_limit = rate_limit  # seconds between requests\n        self.robot_parser = RobotFileParser()\n        self.last_request_time = 0\n    \n    async def init_robots(self):\n        '''Parse robots.txt'''\n        async with httpx.AsyncClient() as client:\n            resp = await client.get(f'{self.base_url}/robots.txt')\n            self.robot_parser.parse(resp.text.splitlines())\n    \n    def can_fetch(self, url: str) -> bool:\n        return self.robot_parser.can_fetch('*', url)\n    \n    async def fetch_page(self, url: str) -> str | None:\n        '''Fetch page with rate limiting'''\n        if not self.can_fetch(url):\n            return None\n        \n        elapsed = time.time() - self.last_request_time\n        if elapsed < self.rate_limit:\n            await asyncio.sleep(self.rate_limit - elapsed)\n        \n        async with httpx.AsyncClient() as client:\n            resp = await client.get(url)\n            self.last_request_time = time.time()\n            return resp.text\n    \n    def extract_content(self, html: str) -> dict:\n        '''Extract title, body text from HTML'''\n        soup = BeautifulSoup(html, 'html.parser')\n        # Remove scripts, styles\n        for tag in soup(['script', 'style', 'nav', 'footer']):\n            tag.decompose()\n        return {\n            'title': soup.title.string if soup.title else '',\n            'body_text': soup.get_text(separator=' ', strip=True)\n        }\n    \n    async def discover_links(self, html: str) -> list[str]:\n        '''Find all internal links to crawl'''\n        pass\n    \n    async def crawl_site(self) -> list[dict]:\n        '''BFS crawl of entire site'''\n        pass\n```\n\nAdd httpx and beautifulsoup4 to pyproject.toml dependencies.",
+        "testStrategy": "1. Test robots.txt parsing with sample file\n2. Test rate limiting delays requests correctly\n3. Test HTML content extraction\n4. Test link discovery finds internal links only\n5. Mock HTTP responses for integration tests",
+        "priority": "high",
+        "dependencies": [
+          "4"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Add httpx and beautifulsoup4 dependencies and create base WebScraper class",
+            "description": "Add httpx and beautifulsoup4 to pyproject.toml dependencies. Create src/content_engine/crawlers/ directory and web_scraper.py with base WebScraper class including constructor, httpx async client setup, and robots.txt parsing using RobotFileParser.",
+            "dependencies": [],
+            "details": "Add 'httpx>=0.26.0' and 'beautifulsoup4>=4.12.0' to pyproject.toml dependencies array. Create src/content_engine/crawlers/__init__.py and src/content_engine/crawlers/web_scraper.py. Implement WebScraper.__init__(base_url, site_name, rate_limit) storing instance variables. Implement async init_robots() method that fetches robots.txt and parses it. Implement can_fetch(url) method that checks robot_parser.can_fetch('*', url). Use httpx.AsyncClient for HTTP operations.",
+            "status": "pending",
+            "testStrategy": "Test robots.txt parsing with mock responses. Test can_fetch returns True for allowed URLs and False for disallowed. Test constructor sets defaults correctly.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement rate-limited async page fetching",
+            "description": "Implement fetch_page method with configurable rate limiting using async sleep and request time tracking to ensure polite crawling that respects server capacity.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement fetch_page(url) async method that: 1) checks can_fetch(url) and returns None if disallowed, 2) calculates elapsed time since last_request_time, 3) awaits asyncio.sleep(rate_limit - elapsed) if needed, 4) makes GET request with httpx.AsyncClient, 5) updates last_request_time, 6) returns response.text. Add proper error handling for HTTP errors (timeouts, 4xx, 5xx). Consider adding retry logic with exponential backoff for transient failures.",
+            "status": "pending",
+            "testStrategy": "Test rate limiting waits correct duration between requests. Mock time.time() and asyncio.sleep to verify timing logic. Test returns None for disallowed URLs. Test handles HTTP errors gracefully.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implement BeautifulSoup content extraction with cleanup",
+            "description": "Implement extract_content method that parses HTML with BeautifulSoup, removes unwanted elements (scripts, styles, nav, footer), and extracts clean title and body text.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement extract_content(html) method that: 1) creates BeautifulSoup(html, 'html.parser') instance, 2) removes script, style, nav, footer, header, aside tags using tag.decompose(), 3) extracts title from soup.title.string with fallback to empty string, 4) extracts body_text using soup.get_text(separator=' ', strip=True), 5) returns dict with 'title' and 'body_text' keys. Consider adding meta description extraction and handling of special characters/encoding.",
+            "status": "pending",
+            "testStrategy": "Test content extraction with sample HTML containing scripts and styles verifies they are removed. Test title extraction with and without title tag. Test body text has proper spacing and no extraneous whitespace.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Implement BFS site crawler with link discovery and duplicate detection",
+            "description": "Implement discover_links method to find internal links and crawl_site method for BFS traversal of the entire site with duplicate URL detection and content collection.",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Implement discover_links(html) async method that: 1) parses HTML with BeautifulSoup, 2) finds all anchor tags with href, 3) filters to internal links only (same base_url domain), 4) normalizes URLs (removes fragments, handles relative paths). Implement crawl_site() async method using BFS: 1) initialize queue with base_url, 2) track visited URLs in a set, 3) for each URL: fetch_page, extract_content, discover_links, add unvisited links to queue, 4) return list of dicts with url, title, body_text. Add configurable max_pages limit to prevent runaway crawls.",
+            "status": "pending",
+            "testStrategy": "Test link discovery finds all internal links and ignores external. Test URL normalization handles relative paths and fragments. Test BFS crawl visits each page once. Test max_pages limit stops crawl at threshold. Mock HTTP responses for integration test.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Build web scraper: 1) Create base scraper class with httpx async client and robots.txt parsing, 2) Implement rate limiting with async sleep and request tracking, 3) Add BeautifulSoup content extraction with script/style removal, 4) Implement BFS crawl with link discovery and duplicate URL detection"
+      },
+      {
+        "id": "7",
+        "title": "Implement Meta Graph API Social History Importer",
+        "description": "Build importer to pull historical posts from Facebook and Instagram via Meta Graph API with engagement data.",
+        "details": "Create src/content_engine/crawlers/meta_importer.py:\n```python\nclass MetaGraphImporter:\n    def __init__(self, access_token: str):\n        self.access_token = access_token\n        self.base_url = 'https://graph.facebook.com/v18.0'\n    \n    async def get_facebook_posts(self, page_id: str) -> list[dict]:\n        '''Fetch all posts from Facebook page'''\n        # GET /{page_id}/posts?fields=id,message,created_time,attachments,shares,likes.summary(true),comments.summary(true)\n        pass\n    \n    async def get_instagram_posts(self, account_id: str) -> list[dict]:\n        '''Fetch all posts from Instagram account'''\n        # GET /{account_id}/media?fields=id,caption,timestamp,media_url,like_count,comments_count\n        pass\n    \n    def extract_hashtags(self, text: str) -> list[str]:\n        '''Parse hashtags from post text'''\n        import re\n        return re.findall(r'#(\\w+)', text or '')\n    \n    async def classify_pillar(self, post_text: str, pillars: list[str]) -> str:\n        '''AI-classify post into pillar'''\n        pass\n    \n    async def import_post(self, session: AsyncSession, post: dict, platform: str):\n        '''Store post in social_history table, skip duplicates'''\n        # Use INSERT OR IGNORE for UNIQUE constraint\n        pass\n    \n    async def import_all(self, session: AsyncSession, fb_page_id: str, ig_account_id: str):\n        '''Import all historical posts'''\n        pass\n```\n\nConfiguration:\n- Store Meta access token in environment variable META_ACCESS_TOKEN\n- Add page IDs to settings (fb_page_id, ig_account_id)",
+        "testStrategy": "1. Mock Graph API responses for unit tests\n2. Test hashtag extraction with various post formats\n3. Test duplicate handling with UNIQUE constraint\n4. Test pillar classification\n5. Test pagination handling for large post histories",
+        "priority": "high",
+        "dependencies": [
+          "4"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create base MetaGraphImporter class with OAuth token handling and rate limiting",
+            "description": "Implement the foundational MetaGraphImporter class in src/content_engine/crawlers/meta_importer.py with async HTTP client setup, OAuth access token management from META_ACCESS_TOKEN environment variable, and rate limiting to comply with Meta Graph API limits (200 calls/user/hour).",
+            "dependencies": [],
+            "details": "Create meta_importer.py with MetaGraphImporter class:\n1. Initialize with access_token from env var META_ACCESS_TOKEN\n2. Set base_url to 'https://graph.facebook.com/v18.0'\n3. Use httpx.AsyncClient for async HTTP requests\n4. Implement rate limiter tracking requests per hour (Meta allows 200/user/hour)\n5. Add check_rate_limit() method that waits if limit exceeded\n6. Add _make_request() helper that handles auth headers, rate limiting, and error responses (400, 401, 429)\n7. Handle token expiration with clear error messages\n8. Add retry logic with exponential backoff for transient failures",
+            "status": "pending",
+            "testStrategy": "1. Test rate limit enforcement waits correctly when limit exceeded\n2. Test _make_request adds Authorization header correctly\n3. Test error handling for 401 (invalid token), 429 (rate limited), 400 (bad request)\n4. Test retry logic with mocked transient failures\n5. Test environment variable loading and missing token error",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement Facebook posts fetching with pagination and field selection",
+            "description": "Build the get_facebook_posts() method to fetch all posts from a Facebook page using cursor-based pagination, requesting engagement metrics (likes, comments, shares) and attachments in a single API call.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement get_facebook_posts(page_id: str) -> list[dict]:\n1. Build request URL: /{page_id}/posts with fields parameter\n2. Request fields: id,message,created_time,attachments{media_type,url,title},shares,likes.summary(true),comments.summary(true)\n3. Handle cursor-based pagination using 'paging.next' URL from response\n4. Collect all posts across pages into single list\n5. Transform response to standardized format: {platform_post_id, message, created_at, likes_count, comments_count, shares_count, media_urls, media_type}\n6. Handle empty pages gracefully (return empty list)\n7. Log progress during pagination for long histories\n8. Add method to settings for fb_page_id configuration",
+            "status": "pending",
+            "testStrategy": "1. Mock Graph API response with sample post data\n2. Test pagination follows 'next' cursor correctly\n3. Test field extraction maps to standardized format\n4. Test handles posts with no attachments\n5. Test handles posts with no engagement (zero likes/comments)\n6. Test empty page returns empty list",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implement Instagram media fetching with account discovery",
+            "description": "Build the get_instagram_posts() method to fetch all media from an Instagram Business account, handling IG-specific fields and the different endpoint structure compared to Facebook.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement get_instagram_posts(account_id: str) -> list[dict]:\n1. Build request URL: /{account_id}/media with fields parameter\n2. Request fields: id,caption,timestamp,media_url,thumbnail_url,media_type,like_count,comments_count,permalink\n3. Handle cursor-based pagination using 'paging.next'\n4. Transform to standardized format matching Facebook output: {platform_post_id, message (from caption), created_at (from timestamp), likes_count, comments_count, shares_count (always 0 for IG), media_urls, media_type}\n5. Handle different media types: IMAGE, VIDEO, CAROUSEL_ALBUM\n6. For CAROUSEL_ALBUM, fetch children media if needed\n7. Add method to discover IG account ID from Facebook page if not configured\n8. Add ig_account_id to settings configuration",
+            "status": "pending",
+            "testStrategy": "1. Mock Graph API response with IG media data\n2. Test pagination handles multiple pages\n3. Test each media type (IMAGE, VIDEO, CAROUSEL_ALBUM)\n4. Test caption extraction and hashtag presence\n5. Test timestamp parsing to datetime\n6. Test account discovery from linked FB page",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Add hashtag extraction and AI pillar classification using Claude CLI",
+            "description": "Implement extract_hashtags() for parsing hashtags from post text and classify_pillar() to use Claude CLI for AI-based content pillar classification matching the project's defined pillars.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement hashtag and classification methods:\n1. extract_hashtags(text: str) -> list[str]: Use regex r'#(\\w+)' to find all hashtags, normalize to lowercase, dedupe\n2. Define content pillars from CLAUDE.md: ['spiritual_education', 'farm_community', 'events', 'behind_scenes', 'seasonal', 'collaborative']\n3. classify_pillar(post_text: str, pillars: list[str]) -> str:\n   - Use subprocess to call Claude CLI with structured prompt\n   - Prompt: 'Classify this social media post into exactly one pillar. Pillars: {pillars}. Post: {text}. Reply with only the pillar name.'\n   - Parse response and validate against pillar list\n   - Default to 'spiritual_education' if classification fails\n4. Add batch classification method for efficiency\n5. Cache classifications to avoid re-processing same content",
+            "status": "pending",
+            "testStrategy": "1. Test hashtag extraction with various formats (#Tag, #tag123, #CamelCase)\n2. Test hashtag extraction with empty/null text\n3. Test hashtag deduplication and normalization\n4. Mock Claude CLI subprocess for pillar classification tests\n5. Test default pillar on classification failure\n6. Test batch classification performance",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Implement database storage with duplicate handling and import_all orchestration",
+            "description": "Build import_post() method to store posts in social_history table with duplicate detection via UNIQUE constraint, and import_all() to orchestrate full historical import from both platforms.",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Implement storage and orchestration:\n1. import_post(session: AsyncSession, post: dict, platform: str):\n   - Map standardized post format to SocialHistory model fields\n   - Extract hashtags using extract_hashtags()\n   - Classify pillar using classify_pillar()\n   - Use INSERT ... ON CONFLICT DO NOTHING for platform+platform_post_id UNIQUE constraint\n   - Return True if inserted, False if duplicate skipped\n2. import_all(session: AsyncSession, fb_page_id: str, ig_account_id: str):\n   - Fetch all Facebook posts via get_facebook_posts()\n   - Fetch all Instagram posts via get_instagram_posts()\n   - Import each post, tracking success/skip counts\n   - Log summary: 'Imported X new posts, skipped Y duplicates'\n   - Handle partial failures gracefully (continue on individual post errors)\n3. Add CLI command or API endpoint to trigger import\n4. Add progress callback for long imports",
+            "status": "pending",
+            "testStrategy": "1. Test import_post creates new record correctly\n2. Test import_post skips duplicate (same platform_post_id)\n3. Test import_post extracts and stores hashtags\n4. Test import_post sets pillar from classification\n5. Test import_all handles both platforms\n6. Test import_all continues on individual post failures\n7. Integration test with mocked API responses and real DB",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 7,
+        "recommendedSubtasks": 5,
+        "expansionPrompt": "Build Meta Graph API importer: 1) Create base importer with OAuth token handling and rate limiting, 2) Implement Facebook posts fetching with pagination and field selection, 3) Implement Instagram media fetching with account discovery, 4) Add hashtag extraction and pillar classification with Claude CLI, 5) Implement database storage with duplicate handling via UNIQUE constraint"
+      },
+      {
+        "id": "8",
+        "title": "Create Knowledge Base API Endpoints",
+        "description": "Implement API endpoints for crawl triggers, import triggers, status reporting, and knowledge search.",
+        "details": "Create api/routes/knowledge.py:\n```python\nrouter = APIRouter(prefix='/api/knowledge', tags=['knowledge'])\n\n@router.post('/crawl')\nasync def trigger_crawl(session: AsyncSession = Depends(get_db)):\n    '''Trigger re-crawl of websites (gitavalley.com, iskcongitanagari.org)'''\n    # Run crawlers in background task\n    # Return immediately with job ID\n    pass\n\n@router.post('/import-social')\nasync def trigger_social_import(session: AsyncSession = Depends(get_db)):\n    '''Trigger Meta Graph API import'''\n    pass\n\n@router.get('/status')\nasync def get_status(session: AsyncSession = Depends(get_db)):\n    '''Return per-source crawl status'''\n    # Query web_pages for last_crawled, count by site\n    # Query social_history for import stats\n    # Return {sources: [{name, last_crawl, page_count, error}]}\n    pass\n\n@router.get('/search')\nasync def search_knowledge(\n    q: str,\n    pillar: str | None = None,\n    limit: int = 20,\n    session: AsyncSession = Depends(get_db)\n):\n    '''Full-text search across knowledge base'''\n    # Search web_knowledge.content, social_history.post_text\n    # Filter by pillar if provided\n    # Return matching facts/posts\n    pass\n```\n\nAdd schemas in api/schemas.py:\n- KnowledgeStatusResponse\n- KnowledgeSearchResult\n- CrawlJobResponse",
+        "testStrategy": "1. Test crawl endpoint returns job ID\n2. Test status endpoint returns correct counts\n3. Test search with various queries\n4. Test pillar filtering in search\n5. Test empty results handling",
+        "priority": "medium",
+        "dependencies": [
+          "5",
+          "6",
+          "7"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement POST /crawl and POST /import-social endpoints with background tasks",
+            "description": "Create the crawl trigger and social import endpoints that spawn background tasks and return job IDs for tracking asynchronous operations.",
+            "dependencies": [],
+            "details": "Create api/routes/knowledge.py with router prefix '/api/knowledge'. Implement POST /crawl endpoint using FastAPI BackgroundTasks to spawn WordPressCrawler.crawl_all_pages() and BeautifulSoupCrawler.crawl_site() for both sites. Implement POST /import-social endpoint to trigger Meta Graph API import via SocialHistoryImporter. Generate UUID job IDs, store job status in memory dict or simple DB table (job_id, status, started_at, completed_at, error). Return CrawlJobResponse schema with job_id and status. Add schemas: CrawlJobResponse(job_id: str, status: str, message: str).",
+            "status": "pending",
+            "testStrategy": "Test POST /crawl returns 202 with valid job_id UUID. Test POST /import-social returns 202 with job_id. Mock crawler classes to verify background task spawning. Test concurrent crawl requests return unique job IDs. Test job status can be queried after trigger.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement GET /status endpoint with crawl statistics aggregation",
+            "description": "Create the status endpoint that aggregates crawl statistics from web_pages and social_history tables, returning per-source status information.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement GET /status endpoint in api/routes/knowledge.py. Query web_pages table with GROUP BY site to get: count of pages per site, MAX(last_crawled) for last crawl time, count of pages with errors. Query social_history table for: total imported posts count, last import timestamp, posts by platform. Query web_knowledge for total facts extracted. Build KnowledgeStatusResponse schema with sources array containing: name, last_crawl datetime, page_count int, fact_count int, error_count int. Add any active job statuses from the job tracking dict.",
+            "status": "pending",
+            "testStrategy": "Test GET /status returns correct structure with empty DB. Test status reflects actual counts after inserting test web_pages rows. Test last_crawled returns most recent timestamp. Test social_history stats are included. Test response includes both gitavalley and iskcon sources.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implement GET /search endpoint with full-text search and pillar filtering",
+            "description": "Create the search endpoint that performs full-text search across web_knowledge and social_history tables with optional pillar filtering.",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement GET /search endpoint with query params: q (required search term), pillar (optional filter), limit (default 20, max 100). Use SQLite LIKE operator with wildcards for search: '%{q}%' on web_knowledge.content and social_history.post_text fields. If pillar provided, add WHERE clause filtering by pillar column. UNION results from both tables, ordering by relevance (exact match first) or recency. Return list of KnowledgeSearchResult schema with: source ('web'|'social'), content snippet (first 200 chars), pillar, url/post_id, created_at. Consider FTS5 extension for future performance but start with LIKE for simplicity.",
+            "status": "pending",
+            "testStrategy": "Test search returns empty array for no matches. Test search finds content in web_knowledge table. Test search finds content in social_history table. Test pillar filter restricts results correctly. Test limit param caps result count. Test special characters in query are handled safely (SQL injection prevention).",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Create knowledge API endpoints: 1) Implement POST /crawl and POST /import-social endpoints with background task spawning and job ID tracking, 2) Implement GET /status endpoint aggregating crawl statistics from web_pages and social_history, 3) Implement GET /search endpoint with full-text search across web_knowledge and social_history with pillar filtering"
+      },
+      {
+        "id": "9",
+        "title": "Implement Crawl Error Handling and Partial Recovery",
+        "description": "Add robust error handling for crawlers with independent source processing and checkpoint-based recovery.",
+        "details": "Update each crawler with:\n1. Independent execution - wrap each source in try/except\n2. Checkpoint storage - track last successfully processed URL/post ID\n3. Partial failure handling - continue processing remaining items on single item failure\n4. Error logging - store last_error in status\n\nCreate src/content_engine/crawlers/base.py:\n```python\nclass CrawlCheckpoint:\n    def __init__(self, source: str):\n        self.source = source\n        self.checkpoint_file = Path(f'data/crawl_checkpoint_{source}.json')\n    \n    def save(self, last_url: str, processed_count: int):\n        pass\n    \n    def load(self) -> dict | None:\n        pass\n    \n    def clear(self):\n        pass\n\nclass CrawlResult:\n    success_count: int\n    error_count: int\n    errors: list[dict]  # [{url, error}]\n    last_url: str | None\n    partial: bool  # True if some items failed\n```\n\nUpdate crawl orchestrator:\n```python\nasync def run_all_crawls():\n    results = {}\n    for source, crawler in crawlers.items():\n        try:\n            results[source] = await crawler.crawl()\n        except Exception as e:\n            results[source] = CrawlResult(success_count=0, error_count=1, errors=[{'error': str(e)}])\n    return results\n```",
+        "testStrategy": "1. Test checkpoint save/load cycle\n2. Test partial failure continues to next item\n3. Test one source failure doesn't block others\n4. Test resume from checkpoint\n5. Test error details included in status",
+        "priority": "medium",
+        "dependencies": [
+          "8"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create CrawlCheckpoint and CrawlResult base classes",
+            "description": "Implement the foundational checkpoint persistence and result aggregation classes in src/content_engine/crawlers/base.py",
+            "dependencies": [],
+            "details": "Create src/content_engine/crawlers/base.py with: 1) CrawlCheckpoint class with JSON file persistence to data/crawl_checkpoint_{source}.json - implement save(last_url, processed_count), load() -> dict | None, clear() methods. Use pathlib for file handling and json for serialization. 2) CrawlResult dataclass with fields: success_count (int), error_count (int), errors (list[dict] for [{url, error}]), last_url (str | None), partial (bool indicating some items failed). Include __init__.py to export these classes.",
+            "status": "pending",
+            "testStrategy": "1. Test CrawlCheckpoint save creates JSON file with correct structure. 2. Test load returns None when file doesn't exist. 3. Test load returns saved data after save. 4. Test clear removes checkpoint file. 5. Test CrawlResult dataclass initializes with all fields. 6. Test partial=True when error_count > 0 and success_count > 0.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Update crawlers with per-item error handling and checkpoint saving",
+            "description": "Modify all crawlers (web_scraper, social_history, facebook_crawler) to wrap each item in try/except, save checkpoints incrementally, and continue on single-item failures",
+            "dependencies": [
+              1
+            ],
+            "details": "For each crawler class: 1) Initialize CrawlCheckpoint in constructor with source name. 2) Wrap each item (URL/post) processing in try/except. 3) On success: increment success count, save checkpoint with last processed URL/ID. 4) On failure: log error to errors list, increment error_count, continue to next item. 5) Load checkpoint on start to resume from last_url if exists. 6) Clear checkpoint only after full successful crawl. 7) Return CrawlResult with partial=True if any errors occurred.",
+            "status": "pending",
+            "testStrategy": "1. Test crawler continues processing after single item failure. 2. Test checkpoint saved after each successful item. 3. Test resume from checkpoint skips already-processed items. 4. Test CrawlResult contains all error details. 5. Test partial=True when some items fail. 6. Mock HTTP responses to simulate failures.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implement crawl orchestrator with independent source aggregation",
+            "description": "Create run_all_crawls orchestrator function that executes each crawler independently and aggregates CrawlResults, ensuring one source failure doesn't block others",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Create src/content_engine/crawlers/orchestrator.py with async run_all_crawls() function: 1) Define crawlers dict mapping source names to crawler instances. 2) Iterate through crawlers, wrapping each in try/except. 3) On crawler exception, create CrawlResult with error_count=1 and the exception message. 4) Aggregate all results into dict[str, CrawlResult]. 5) Log summary of success/error counts per source. 6) Return the aggregated results dict. Support both async and sync crawler interfaces.",
+            "status": "pending",
+            "testStrategy": "1. Test one source failure doesn't block other sources. 2. Test all sources run when all succeed. 3. Test exception from one crawler returns CrawlResult with error details. 4. Test aggregated results contain entries for all sources. 5. Test logging output shows per-source summary.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Add crawl error handling: 1) Create CrawlCheckpoint class with JSON file persistence for last processed URL/ID, 2) Update crawlers with independent try/except per item and checkpoint saving, 3) Create CrawlResult dataclass and update orchestrator to aggregate partial results"
+      },
+      {
+        "id": "10",
+        "title": "Integrate Knowledge Base into Caption Generation",
+        "description": "Extend CaptionGenerator to query knowledge base and inject relevant context into Claude prompts.",
+        "details": "Update src/content_engine/generator.py:\n```python\nclass CaptionGenerator:\n    def __init__(self, data_dir: Path = _DEFAULT_DATA_DIR, db_session=None):\n        self.db_session = db_session\n        # ... existing init\n    \n    async def _get_knowledge_context(self, pillar: str) -> str:\n        '''Query knowledge base for relevant facts'''\n        if not self.db_session:\n            return ''\n        \n        # Query web_knowledge for pillar match\n        # Query social_history for high-performing posts in pillar\n        # Limit to ~2000 tokens\n        facts = await self._query_facts(pillar, limit=10)\n        examples = await self._query_social_examples(pillar, limit=3)\n        \n        context = 'RELEVANT KNOWLEDGE:\\n'\n        for fact in facts:\n            context += f'- {fact.fact_type}: {fact.content}\\n'\n        \n        if examples:\n            context += '\\nHIGH-PERFORMING PAST POSTS:\\n'\n            for ex in examples:\n                context += f'- ({ex.platform}, {ex.likes} likes): {ex.post_text[:200]}...\\n'\n        \n        return context[:8000]  # Token limit safety\n    \n    def _build_prompt(self, row: ContentRow, platforms: list[Platform]) -> str:\n        parts = [BRAND_RULES, '']\n        \n        # NEW: Add knowledge context\n        if row.content_pillar:\n            knowledge = asyncio.run(self._get_knowledge_context(row.content_pillar))\n            if knowledge:\n                parts.append(knowledge)\n                parts.append('')\n        \n        # ... rest of existing prompt building\n```\n\nKnowledge injection is additive - extends existing brand rules.",
+        "testStrategy": "1. Test knowledge query returns relevant facts\n2. Test context limited to token budget\n3. Test generation includes knowledge in prompt\n4. Test fallback when no knowledge found\n5. Test performance with and without knowledge injection",
+        "priority": "high",
+        "dependencies": [
+          "8"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Add db_session parameter and implement _get_knowledge_context method",
+            "description": "Extend CaptionGenerator.__init__ to accept an optional db_session parameter and implement the async _get_knowledge_context method that coordinates querying facts and social examples, returning formatted context string within token budget.",
+            "dependencies": [],
+            "details": "Modify CaptionGenerator.__init__ to store db_session as instance variable. Implement _get_knowledge_context(pillar: str) -> str that: 1) Returns empty string if no db_session, 2) Calls _query_facts and _query_social_examples methods, 3) Formats results into 'RELEVANT KNOWLEDGE:' and 'HIGH-PERFORMING PAST POSTS:' sections, 4) Truncates to 8000 chars for token safety. Handle async/sync boundary using asyncio.run() or consider making generator methods async.",
+            "status": "pending",
+            "testStrategy": "Test _get_knowledge_context returns empty when db_session is None. Test context formatting with mock facts and examples. Test truncation at 8000 character limit. Test with empty results from queries.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement _query_facts and _query_social_examples database query methods",
+            "description": "Add methods to query web_knowledge table for relevant facts by pillar and social_history table for high-performing posts, with proper filtering, limits, and token budgeting.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement _query_facts(pillar: str, limit: int = 10) that queries web_knowledge table filtering by pillar match, orders by relevance/recency, returns list of facts with fact_type and content. Implement _query_social_examples(pillar: str, limit: int = 3) that queries social_history table for posts matching pillar, orders by engagement (likes), returns posts with platform, likes, post_text. Both methods should use SQLAlchemy async queries with the stored db_session.",
+            "status": "pending",
+            "testStrategy": "Test _query_facts returns facts matching pillar filter. Test limit parameter respected. Test _query_social_examples returns high-engagement posts ordered by likes. Test empty results when no matches. Mock database session for unit tests.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Update _build_prompt to inject knowledge context and update all callers",
+            "description": "Modify _build_prompt method to include knowledge context after brand rules, and update all code paths that instantiate CaptionGenerator to pass db_session parameter.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Update _build_prompt to call _get_knowledge_context when row.content_pillar exists, inserting the returned context after BRAND_RULES in the prompt parts list. Handle the async/sync boundary appropriately (asyncio.run or refactor). Search codebase for CaptionGenerator instantiations and update them to pass db_session from their context. Update API routes in api/routes/ and any CLI scripts that use the generator. Ensure backwards compatibility when db_session is not provided.",
+            "status": "pending",
+            "testStrategy": "Test _build_prompt includes knowledge section when pillar exists and db_session provided. Test prompt structure unchanged when no db_session. Test all caller sites pass db_session correctly. Integration test: generate caption with knowledge injection and verify context appears in Claude prompt.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Integrate knowledge into generation: 1) Add db_session parameter to CaptionGenerator and implement _get_knowledge_context method, 2) Add _query_facts and _query_social_examples methods with pillar filtering and token budgeting, 3) Update _build_prompt to include knowledge context and update all callers to pass db_session"
+      },
+      {
+        "id": "11",
+        "title": "Implement Postiz Analytics Data Pull",
+        "description": "Build scheduled job to fetch engagement data from Postiz API and store in analytics_cache table.",
+        "details": "Create src/content_engine/analytics/postiz_sync.py:\n```python\nclass PostizAnalyticsSync:\n    def __init__(self, postiz_client):\n        self.client = postiz_client\n        self.rate_limit = 30  # requests per hour\n        self.request_count = 0\n        self.hour_start = time.time()\n    \n    async def check_rate_limit(self):\n        '''Enforce 30 req/hour limit, wait if needed'''\n        if self.request_count >= self.rate_limit:\n            elapsed = time.time() - self.hour_start\n            if elapsed < 3600:\n                await asyncio.sleep(3600 - elapsed)\n            self.request_count = 0\n            self.hour_start = time.time()\n    \n    async def fetch_post_analytics(self, postiz_post_id: str) -> dict:\n        '''GET /analytics/post/{postId}'''\n        await self.check_rate_limit()\n        self.request_count += 1\n        # Call Postiz API\n        pass\n    \n    async def sync_all(self, session: AsyncSession):\n        '''Sync analytics for all posted content'''\n        # Query content_rows where postiz_ids is not null\n        # For each post, fetch analytics and upsert to analytics_cache\n        pass\n    \n    async def upsert_analytics(self, session: AsyncSession, content_row_id: int, platform: str, data: dict):\n        '''Insert or update analytics_cache entry'''\n        pass\n```\n\nAdd API endpoint:\n```python\n@router.post('/api/analytics/refresh')\nasync def refresh_analytics(session: AsyncSession = Depends(get_db)):\n    '''Manual trigger for Postiz data pull'''\n    pass\n```",
+        "testStrategy": "1. Test rate limit enforcement\n2. Test API call with mock Postiz responses\n3. Test upsert creates and updates correctly\n4. Test sync handles missing postiz_ids\n5. Test 429 retry logic",
+        "priority": "high",
+        "dependencies": [
+          "4"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create PostizAnalyticsSync Class with Hourly Rate Limiting",
+            "description": "Implement the core PostizAnalyticsSync class with hourly rate limiting logic (30 req/hour), request counting, and time-window tracking that differs from PostizClient's retry-based approach.",
+            "dependencies": [],
+            "details": "Create src/content_engine/analytics/postiz_sync.py with PostizAnalyticsSync class. Initialize with PostizClient instance, rate_limit=30, request_count=0, and hour_start timestamp. Implement async check_rate_limit() that enforces 30 requests per hour by checking if request_count >= rate_limit and sleeping for remaining time if within the hour window. Reset counter and hour_start after waiting or when hour expires. This differs from PostizClient's exponential backoff retry logic - this is a proactive hourly quota system. Include proper asyncio.sleep for non-blocking waits.",
+            "status": "pending",
+            "testStrategy": "Test rate limit blocks after 30 requests within an hour. Test counter reset after hour window expires. Test sleep duration calculation is correct. Mock time.time() to control timing scenarios. Test no blocking when under limit.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement fetch_post_analytics and sync_all Methods",
+            "description": "Build the fetch_post_analytics method wrapping PostizClient.get_post_analytics with rate limiting, and sync_all method to iterate over content_rows with postiz_ids and sync their analytics.",
+            "dependencies": [
+              1
+            ],
+            "details": "In PostizAnalyticsSync, implement fetch_post_analytics(postiz_post_id: str, pillar: ContentPillar) that calls check_rate_limit(), increments request_count, then delegates to self.client.get_post_analytics(). The pillar parameter is needed since PostizClient.get_post_analytics requires it. Implement sync_all(session: AsyncSession) that queries ContentRow model where postiz_ids is not null, parses postiz_ids (may contain multiple comma-separated IDs per platform), calls fetch_post_analytics for each, and upserts results. Handle exceptions per-post to avoid failing entire sync on one bad post.",
+            "status": "pending",
+            "testStrategy": "Test fetch_post_analytics increments counter and calls client method. Test sync_all queries database correctly. Test parsing of postiz_ids with single and multiple IDs. Test exception handling doesn't abort sync. Mock PostizClient and AsyncSession.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implement upsert_analytics and API Refresh Endpoint",
+            "description": "Add upsert_analytics method for analytics_cache table storage and create POST /api/analytics/refresh endpoint for manual trigger of Postiz data pull.",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement upsert_analytics(session: AsyncSession, content_row_id: int, platform: str, data: dict) using SQLAlchemy merge or on_conflict_do_update pattern matching analytics_cache table schema (content_row_id, platform as composite key). Map PostPerformance fields to analytics_cache columns: likes, comments, shares, reach, engagement_rate, fetched_at=now(). Add FastAPI endpoint in routes: @router.post('/api/analytics/refresh') that instantiates PostizAnalyticsSync with PostizClient from config, calls sync_all, returns summary of synced count. Include proper dependency injection for database session.",
+            "status": "pending",
+            "testStrategy": "Test upsert creates new record when none exists. Test upsert updates existing record for same content_row_id+platform. Test API endpoint returns correct response. Test endpoint handles sync errors gracefully. Integration test with SQLite in-memory database.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Build Postiz analytics sync: 1) Create PostizAnalyticsSync class with rate limiting (30 req/hour) and request tracking, 2) Implement fetch_post_analytics using existing PostizClient.get_post_analytics method, 3) Add sync_all method querying content_rows with postiz_ids and upsert_analytics for database storage"
+      },
+      {
+        "id": "12",
+        "title": "Build Analytics Correlation Engine",
+        "description": "Create analytics service to correlate engagement data with content metadata and generate insights.",
+        "details": "Create src/content_engine/analytics/correlation.py:\n```python\nclass AnalyticsCorrelation:\n    async def get_overview(self, session: AsyncSession, days: int = 30) -> dict:\n        '''Total engagement, post count, trend vs previous period'''\n        # Sum likes+comments+shares from analytics_cache\n        # Compare to previous period\n        # Return {total_engagement, post_count, trend: 'up'|'down'|'flat'}\n        pass\n    \n    async def get_pillar_breakdown(self, session: AsyncSession) -> list[dict]:\n        '''Engagement by pillar per platform'''\n        # JOIN analytics_cache with content_rows on content_row_id\n        # GROUP BY pillar, platform\n        # Return [{pillar, platform, total_engagement, avg_engagement}]\n        pass\n    \n    async def get_timing_heatmap(self, session: AsyncSession) -> dict:\n        '''Best posting times as heatmap data'''\n        # Extract day_of_week, hour from posted_at\n        # Aggregate engagement by time slot\n        # Return {data: [[day, hour, score], ...]}\n        pass\n    \n    async def get_top_posts(self, session: AsyncSession, platform: str = None, pillar: str = None, limit: int = 20) -> list[dict]:\n        '''Posts ranked by engagement with filters'''\n        pass\n    \n    async def analyze_iteration_impact(self, session: AsyncSession) -> dict:\n        '''Do iterated posts outperform first drafts?'''\n        # Compare avg engagement: posts with iterations vs without\n        pass\n    \n    async def generate_insights(self, session: AsyncSession) -> list[str]:\n        '''Generate text insights for Claude prompt injection'''\n        # e.g., 'Posts about cow protection get 3x average engagement'\n        pass\n```",
+        "testStrategy": "1. Test overview calculation with sample data\n2. Test pillar breakdown grouping\n3. Test timing heatmap structure\n4. Test filtering on top_posts\n5. Test insight generation produces useful text",
+        "priority": "medium",
+        "dependencies": [
+          "11"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement get_overview and trend calculation logic",
+            "description": "Build the overview method that calculates total engagement, post count, and trend comparison between current and previous periods.",
+            "dependencies": [],
+            "details": "Create AnalyticsCorrelation class with get_overview method. Query analytics_cache to sum likes+comments+shares for current period (default 30 days). Calculate same metrics for the previous equivalent period. Compute trend as 'up' if current > previous by 5%, 'down' if less by 5%, else 'flat'. Return dict with total_engagement, post_count, and trend string. Use SQLAlchemy async select with func.sum() and date filtering via posted_at >= current_period_start.",
+            "status": "pending",
+            "testStrategy": "Test with sample data: 1) Empty data returns zeros with 'flat' trend, 2) Higher current period returns 'up', 3) Lower current returns 'down', 4) Threshold boundary cases (exactly 5% difference), 5) Verify date range filtering is correct for 30, 7, and 90 day periods.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement get_pillar_breakdown with JOIN aggregations",
+            "description": "Build pillar breakdown that joins analytics_cache with content_rows to aggregate engagement by pillar and platform.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement get_pillar_breakdown method using SQLAlchemy JOIN between analytics_cache and content_rows on content_row_id. GROUP BY pillar, platform. Calculate func.sum for total_engagement and func.avg for avg_engagement. Handle NULL pillars gracefully (group as 'Uncategorized'). Return list of dicts with pillar, platform, total_engagement, avg_engagement keys. Use selectinload or explicit join to minimize queries.",
+            "status": "pending",
+            "testStrategy": "Test: 1) Multiple pillars/platforms aggregate correctly, 2) Posts with same pillar but different platforms separate, 3) NULL pillar handling, 4) Empty data returns empty list, 5) Average calculation is accurate with varying engagement counts.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implement get_timing_heatmap with datetime extraction",
+            "description": "Build timing heatmap that extracts day-of-week and hour from posted_at and aggregates engagement by time slot.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement get_timing_heatmap using SQLite strftime functions: strftime('%w', posted_at) for day-of-week (0=Sunday to 6=Saturday), strftime('%H', posted_at) for hour (00-23). GROUP BY day, hour and aggregate engagement. Return {data: [[day, hour, score], ...]} where score is normalized engagement (0-100 scale based on max). Use func.strftime() in SQLAlchemy. Consider timezone handling if posted_at stores UTC (convert to local time for meaningful results).",
+            "status": "pending",
+            "testStrategy": "Test: 1) Correct day/hour extraction from sample timestamps, 2) Engagement aggregation per slot, 3) Score normalization (max slot = 100), 4) All 168 slots (7x24) represented even if some have zero, 5) Empty data returns empty heatmap, 6) Verify Sunday=0 convention matches expected output.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Implement get_top_posts, analyze_iteration_impact, and generate_insights",
+            "description": "Build remaining methods: top posts with filtering, iteration impact analysis, and text insight generation for Claude prompt injection.",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "Implement get_top_posts: ORDER BY (likes+comments+shares) DESC with optional WHERE platform= and pillar= filters, LIMIT by parameter. Implement analyze_iteration_impact: JOIN content_iterations to identify posts with iterations, compare avg engagement vs posts without iterations, return {with_iterations_avg, without_iterations_avg, improvement_percent}. Implement generate_insights: call other methods, detect patterns (e.g., 'Cow Life posts get 3x average engagement', 'Posts at 9am get highest reach'), return list of 3-5 human-readable insight strings suitable for prompt injection. Use thresholds (e.g., 2x average) to identify noteworthy patterns.",
+            "status": "pending",
+            "testStrategy": "Test get_top_posts: 1) Correct ranking, 2) Platform filter, 3) Pillar filter, 4) Limit works. Test iteration_impact: 5) Correct comparison, 6) No iterations returns null/zero. Test generate_insights: 7) Produces meaningful text, 8) Handles edge cases (no data, uniform data), 9) Output format suitable for Claude prompts.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Build analytics correlation: 1) Implement get_overview with period comparison and trend calculation, 2) Implement get_pillar_breakdown with JOIN and GROUP BY aggregations, 3) Implement get_timing_heatmap extracting day/hour from posted_at, 4) Implement get_top_posts with filtering and generate_insights for text output"
+      },
+      {
+        "id": "13",
+        "title": "Create Analytics API Endpoints",
+        "description": "Implement REST endpoints for analytics overview, pillar breakdown, timing analysis, and top posts.",
+        "details": "Create api/routes/analytics.py:\n```python\nrouter = APIRouter(prefix='/api/analytics', tags=['analytics'])\n\n@router.get('/overview')\nasync def get_overview(\n    days: int = 30,\n    session: AsyncSession = Depends(get_db)\n) -> AnalyticsOverviewResponse:\n    '''Dashboard summary: total engagement, post count, trend'''\n    pass\n\n@router.get('/pillars')\nasync def get_pillar_analytics(\n    session: AsyncSession = Depends(get_db)\n) -> list[PillarAnalyticsResponse]:\n    '''Engagement breakdown by pillar per platform'''\n    pass\n\n@router.get('/timing')\nasync def get_timing_analysis(\n    session: AsyncSession = Depends(get_db)\n) -> TimingHeatmapResponse:\n    '''Best posting times heatmap data'''\n    pass\n\n@router.get('/posts')\nasync def get_top_posts(\n    sort: str = 'engagement',\n    platform: str | None = None,\n    pillar: str | None = None,\n    date_from: str | None = None,\n    date_to: str | None = None,\n    limit: int = 20,\n    session: AsyncSession = Depends(get_db)\n) -> list[PostAnalyticsResponse]:\n    '''Posts ranked by engagement with filters'''\n    pass\n\n@router.post('/refresh')\nasync def refresh_analytics(session: AsyncSession = Depends(get_db)):\n    '''Trigger Postiz data pull'''\n    pass\n```\n\nAdd response schemas to api/schemas.py.",
+        "testStrategy": "1. Test each endpoint returns correct structure\n2. Test date range filtering\n3. Test platform/pillar filtering\n4. Test sorting options\n5. Test empty data handling",
+        "priority": "medium",
+        "dependencies": [
+          "12"
+        ],
+        "status": "pending",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Create analytics API: 1) Implement /overview, /pillars, /timing endpoints calling correlation engine methods, 2) Implement /posts endpoint with filtering (sort, platform, pillar, date range) and POST /refresh trigger"
+      },
+      {
+        "id": "14",
+        "title": "Implement Hashtag Performance Tracking",
+        "description": "Parse hashtags from content and social history, correlate with engagement, and update hashtag_performance table.",
+        "details": "Create src/content_engine/analytics/hashtags.py:\n```python\nimport re\n\nclass HashtagTracker:\n    HASHTAG_PATTERN = re.compile(r'#(\\w+)')\n    \n    PLATFORM_LIMITS = {\n        'instagram': 30,\n        'facebook': 5,\n        'tiktok': 5,\n        'threads': 0,\n        'linkedin': 5\n    }\n    \n    def extract_hashtags(self, text: str) -> list[str]:\n        '''Parse hashtags from text'''\n        return self.HASHTAG_PATTERN.findall(text or '')\n    \n    async def update_performance(self, session: AsyncSession):\n        '''Recalculate hashtag performance from analytics data'''\n        # For each hashtag in posted content:\n        # - Count times_used\n        # - Sum total_engagement from associated posts\n        # - Calculate avg_engagement\n        # - Determine trend (compare to previous period)\n        # Upsert to hashtag_performance\n        pass\n    \n    async def get_top_hashtags(self, session: AsyncSession, platform: str, limit: int = 10) -> list[dict]:\n        '''Get top performing hashtags for platform'''\n        pass\n    \n    def suggest_hashtags(self, pillar: str, platform: str, top_hashtags: list[dict]) -> list[str]:\n        '''Suggest hashtags for content, respecting platform limits'''\n        limit = self.PLATFORM_LIMITS.get(platform, 5)\n        # Filter by pillar relevance, sort by performance\n        # Return up to limit hashtags\n        pass\n```\n\nAdd API endpoint:\n```python\n@router.get('/api/hashtags')\nasync def get_hashtags(\n    platform: str | None = None,\n    limit: int = 20,\n    session: AsyncSession = Depends(get_db)\n) -> list[HashtagPerformanceResponse]:\n    pass\n```",
+        "testStrategy": "1. Test hashtag extraction with various formats\n2. Test platform limit enforcement\n3. Test performance calculation\n4. Test trend detection\n5. Test suggestion respects pillar",
+        "priority": "medium",
+        "dependencies": [
+          "11"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create HashtagTracker Core Class with Extraction and Platform Limits",
+            "description": "Implement the HashtagTracker class in src/content_engine/analytics/hashtags.py with regex-based hashtag extraction, platform-specific limits configuration, and the extract_hashtags method.",
+            "dependencies": [],
+            "details": "Create src/content_engine/analytics/hashtags.py with: 1) HASHTAG_PATTERN regex compile for #word extraction, 2) PLATFORM_LIMITS dict with instagram=30, facebook=5, tiktok=5, threads=0, linkedin=5, 3) extract_hashtags(text) method using findall on pattern, handling None input gracefully. Add proper type hints and docstrings. Include __init__.py update to export HashtagTracker class.",
+            "status": "pending",
+            "testStrategy": "Test extract_hashtags with: empty string, None, single hashtag, multiple hashtags, hashtags with numbers (#tag123), edge cases like #_underscore. Verify platform limits dict has all expected keys and values.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement update_performance and get_top_hashtags Database Methods",
+            "description": "Build the async database methods for aggregating hashtag performance from analytics_cache/social_history tables and querying top performing hashtags with trend detection.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement update_performance(session): 1) Query social_history to find posts containing hashtags, 2) Join with analytics_cache for engagement metrics (likes, comments, shares), 3) Aggregate per hashtag: times_used count, total_engagement sum, avg_engagement calculation, 4) Detect trend by comparing current vs previous 30-day period, 5) Upsert results to hashtag_performance table using SQLAlchemy merge. Implement get_top_hashtags(session, platform, limit): Query hashtag_performance filtered by platform, ordered by avg_engagement DESC, with limit parameter.",
+            "status": "pending",
+            "testStrategy": "Test update_performance with mock social_history containing known hashtags and engagement values, verify correct aggregation. Test trend detection with period comparison. Test get_top_hashtags returns correct ordering and respects limit. Test handling of empty data gracefully.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implement suggest_hashtags Logic and API Endpoint",
+            "description": "Build the suggest_hashtags method with pillar relevance scoring and create the GET /api/hashtags FastAPI endpoint returning hashtag performance data.",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement suggest_hashtags(pillar, platform, top_hashtags): 1) Get platform limit from PLATFORM_LIMITS, 2) Filter top_hashtags by pillar relevance (match pillar field or score by usage in pillar content), 3) Sort by performance metrics, 4) Return list capped at platform limit. Create API endpoint in src/api/routes/analytics.py: GET /api/hashtags with query params platform (optional), limit (default 20), returns List[HashtagPerformanceResponse]. Add HashtagPerformanceResponse Pydantic model with hashtag, platform, times_used, total_engagement, avg_engagement, trend, pillar fields.",
+            "status": "pending",
+            "testStrategy": "Test suggest_hashtags respects platform limits (especially threads=0 returns empty). Test pillar filtering returns relevant hashtags. Test API endpoint returns correct JSON structure. Test limit parameter enforcement. Integration test full flow from extraction to suggestion.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Build hashtag tracking: 1) Create HashtagTracker class with regex extraction and platform limits config, 2) Implement update_performance aggregating engagement from analytics_cache and social_history, 3) Implement get_top_hashtags and suggest_hashtags with pillar relevance scoring"
+      },
+      {
+        "id": "15",
+        "title": "Inject Hashtag Suggestions into Caption Generation",
+        "description": "Extend caption generator to include top-performing hashtag suggestions in Claude prompts and enforce platform limits.",
+        "details": "Update src/content_engine/generator.py:\n```python\nPLATFORM_INSTRUCTIONS: dict[Platform, str] = {\n    Platform.INSTAGRAM: (\n        'Visual focus, 5-10 hashtags from suggestions below, emoji-rich, 150-200 words, CTA in last line'\n    ),\n    # ... update other platforms\n}\n\nclass CaptionGenerator:\n    async def _get_hashtag_suggestions(self, pillar: str, platforms: list[Platform]) -> dict[str, list[str]]:\n        '''Get top hashtags per platform'''\n        suggestions = {}\n        tracker = HashtagTracker()\n        for platform in platforms:\n            top = await tracker.get_top_hashtags(self.db_session, platform.value, limit=15)\n            suggestions[platform.value] = tracker.suggest_hashtags(pillar, platform.value, top)\n        return suggestions\n    \n    def _build_prompt(self, row: ContentRow, platforms: list[Platform]) -> str:\n        # ... existing code ...\n        \n        # Add hashtag suggestions\n        if row.content_pillar:\n            hashtags = asyncio.run(self._get_hashtag_suggestions(row.content_pillar, platforms))\n            if hashtags:\n                parts.append('SUGGESTED HASHTAGS (use these for better engagement):')\n                for platform, tags in hashtags.items():\n                    parts.append(f'- {platform}: {\" \".join(\"#\" + t for t in tags)}')\n                parts.append('')\n        \n        # ... rest of prompt\n```\n\nUpdate frontend ContentEditor to show hashtag suggestions during iteration.",
+        "testStrategy": "1. Test hashtag suggestions appear in prompt\n2. Test platform limits enforced in suggestions\n3. Test generation uses suggested hashtags\n4. Test UI displays suggestions\n5. Test empty suggestions handled gracefully",
+        "priority": "medium",
+        "dependencies": [
+          "14"
+        ],
+        "status": "pending",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Add hashtag suggestions to generation: 1) Add _get_hashtag_suggestions method to CaptionGenerator calling HashtagTracker, 2) Update _build_prompt to include suggested hashtags section and update PLATFORM_INSTRUCTIONS with hashtag guidance"
+      },
+      {
+        "id": "16",
+        "title": "Rebuild Dashboard with Analytics Widgets",
+        "description": "Redesign Dashboard page using Magic MCP + frontend-design to add analytics visualization widgets.",
+        "details": "Use frontend workflow:\n1. Invoke frontend-design skill for creative direction\n2. Use Magic MCP component_inspiration for dashboard designs\n3. Use component_builder to generate widgets\n4. Use component_refiner to polish\n\nWidgets to add:\n1. Engagement Over Time - Line chart (recharts), per-platform, configurable date range\n2. Pillar Performance - Bar chart showing avg engagement per pillar\n3. Best Posting Times - Heatmap (7 days x 24 hours)\n4. Top Performing Posts - Table with preview, platform, metrics\n5. Content Pipeline Stats - Enhanced counts with trend indicators\n\nCreate new components:\n- frontend/src/components/analytics/EngagementChart.tsx\n- frontend/src/components/analytics/PillarChart.tsx\n- frontend/src/components/analytics/TimingHeatmap.tsx\n- frontend/src/components/analytics/TopPostsTable.tsx\n- frontend/src/components/analytics/PipelineStats.tsx\n\nUpdate DashboardPage.tsx to use new widgets with data from /api/analytics/* endpoints.\n\nAdd recharts to package.json dependencies.",
+        "testStrategy": "1. Test each widget renders with mock data\n2. Test date range picker updates chart\n3. Test loading states display correctly\n4. Test empty states for no data\n5. Test error states for API failures\n6. E2E test dashboard loads and displays analytics",
+        "priority": "medium",
+        "dependencies": [
+          "13"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Set up recharts dependency and analytics component directory structure",
+            "description": "Install recharts package and create the analytics component directory with shared types and utilities for all dashboard widgets.",
+            "dependencies": [],
+            "details": "1. Add recharts to package.json dependencies: `npm install recharts @types/recharts`\n2. Create `frontend/src/components/analytics/` directory\n3. Create `frontend/src/components/analytics/index.ts` barrel export file\n4. Create `frontend/src/components/analytics/types.ts` with shared TypeScript interfaces for analytics data (EngagementDataPoint, PillarStats, TimingCell, TopPost, PipelineStats)\n5. Create `frontend/src/components/analytics/colors.ts` with platform color constants matching existing design system (sage palette)\n6. Create `frontend/src/hooks/useAnalyticsData.ts` hook skeleton with react-query queries for /api/analytics/* endpoints (overview, pillars, timing, posts)\n7. Verify recharts types work with TypeScript strict mode",
+            "status": "pending",
+            "testStrategy": "1. Verify recharts installs without conflicts\n2. Test TypeScript compilation passes with new types\n3. Test useAnalyticsData hook returns loading state initially\n4. Verify barrel export works: `import { EngagementChart } from '@/components/analytics'`",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Create EngagementChart component with recharts line chart and date range picker",
+            "description": "Build the Engagement Over Time widget using recharts LineChart with per-platform series and a configurable date range selector.",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Follow frontend workflow: invoke frontend-design skill for chart layout direction\n2. Use Magic MCP component_inspiration to find line chart dashboard examples\n3. Create `frontend/src/components/analytics/EngagementChart.tsx`\n4. Implement LineChart from recharts with:\n   - X-axis: date (formatted via date-fns)\n   - Y-axis: engagement count\n   - Multiple Line series: one per platform (Facebook, Instagram, TikTok) with platform colors\n   - Tooltip showing platform breakdown on hover\n   - Legend identifying each platform\n5. Add date range picker using existing react-day-picker (already in package.json)\n6. Props: data array, onDateRangeChange callback, isLoading boolean\n7. Implement loading skeleton state and empty state\n8. Use component_refiner to polish spacing, colors, responsiveness",
+            "status": "pending",
+            "testStrategy": "1. Test renders with mock engagement data array\n2. Test date range picker updates chart (mock onDateRangeChange)\n3. Test loading skeleton displays when isLoading=true\n4. Test empty state shows when data is empty array\n5. Test platform legend renders all platforms",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Create PillarChart component with bar chart for pillar breakdown",
+            "description": "Build the Pillar Performance widget showing average engagement per content pillar using a recharts BarChart.",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Follow frontend workflow: invoke frontend-design skill for bar chart layout\n2. Use Magic MCP component_inspiration for bar chart dashboard examples\n3. Create `frontend/src/components/analytics/PillarChart.tsx`\n4. Implement BarChart from recharts with:\n   - X-axis: pillar names (dynamic from API, not hardcoded)\n   - Y-axis: average engagement\n   - Bar fill colors derived from pillar or using gradient\n   - Tooltip showing exact engagement value\n   - Responsive sizing with ResponsiveContainer\n5. Props: data array (pillar, avgEngagement, postCount), isLoading boolean\n6. Implement loading skeleton state and empty state ('No pillar data yet')\n7. Use component_refiner to ensure consistent styling with EngagementChart\n8. Consider horizontal bars if many pillars for better readability",
+            "status": "pending",
+            "testStrategy": "1. Test renders with mock pillar data array\n2. Test handles dynamic pillar names (not hardcoded enum)\n3. Test loading skeleton displays correctly\n4. Test empty state shows appropriate message\n5. Test responsive behavior at different viewport widths",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Create TimingHeatmap component with 7x24 hour grid visualization",
+            "description": "Build the Best Posting Times widget displaying a heatmap of engagement by day of week and hour.",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Follow frontend workflow: invoke frontend-design skill for heatmap layout\n2. Use Magic MCP component_inspiration for heatmap/calendar grid examples\n3. Create `frontend/src/components/analytics/TimingHeatmap.tsx`\n4. Implement custom heatmap grid (recharts doesn't have built-in heatmap, use CSS grid or SVG):\n   - 7 columns (Sun-Sat)\n   - 24 rows (0-23 hours)\n   - Cell color intensity based on engagement score (sage color gradient: light sage -> dark sage)\n   - Tooltip on hover showing day, hour, and exact engagement value\n5. Props: data (2D array [day][hour] = score), isLoading boolean\n6. Add day labels (S M T W T F S) as column headers\n7. Add hour labels (12am, 1am, ..., 11pm) as row headers\n8. Implement loading skeleton and empty state\n9. Use component_refiner for color tuning and accessibility",
+            "status": "pending",
+            "testStrategy": "1. Test renders 7x24 grid correctly\n2. Test color intensity varies with engagement value\n3. Test tooltip shows correct day/hour/value on hover\n4. Test loading skeleton displays correctly\n5. Test empty state when all values are zero",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Create TopPostsTable and PipelineStats components",
+            "description": "Build the Top Performing Posts table with sorting/preview and the enhanced Content Pipeline Stats widget with trend indicators.",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Follow frontend workflow: invoke frontend-design skill for table and stats card layouts\n2. Use Magic MCP component_inspiration for data tables and metric cards\n3. Create `frontend/src/components/analytics/TopPostsTable.tsx`:\n   - Table columns: preview (truncated text), platform icon, likes, comments, shares, total\n   - Sortable by engagement metrics (click column header)\n   - Platform filter dropdown\n   - Limit to top 10 with 'View all' link\n   - Props: data array, onSort callback, isLoading\n4. Create `frontend/src/components/analytics/PipelineStats.tsx`:\n   - Enhanced version of existing dashboard stats (Pending Drafts, Scheduled, Posted)\n   - Add trend indicators: arrow up/down/flat with percentage change\n   - Add sparkline mini-charts using recharts AreaChart\n   - Props: stats object with current/previous values, isLoading\n5. Use component_refiner for both components\n6. Update barrel export in index.ts",
+            "status": "pending",
+            "testStrategy": "1. Test TopPostsTable renders with mock posts data\n2. Test sorting changes row order\n3. Test platform filter reduces visible rows\n4. Test PipelineStats shows trend arrows correctly (up for positive, down for negative)\n5. Test loading states for both components",
+            "parentId": "undefined"
+          },
+          {
+            "id": 6,
+            "title": "Update DashboardPage to compose all analytics widgets with API integration",
+            "description": "Refactor DashboardPage.tsx to integrate all new analytics widgets with data from /api/analytics/* endpoints, proper loading states, and responsive layout.",
+            "dependencies": [
+              2,
+              3,
+              4,
+              5
+            ],
+            "details": "1. Update `frontend/src/hooks/useDashboardData.ts` (or create `useAnalyticsData.ts`) to add queries for:\n   - GET /api/analytics/overview (for PipelineStats trends)\n   - GET /api/analytics/pillars (for PillarChart)\n   - GET /api/analytics/timing (for TimingHeatmap)\n   - GET /api/analytics/posts?sort=engagement (for TopPostsTable)\n2. Update DashboardPage.tsx layout:\n   - Keep existing Quick Create and System Health cards\n   - Replace/enhance stats cards with PipelineStats component\n   - Add new grid section for analytics widgets\n   - Responsive layout: 2 columns on desktop, stack on mobile\n3. Wire up EngagementChart with date range state management (useState for range)\n4. Wire up all widgets with loading/error/empty states\n5. Add section heading 'Analytics' above widgets\n6. Ensure graceful degradation if analytics endpoints return errors (show 'Analytics unavailable' card)\n7. Test full page loads correctly with backend running",
+            "status": "pending",
+            "testStrategy": "1. E2E test: Dashboard page loads and displays analytics section\n2. Test each widget renders with API data (requires backend with analytics endpoints)\n3. Test loading states display while fetching\n4. Test error state displays when API fails (mock 500)\n5. Test empty states display when no analytics data exists\n6. Test date range picker updates EngagementChart\n7. Verify no regressions in existing dashboard functionality (Quick Create, Health Status)",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 8,
+        "recommendedSubtasks": 6,
+        "expansionPrompt": "Rebuild Dashboard with analytics: 1) Use frontend-design skill for creative direction on dashboard layout, 2) Create EngagementChart component with recharts line chart and date range picker, 3) Create PillarChart component with bar chart for pillar breakdown, 4) Create TimingHeatmap component with heatmap visualization, 5) Create TopPostsTable component with sorting and preview, 6) Update DashboardPage to compose widgets with API hooks and loading states"
+      },
+      {
+        "id": "17",
+        "title": "Add Scheduler for Periodic Crawls and Analytics Sync",
+        "description": "Implement background scheduler for weekly website crawls and daily analytics sync.",
+        "details": "Update src/content_engine/scheduler.py:\n```python\nfrom apscheduler.schedulers.asyncio import AsyncIOScheduler\nfrom apscheduler.triggers.cron import CronTrigger\n\nclass ContentScheduler:\n    def __init__(self):\n        self.scheduler = AsyncIOScheduler()\n    \n    def setup_jobs(self):\n        # Weekly website crawl - Sundays at 2 AM\n        self.scheduler.add_job(\n            self.run_website_crawl,\n            CronTrigger(day_of_week='sun', hour=2),\n            id='weekly_crawl'\n        )\n        \n        # Daily social sync - every day at 3 AM\n        self.scheduler.add_job(\n            self.run_social_sync,\n            CronTrigger(hour=3),\n            id='daily_social_sync'\n        )\n        \n        # Daily analytics pull - every day at 4 AM\n        self.scheduler.add_job(\n            self.run_analytics_sync,\n            CronTrigger(hour=4),\n            id='daily_analytics'\n        )\n    \n    async def run_website_crawl(self):\n        '''Crawl gitavalley.com and iskcongitanagari.org'''\n        pass\n    \n    async def run_social_sync(self):\n        '''Sync new posts from Meta Graph API'''\n        pass\n    \n    async def run_analytics_sync(self):\n        '''Pull engagement data from Postiz'''\n        pass\n    \n    def start(self):\n        self.scheduler.start()\n    \n    def shutdown(self):\n        self.scheduler.shutdown()\n```\n\nIntegrate with FastAPI lifespan:\n```python\n@asynccontextmanager\nasync def lifespan(app: FastAPI):\n    scheduler = ContentScheduler()\n    scheduler.setup_jobs()\n    scheduler.start()\n    yield\n    scheduler.shutdown()\n```\n\nAdd APScheduler to dependencies.",
+        "testStrategy": "1. Test job scheduling with mock time\n2. Test each job executes without error\n3. Test scheduler starts/stops with app lifecycle\n4. Test job failure doesn't crash scheduler\n5. Test job results logged correctly",
+        "priority": "low",
+        "dependencies": [
+          "9",
+          "11"
+        ],
+        "status": "pending",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Add APScheduler jobs: 1) Add APScheduler dependency and create ContentScheduler class with cron triggers for weekly crawl, daily social sync, daily analytics, 2) Integrate scheduler with FastAPI lifespan, implement job methods calling crawlers and PostizAnalyticsSync"
+      },
+      {
+        "id": "18",
+        "title": "Add Pillars Dynamic Lookup to Content Engine",
+        "description": "Update content engine to fetch pillar list from database for AI classification instead of using hardcoded enum.",
+        "details": "Update src/content_engine/generator.py:\n```python\nclass CaptionGenerator:\n    def __init__(self, data_dir: Path = _DEFAULT_DATA_DIR, db_session=None):\n        self.db_session = db_session\n        self._pillar_cache: list[str] | None = None\n        self._pillar_cache_time: float = 0\n    \n    async def get_pillars(self) -> list[str]:\n        '''Fetch active pillars from database, cache for 5 minutes'''\n        import time\n        if self._pillar_cache and (time.time() - self._pillar_cache_time) < 300:\n            return self._pillar_cache\n        \n        if not self.db_session:\n            # Fallback to default pillars\n            return ['Spiritual Education', 'Farm & Community', 'Events', 'Behind the Scenes']\n        \n        from api.models import Pillar\n        from sqlalchemy import select\n        result = await self.db_session.execute(\n            select(Pillar.name).where(Pillar.is_active == True).order_by(Pillar.sort_order)\n        )\n        self._pillar_cache = [r[0] for r in result.all()]\n        self._pillar_cache_time = time.time()\n        return self._pillar_cache\n    \n    async def infer_pillar(self, raw_text: str) -> str:\n        '''AI-infer content pillar from text using dynamic pillar list'''\n        pillars = await self.get_pillars()\n        pillar_values = ', '.join(pillars)\n        prompt = (\n            f'Classify this social media post into exactly one of these categories: '\n            f'{pillar_values}\\n\\n'\n            f'Post: {raw_text}\\n\\n'\n            f'Reply with ONLY the category name, nothing else.'\n        )\n        raw = _call_claude(prompt)\n        result = raw.strip()\n        if result in pillars:\n            return result\n        logger.warning('Unrecognised pillar %r, defaulting to first pillar', result)\n        return pillars[0] if pillars else 'General'\n```\n\nUpdate all callers to use async version.",
+        "testStrategy": "1. Test pillar fetch from database\n2. Test cache expiration\n3. Test fallback when no DB session\n4. Test infer_pillar uses dynamic list\n5. Test unknown pillar falls back correctly",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Add dynamic pillar lookup: 1) Add db_session and pillar caching to CaptionGenerator.__init__ with async get_pillars method, 2) Update infer_pillar to be async, use dynamic pillar list, and update all callers to pass db_session",
+        "updatedAt": "2026-03-19T02:10:17.171Z"
+      },
+      {
+        "id": "19",
+        "title": "Add Knowledge Search to Dashboard",
+        "description": "Add search widget to Dashboard for querying the knowledge base, usable during content creation.",
+        "details": "Create frontend/src/components/knowledge/KnowledgeSearch.tsx:\n```tsx\nexport function KnowledgeSearch() {\n  const [query, setQuery] = useState('');\n  const [results, setResults] = useState<KnowledgeResult[]>([]);\n  const [loading, setLoading] = useState(false);\n  \n  const search = async () => {\n    setLoading(true);\n    const resp = await fetch(`/api/knowledge/search?q=${encodeURIComponent(query)}`);\n    const data = await resp.json();\n    setResults(data.results);\n    setLoading(false);\n  };\n  \n  return (\n    <Card>\n      <CardHeader>\n        <CardTitle>Knowledge Base</CardTitle>\n      </CardHeader>\n      <CardContent>\n        <div className=\"flex gap-2\">\n          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder=\"Search programs, events, facts...\" />\n          <Button onClick={search} disabled={loading}>\n            {loading ? <Spinner /> : <Search />}\n          </Button>\n        </div>\n        <div className=\"mt-4 space-y-2\">\n          {results.map((r, i) => (\n            <div key={i} className=\"p-2 border rounded\">\n              <Badge>{r.fact_type}</Badge>\n              <Badge variant=\"outline\">{r.pillar}</Badge>\n              <p className=\"mt-1\">{r.content}</p>\n            </div>\n          ))}\n        </div>\n      </CardContent>\n    </Card>\n  );\n}\n```\n\nIntegrate into ContentEditor to allow searching while editing.",
+        "testStrategy": "1. Test search returns results\n2. Test empty query handling\n3. Test loading state\n4. Test result rendering\n5. Test integration with ContentEditor",
+        "priority": "low",
+        "dependencies": [
+          "8",
+          "16"
+        ],
+        "status": "pending",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Add knowledge search widget: 1) Create KnowledgeSearch.tsx component with search input, loading state, and result display, 2) Add to DashboardPage and optionally integrate with ContentEditor for search-while-editing"
+      },
+      {
+        "id": "20",
+        "title": "End-to-End Integration Testing for Phase 2",
+        "description": "Create comprehensive E2E tests covering all Phase 2 features working together.",
+        "details": "Create tests/e2e/test_phase2_integration.py:\n```python\nimport pytest\nfrom playwright.sync_api import Page\n\nclass TestPhase2Integration:\n    @pytest.fixture\n    def seeded_knowledge(self, db_session):\n        '''Seed knowledge base with test data'''\n        pass\n    \n    @pytest.fixture\n    def seeded_analytics(self, db_session):\n        '''Seed analytics cache with test data'''\n        pass\n    \n    def test_knowledge_injection_in_generation(self, seeded_knowledge):\n        '''Verify generated captions include knowledge context'''\n        pass\n    \n    def test_dashboard_displays_analytics(self, page: Page, seeded_analytics):\n        '''Verify dashboard widgets render with data'''\n        page.goto('/dashboard')\n        page.wait_for_selector('[data-testid=\"engagement-chart\"]')\n        page.wait_for_selector('[data-testid=\"pillar-chart\"]')\n        page.wait_for_selector('[data-testid=\"timing-heatmap\"]')\n        pass\n    \n    def test_hashtag_suggestions_appear(self, page: Page, seeded_analytics):\n        '''Verify hashtag suggestions show in ContentEditor'''\n        pass\n    \n    def test_knowledge_search_returns_results(self, page: Page, seeded_knowledge):\n        '''Verify knowledge search works from dashboard'''\n        pass\n    \n    def test_crawl_status_endpoint(self, client):\n        '''Verify /api/knowledge/status returns correct format'''\n        pass\n    \n    def test_analytics_correlation(self, seeded_analytics):\n        '''Verify pillar breakdown correctly aggregates data'''\n        pass\n```\n\nAdd Playwright fixtures for authenticated dashboard access.",
+        "testStrategy": "1. Run full E2E suite with seeded data\n2. Test each feature independently\n3. Test features work together\n4. Test error scenarios\n5. Verify no regressions in Phase 1 features",
+        "priority": "medium",
+        "dependencies": [
+          "16",
+          "19"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create Database Seeding Fixtures for E2E Tests",
+            "description": "Build pytest fixtures that seed web_knowledge and analytics_cache tables with realistic test data for Phase 2 integration testing.",
+            "dependencies": [],
+            "details": "Create tests/e2e/conftest.py with fixtures:\n\n1. `seeded_knowledge` fixture:\n   - Insert 10-15 web_knowledge entries covering all fact_types (scripture_reference, farm_fact, event_detail, community_info)\n   - Include entries from both gitavalley.com and iskcongitanagari.org sources\n   - Cover all content pillars (spiritual_education, farm_community, events, behind_scenes, seasonal, collaborative)\n   - Set realistic embedding vectors for semantic search testing\n\n2. `seeded_analytics` fixture:\n   - Insert analytics_cache entries for overview, pillar_breakdown, timing_analysis, top_posts\n   - Include 30 days of mock engagement data\n   - Create realistic pillar distribution (40% spiritual, 25% farm, etc.)\n   - Include timing heatmap data for optimal posting times\n\n3. `db_session` fixture:\n   - Use SQLAlchemy async session with test database\n   - Handle transaction rollback after each test\n   - Ensure isolation between tests\n\nUse factory patterns for generating realistic test data with Faker library.",
+            "status": "pending",
+            "testStrategy": "1. Verify fixtures create expected number of records\n2. Test data matches expected schema\n3. Verify rollback cleans up after tests\n4. Test fixtures work in isolation and combination",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement API Integration Tests for Knowledge and Analytics Endpoints",
+            "description": "Create comprehensive API tests for /api/knowledge and /api/analytics endpoints using pytest and httpx AsyncClient.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create tests/e2e/test_api_integration.py:\n\n1. Knowledge API tests:\n   - `test_knowledge_status_endpoint`: Verify /api/knowledge/status returns {total_entries, last_crawl, sources_breakdown}\n   - `test_knowledge_search_basic`: Search with query string returns relevant results\n   - `test_knowledge_search_pillar_filter`: Filter by pillar returns only matching entries\n   - `test_knowledge_search_empty_results`: Non-matching query returns empty array gracefully\n   - `test_crawl_trigger_returns_job_id`: POST /api/knowledge/crawl returns job ID immediately\n\n2. Analytics API tests:\n   - `test_analytics_overview_default`: GET /api/analytics/overview returns 30-day summary\n   - `test_analytics_overview_date_range`: Custom days parameter filters correctly\n   - `test_analytics_pillars`: GET /api/analytics/pillars returns breakdown with percentages\n   - `test_analytics_timing`: GET /api/analytics/timing returns heatmap data structure\n   - `test_analytics_top_posts`: GET /api/analytics/top-posts returns sorted by engagement\n\n3. Error handling tests:\n   - Test invalid parameters return 422\n   - Test missing data returns empty results, not errors",
+            "status": "pending",
+            "testStrategy": "1. Use seeded_knowledge and seeded_analytics fixtures\n2. Assert response status codes and JSON structure\n3. Verify data correctness against seeded values\n4. Test edge cases and error responses",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Create Playwright E2E Tests for Dashboard Analytics Widgets",
+            "description": "Build Playwright browser tests verifying Dashboard renders analytics widgets correctly with seeded data.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create tests/e2e/test_dashboard_e2e.py with Playwright:\n\n1. Setup authenticated browser fixture:\n   - Create `authenticated_page` fixture that logs in or bypasses auth for test environment\n   - Configure Playwright to use test API backend\n   - Set up screenshot-on-failure for debugging\n\n2. Dashboard widget tests:\n   - `test_dashboard_loads_engagement_chart`: Navigate to /dashboard, wait for [data-testid=\"engagement-chart\"], verify chart SVG renders\n   - `test_dashboard_loads_pillar_chart`: Verify [data-testid=\"pillar-chart\"] renders with correct pillar segments\n   - `test_dashboard_loads_timing_heatmap`: Verify [data-testid=\"timing-heatmap\"] displays 7x24 grid\n   - `test_dashboard_shows_top_posts`: Verify top posts list renders with post titles and engagement counts\n\n3. Interactive tests:\n   - `test_date_range_selector`: Change date range and verify charts update\n   - `test_knowledge_search_from_dashboard`: Type in search, verify results panel appears\n   - `test_hashtag_suggestions_in_editor`: Navigate to content editor, verify hashtag chips appear\n\nUse page.wait_for_selector() with appropriate timeouts for async data loading.",
+            "status": "pending",
+            "testStrategy": "1. Run with seeded database\n2. Capture screenshots on assertion failures\n3. Test responsive breakpoints\n4. Verify no console errors during tests",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Create Integration Test for Knowledge Injection in Caption Generation",
+            "description": "Test that the content generation pipeline correctly injects knowledge base context into AI-generated captions.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Create tests/e2e/test_knowledge_injection.py:\n\n1. Test knowledge context injection:\n   - `test_generation_includes_knowledge_context`: Seed knowledge with specific facts, generate caption for matching pillar, verify API receives knowledge context\n   - `test_scripture_references_injected`: Seed scripture_reference facts, generate spiritual_education content, verify references appear in prompt context\n   - `test_farm_facts_injected_for_farm_pillar`: Seed farm_fact entries, generate farm_community content, verify farm facts in context\n\n2. Mock AI response verification:\n   - Use respx or pytest-httpx to mock Claude/OpenAI API\n   - Capture the prompt sent to AI and verify knowledge context is included\n   - Verify prompt structure matches expected format with RAG context\n\n3. End-to-end generation test:\n   - `test_full_generation_with_knowledge`: POST /api/generate with image and pillar, verify response includes caption that could plausibly reference seeded knowledge\n   - `test_generation_without_knowledge`: Empty knowledge base still generates valid captions\n\n4. Analytics correlation test:\n   - `test_pillar_breakdown_aggregation`: Verify analytics correctly aggregates engagement by pillar from seeded data\n   - `test_timing_analysis_accuracy`: Verify timing recommendations match seeded engagement patterns",
+            "status": "pending",
+            "testStrategy": "1. Mock external AI APIs to control responses\n2. Verify prompt construction includes knowledge\n3. Test with various pillar types\n4. Ensure graceful handling when knowledge base is empty",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Create Phase 2 E2E tests: 1) Create test fixtures for seeding web_knowledge and analytics_cache tables, 2) Create API integration tests for /api/knowledge and /api/analytics endpoints, 3) Create Playwright E2E tests for Dashboard analytics widgets, 4) Create integration test for knowledge injection in caption generation"
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2026-03-19T02:10:17.172Z",
+      "taskCount": 20,
+      "completedCount": 4,
+      "tags": [
+        "phase2-intelligence"
       ]
     }
   }

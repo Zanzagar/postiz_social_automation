@@ -3,7 +3,7 @@
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-from content_engine.models import ContentPillar, ContentRow, ContentStatus, Platform
+from content_engine.models import ContentRow, ContentStatus, Platform
 from content_engine.validator import ContentValidator
 
 
@@ -12,7 +12,7 @@ def _make_row(**overrides) -> ContentRow:
     defaults = {
         "row_number": 1,
         "date": datetime(2026, 3, 1),
-        "content_pillar": ContentPillar.COW_LIFE,
+        "content_pillar": "Cow Life",
         "raw_text": "Baby calf born this morning!",
         "platforms": {Platform.INSTAGRAM: True},
         "status": ContentStatus.READY,

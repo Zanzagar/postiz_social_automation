@@ -16,15 +16,6 @@ class ContentStatus(StrEnum):
     ERROR = "error"
 
 
-class ContentPillar(StrEnum):
-    COW_LIFE = "Cow Life"
-    FARM_OPS = "Farm Ops"
-    COMMUNITY = "Community"
-    KITCHEN = "Kitchen"
-    SPIRITUAL = "Spiritual"
-    CTA = "CTA"
-
-
 class Platform(StrEnum):
     INSTAGRAM = "instagram"
     FACEBOOK = "facebook"
@@ -38,7 +29,7 @@ class ContentRow(BaseModel):
 
     row_number: int
     date: datetime
-    content_pillar: ContentPillar | None = None
+    content_pillar: str | None = None
     raw_text: str
     media_url: HttpUrl | None = None
     platforms: dict[Platform, bool]
@@ -56,7 +47,7 @@ class Suggestion(BaseModel):
 
     suggested_date: datetime
     content_idea: str
-    suggested_pillar: ContentPillar
+    suggested_pillar: str
     rationale: str
     media_suggestion: str
     status: str = "suggested"
@@ -67,7 +58,7 @@ class PostPerformance(BaseModel):
 
     post_id: str
     platform: Platform
-    pillar: ContentPillar
+    pillar: str
     posted_at: datetime
     likes: int = 0
     comments: int = 0

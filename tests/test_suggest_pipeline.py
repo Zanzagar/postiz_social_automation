@@ -13,7 +13,7 @@ Tests verify:
 from datetime import datetime
 from unittest.mock import MagicMock
 
-from content_engine.models import ContentPillar, Suggestion
+from content_engine.models import Suggestion
 from content_engine.pipeline import PipelineResult, suggest_pipeline
 
 
@@ -33,15 +33,15 @@ class TestSuggestPipeline:
             {"date": "2026-03-03"},
         ]
         intelligence.analyze_pillar_balance.return_value = {
-            ContentPillar.COW_LIFE: {"actual": 0.30, "target": 0.40, "deviation": -0.10},
-            ContentPillar.FARM_OPS: {"actual": 0.30, "target": 0.25, "deviation": 0.05},
+            "Cow Life": {"actual": 0.30, "target": 0.40, "deviation": -0.10},
+            "Farm Ops": {"actual": 0.30, "target": 0.25, "deviation": 0.05},
         }
         intelligence.get_upcoming_events.return_value = []
 
         suggestion = Suggestion(
             suggested_date=datetime(2026, 3, 1),
             content_idea="Photo of morning milking routine",
-            suggested_pillar=ContentPillar.COW_LIFE,
+            suggested_pillar="Cow Life",
             rationale="Cow Life pillar is underrepresented",
             media_suggestion="Photo of cows in the barn",
         )
@@ -70,14 +70,14 @@ class TestSuggestPipeline:
         s1 = Suggestion(
             suggested_date=datetime(2026, 3, 1),
             content_idea="Idea 1",
-            suggested_pillar=ContentPillar.COW_LIFE,
+            suggested_pillar="Cow Life",
             rationale="r1",
             media_suggestion="m1",
         )
         s2 = Suggestion(
             suggested_date=datetime(2026, 3, 2),
             content_idea="Idea 2",
-            suggested_pillar=ContentPillar.FARM_OPS,
+            suggested_pillar="Farm Ops",
             rationale="r2",
             media_suggestion="m2",
         )
@@ -105,14 +105,14 @@ class TestSuggestPipeline:
         s1 = Suggestion(
             suggested_date=datetime(2026, 3, 1),
             content_idea="Idea 1",
-            suggested_pillar=ContentPillar.COW_LIFE,
+            suggested_pillar="Cow Life",
             rationale="r1",
             media_suggestion="m1",
         )
         s2 = Suggestion(
             suggested_date=datetime(2026, 3, 2),
             content_idea="Idea 2",
-            suggested_pillar=ContentPillar.FARM_OPS,
+            suggested_pillar="Farm Ops",
             rationale="r2",
             media_suggestion="m2",
         )
@@ -155,7 +155,7 @@ class TestSuggestPipeline:
 
         intelligence.analyze_calendar_gaps.return_value = [{"date": "2026-03-01"}]
         intelligence.analyze_pillar_balance.return_value = {
-            ContentPillar.COW_LIFE: {"actual": 0.30, "target": 0.40, "deviation": -0.10},
+            "Cow Life": {"actual": 0.30, "target": 0.40, "deviation": -0.10},
         }
         intelligence.get_upcoming_events.return_value = []
         generator.generate_suggestions.return_value = []

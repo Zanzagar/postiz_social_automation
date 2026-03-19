@@ -38,7 +38,7 @@ class SheetsSyncAdapter:
             content_row = await self.repo.create_content_row(
                 {
                     "date": row.date,
-                    "pillar": row.content_pillar.value if row.content_pillar else None,
+                    "pillar": row.content_pillar if row.content_pillar else None,
                     "raw_text": row.raw_text,
                     "media_url": str(row.media_url) if row.media_url else None,
                     "platforms": platforms_json,

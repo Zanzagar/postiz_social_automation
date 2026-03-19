@@ -47,10 +47,10 @@ def build_pillar_comparison(actual_distribution: dict[str, float]) -> list[dict]
     """
     result = []
     for pillar, target_pct in TARGET_PILLAR_WEIGHTS.items():
-        actual_pct = actual_distribution.get(pillar.value, 0.0)
+        actual_pct = actual_distribution.get(pillar, 0.0)
         result.append(
             {
-                "pillar": pillar.value,
+                "pillar": pillar,
                 "target": round(target_pct * 100, 1),
                 "actual": round(actual_pct * 100, 1),
             }
