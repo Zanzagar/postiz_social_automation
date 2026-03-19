@@ -1,103 +1,43 @@
-"""Tests for the scheduling module (Task 21).
+"""Tests for periodic crawl and analytics scheduler."""
 
-Tests verify:
-- Scheduler module is importable
-- Pipeline runner functions exist and are callable
-- Schedule configuration builds correct job list
-- Pipeline runner handles subprocess success
-- Pipeline runner handles subprocess failure
-- Default schedule has enhance, suggest, learn jobs
-"""
+import json
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+import pytest
+
+from content_engine.scheduler import CrawlScheduler
 
 
-class TestSchedulerModuleExists:
-    def test_module_importable(self) -> None:
-        from content_engine.scheduler import build_schedule, run_pipeline
+class TestCrawlSchedulerInit:
+    def test_default_intervals(self):
+        scheduler = CrawlScheduler(db_path="test.db")
+        assert scheduler.web_crawl_interval_hours == 168  # weekly
+        assert scheduler.analytics_sync_interval_hours == 24  # daily
+        assert scheduler.hashtag_update_interval_hours == 24
 
-        assert callable(build_schedule)
-        assert callable(run_pipeline)
-
-
-class TestRunPipeline:
-    """Test the generic pipeline runner."""
-
-    @patch("content_engine.scheduler.subprocess.run")
-    def test_success_returns_true(self, mock_run: MagicMock) -> None:
-        from content_engine.scheduler import run_pipeline
-
-        mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
-        result = run_pipeline("enhance")
-        assert result is True
-
-    @patch("content_engine.scheduler.subprocess.run")
-    def test_failure_returns_false(self, mock_run: MagicMock) -> None:
-        from content_engine.scheduler import run_pipeline
-
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error")
-        result = run_pipeline("enhance")
-        assert result is False
-
-    @patch("content_engine.scheduler.subprocess.run")
-    def test_calls_correct_script(self, mock_run: MagicMock) -> None:
-        from content_engine.scheduler import run_pipeline
-
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        run_pipeline("suggest")
-        args = mock_run.call_args[0][0]
-        assert "run_suggest.py" in args[-1]
-
-    @patch("content_engine.scheduler.subprocess.run")
-    def test_exception_returns_false(self, mock_run: MagicMock) -> None:
-        from content_engine.scheduler import run_pipeline
-
-        mock_run.side_effect = OSError("not found")
-        result = run_pipeline("enhance")
-        assert result is False
-
-
-class TestBuildSchedule:
-    """Test schedule configuration."""
-
-    def test_returns_schedule_with_three_jobs(self) -> None:
-        from content_engine.scheduler import build_schedule
-
-        sched = build_schedule()
-        assert len(sched.get_jobs()) == 3
-
-    def test_job_tags_include_all_pipelines(self) -> None:
-        from content_engine.scheduler import build_schedule
-
-        sched = build_schedule()
-        tags = set()
-        for job in sched.get_jobs():
-            tags.update(job.tags)
-        assert "enhance" in tags
-        assert "suggest" in tags
-        assert "learn" in tags
-
-    def test_custom_intervals(self) -> None:
-        from content_engine.scheduler import build_schedule
-
-        sched = build_schedule(
-            enhance_minutes=15,
-            suggest_day="monday",
-            suggest_time="10:00",
-            learn_time="07:00",
+    def test_custom_intervals(self):
+        scheduler = CrawlScheduler(
+            db_path="test.db",
+            web_crawl_interval_hours=48,
+            analytics_sync_interval_hours=12,
         )
-        assert len(sched.get_jobs()) == 3
+        assert scheduler.web_crawl_interval_hours == 48
+        assert scheduler.analytics_sync_interval_hours == 12
 
 
-class TestScriptPaths:
-    """Verify pipeline script files exist."""
+class TestShouldRun:
+    def test_should_run_when_never_run(self, tmp_path):
+        scheduler = CrawlScheduler(db_path=str(tmp_path / "test.db"), state_dir=tmp_path)
+        assert scheduler.should_run("web_crawl") is True
 
-    def test_enhance_script_exists(self) -> None:
-        assert Path("src/content_engine/scripts/run_enhance.py").exists()
+    def test_should_not_run_when_recently_run(self, tmp_path):
+        scheduler = CrawlScheduler(db_path=str(tmp_path / "test.db"), state_dir=tmp_path)
+        scheduler.record_run("web_crawl")
+        assert scheduler.should_run("web_crawl") is False
 
-    def test_suggest_script_exists(self) -> None:
-        assert Path("src/content_engine/scripts/run_suggest.py").exists()
 
-    def test_learn_script_exists(self) -> None:
-        assert Path("src/content_engine/scripts/run_learn.py").exists()
+class TestRecordRun:
+    def test_record_creates_timestamp(self, tmp_path):
+        scheduler = CrawlScheduler(db_path=str(tmp_path / "test.db"), state_dir=tmp_path)
+        scheduler.record_run("analytics_sync")
+        state = scheduler._load_state()
+        assert "analytics_sync" in state
