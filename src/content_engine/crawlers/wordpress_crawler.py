@@ -1,8 +1,12 @@
 """WordPress REST API crawler for gitavalley.com."""
 
 import hashlib
+import json
 import logging
 import re
+import sqlite3
+import subprocess
+from datetime import datetime, timezone
 
 import httpx
 
@@ -10,6 +14,19 @@ logger = logging.getLogger(__name__)
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
+
+VALID_FACT_TYPES = {"program", "event", "quote", "link", "description"}
+
+
+def _call_claude(prompt: str) -> str:
+    """Call Claude CLI and return the raw text response."""
+    result = subprocess.run(
+        ["claude", "-p", prompt],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    return result.stdout.strip()
 
 
 class WordPressCrawler:
@@ -115,6 +132,122 @@ class WordPressCrawler:
             len(raw_pages),
         )
         return results
+
+    # ------------------------------------------------------------------
+    # AI classification and extraction
+    # ------------------------------------------------------------------
+
+    def classify_pillar(self, title: str, body_text: str, pillars: list[str]) -> str:
+        """Use Claude CLI to classify a page into one of the known pillars."""
+        pillar_list = ", ".join(pillars)
+        prompt = (
+            f"Classify this web page into exactly one of these categories: {pillar_list}\n\n"
+            f"Title: {title}\n"
+            f"Content (first 500 chars): {body_text[:500]}\n\n"
+            f"Reply with ONLY the category name, nothing else."
+        )
+        raw = _call_claude(prompt).strip()
+        if raw in pillars:
+            return raw
+        logger.warning("Unrecognised pillar %r, using first pillar", raw)
+        return pillars[0] if pillars else "General"
+
+    def extract_knowledge(self, title: str, body_text: str) -> list[dict]:
+        """Use Claude CLI to extract structured facts from page content."""
+        prompt = (
+            "Extract key facts from this web page as a JSON array. "
+            "Each item must have: fact_type (one of: program, event, quote, link, description), "
+            "content (the fact text), keywords (list of strings).\n\n"
+            f"Title: {title}\n"
+            f"Content (first 1000 chars): {body_text[:1000]}\n\n"
+            "Reply with ONLY valid JSON, no markdown fences."
+        )
+        raw = _call_claude(prompt)
+        try:
+            facts = json.loads(raw)
+            if not isinstance(facts, list):
+                return []
+            # Validate fact_types
+            return [
+                f
+                for f in facts
+                if isinstance(f, dict)
+                and f.get("fact_type") in VALID_FACT_TYPES
+                and f.get("content")
+            ]
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Failed to parse knowledge extraction response")
+            return []
+
+    # ------------------------------------------------------------------
+    # Database storage (sync, uses sqlite3 directly)
+    # ------------------------------------------------------------------
+
+    def store_page_sync(self, db_path: str, page_data: dict, pillar: str | None = None) -> int:
+        """Insert or update a web page row. Returns the page id."""
+        conn = sqlite3.connect(db_path)
+        now = datetime.now(timezone.utc).isoformat()
+
+        existing = conn.execute(
+            "SELECT id FROM web_pages WHERE url = ? AND site = ?",
+            (page_data["url"], page_data["site"]),
+        ).fetchone()
+
+        if existing:
+            conn.execute(
+                """UPDATE web_pages
+                   SET title = ?, body_text = ?, pillar = ?, content_hash = ?, last_crawled = ?
+                   WHERE id = ?""",
+                (
+                    page_data["title"],
+                    page_data["body_text"],
+                    pillar,
+                    page_data["content_hash"],
+                    now,
+                    existing[0],
+                ),
+            )
+            conn.commit()
+            page_id = existing[0]
+        else:
+            cursor = conn.execute(
+                """INSERT INTO web_pages (url, site, title, body_text, pillar, content_hash, last_crawled)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    page_data["url"],
+                    page_data["site"],
+                    page_data["title"],
+                    page_data["body_text"],
+                    pillar,
+                    page_data["content_hash"],
+                    now,
+                ),
+            )
+            conn.commit()
+            page_id = cursor.lastrowid
+
+        conn.close()
+        return page_id
+
+    def store_knowledge_sync(
+        self, db_path: str, page_id: int, knowledge: list[dict], pillar: str | None = None
+    ) -> None:
+        """Store extracted knowledge entries for a page."""
+        conn = sqlite3.connect(db_path)
+        for fact in knowledge:
+            conn.execute(
+                """INSERT INTO web_knowledge (web_page_id, fact_type, content, pillar, keywords)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    page_id,
+                    fact["fact_type"],
+                    fact["content"],
+                    pillar,
+                    json.dumps(fact.get("keywords", [])),
+                ),
+            )
+        conn.commit()
+        conn.close()
 
     async def close(self):
         """Close the underlying HTTP client."""

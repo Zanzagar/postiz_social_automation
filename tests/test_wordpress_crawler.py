@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import sqlite3
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -183,3 +184,197 @@ class TestCrawlAll:
         assert "body_text" in page
         assert "content_hash" in page
         assert "site" in page
+
+
+# --- Subtask 5.4: Pillar classification ---
+
+
+class TestClassifyPillar:
+    def test_classify_returns_matching_pillar(self):
+        crawler = WordPressCrawler()
+        pillars = ["Cow Life", "Farm Ops", "Community", "Spiritual"]
+        with patch(
+            "content_engine.crawlers.wordpress_crawler._call_claude",
+            return_value="Cow Life",
+        ):
+            result = crawler.classify_pillar("Cow Protection", "85 cows roam", pillars)
+        assert result == "Cow Life"
+
+    def test_classify_unknown_returns_first_pillar(self):
+        crawler = WordPressCrawler()
+        pillars = ["Cow Life", "Farm Ops"]
+        with patch(
+            "content_engine.crawlers.wordpress_crawler._call_claude",
+            return_value="SomethingRandom",
+        ):
+            result = crawler.classify_pillar("test", "test body", pillars)
+        assert result == "Cow Life"
+
+    def test_classify_strips_whitespace(self):
+        crawler = WordPressCrawler()
+        pillars = ["Spiritual", "Community"]
+        with patch(
+            "content_engine.crawlers.wordpress_crawler._call_claude",
+            return_value="  Spiritual  \n",
+        ):
+            result = crawler.classify_pillar("test", "test body", pillars)
+        assert result == "Spiritual"
+
+
+# --- Subtask 5.5: Knowledge extraction ---
+
+
+class TestExtractKnowledge:
+    def test_extract_returns_list_of_dicts(self):
+        crawler = WordPressCrawler()
+        sample_response = json.dumps(
+            [
+                {
+                    "fact_type": "program",
+                    "content": "Cow protection program with 85 cows",
+                    "keywords": ["cows", "ahimsa"],
+                },
+                {
+                    "fact_type": "description",
+                    "content": "Gita Valley is a spiritual farm community",
+                    "keywords": ["community", "farm"],
+                },
+            ]
+        )
+        with patch(
+            "content_engine.crawlers.wordpress_crawler._call_claude",
+            return_value=sample_response,
+        ):
+            facts = crawler.extract_knowledge("Cow Protection", "Our 85 cows roam freely.")
+        assert len(facts) == 2
+        assert facts[0]["fact_type"] == "program"
+        assert facts[1]["fact_type"] == "description"
+
+    def test_extract_handles_invalid_json(self):
+        crawler = WordPressCrawler()
+        with patch(
+            "content_engine.crawlers.wordpress_crawler._call_claude",
+            return_value="not valid json",
+        ):
+            facts = crawler.extract_knowledge("test", "test body")
+        assert facts == []
+
+    def test_extract_valid_fact_types(self):
+        crawler = WordPressCrawler()
+        sample = json.dumps(
+            [
+                {"fact_type": "event", "content": "Sunday Feast", "keywords": ["feast"]},
+            ]
+        )
+        with patch(
+            "content_engine.crawlers.wordpress_crawler._call_claude",
+            return_value=sample,
+        ):
+            facts = crawler.extract_knowledge("Events", "Sunday Feast every week")
+        assert facts[0]["fact_type"] in ("program", "event", "quote", "link", "description")
+
+
+# --- Subtask 5.5: Database storage ---
+
+
+@pytest.fixture
+def wp_db(tmp_path):
+    """Create a temporary SQLite database with Phase 2 schema."""
+    db_path = tmp_path / "test.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("""
+        CREATE TABLE web_pages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT NOT NULL,
+            site TEXT NOT NULL,
+            title TEXT,
+            body_text TEXT,
+            pillar TEXT,
+            content_hash TEXT,
+            last_crawled DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE web_knowledge (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            web_page_id INTEGER REFERENCES web_pages(id),
+            fact_type TEXT NOT NULL,
+            content TEXT NOT NULL,
+            pillar TEXT,
+            keywords TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+    return db_path
+
+
+class TestStorePages:
+    def test_store_page_inserts_row(self, wp_db):
+        crawler = WordPressCrawler()
+        page_data = {
+            "url": "https://gitavalley.com/about/",
+            "title": "About",
+            "body_text": "We are a farm community.",
+            "content_hash": "abc123",
+            "site": "gitavalley",
+        }
+        page_id = crawler.store_page_sync(str(wp_db), page_data, pillar="Community")
+
+        conn = sqlite3.connect(str(wp_db))
+        row = conn.execute("SELECT * FROM web_pages WHERE id = ?", (page_id,)).fetchone()
+        conn.close()
+        assert row is not None
+        assert row[1] == "https://gitavalley.com/about/"  # url
+        assert row[5] == "Community"  # pillar
+
+    def test_store_page_upserts_on_same_url(self, wp_db):
+        crawler = WordPressCrawler()
+        page_data = {
+            "url": "https://gitavalley.com/about/",
+            "title": "About",
+            "body_text": "Version 1",
+            "content_hash": "hash1",
+            "site": "gitavalley",
+        }
+        id1 = crawler.store_page_sync(str(wp_db), page_data, pillar="Community")
+
+        page_data["body_text"] = "Version 2"
+        page_data["content_hash"] = "hash2"
+        id2 = crawler.store_page_sync(str(wp_db), page_data, pillar="Community")
+
+        conn = sqlite3.connect(str(wp_db))
+        count = conn.execute("SELECT COUNT(*) FROM web_pages").fetchone()[0]
+        body = conn.execute(
+            "SELECT body_text FROM web_pages WHERE url = ?",
+            ("https://gitavalley.com/about/",),
+        ).fetchone()[0]
+        conn.close()
+        assert count == 1
+        assert body == "Version 2"
+
+    def test_store_knowledge_entries(self, wp_db):
+        crawler = WordPressCrawler()
+        page_data = {
+            "url": "https://gitavalley.com/cows/",
+            "title": "Cows",
+            "body_text": "85 cows",
+            "content_hash": "xyz",
+            "site": "gitavalley",
+        }
+        page_id = crawler.store_page_sync(str(wp_db), page_data, pillar="Cow Life")
+
+        knowledge = [
+            {"fact_type": "program", "content": "Cow protection", "keywords": ["cows"]},
+            {"fact_type": "description", "content": "85 cows on 430 acres", "keywords": ["farm"]},
+        ]
+        crawler.store_knowledge_sync(str(wp_db), page_id, knowledge, pillar="Cow Life")
+
+        conn = sqlite3.connect(str(wp_db))
+        rows = conn.execute(
+            "SELECT * FROM web_knowledge WHERE web_page_id = ?", (page_id,)
+        ).fetchall()
+        conn.close()
+        assert len(rows) == 2
