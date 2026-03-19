@@ -245,7 +245,9 @@ class TestExtractKnowledge:
             "content_engine.crawlers.wordpress_crawler._call_claude",
             return_value=sample_response,
         ):
-            facts = crawler.extract_knowledge("Cow Protection", "Our 85 cows roam freely.")
+            facts = crawler.extract_knowledge(
+                "Cow Protection", "Our 85 cows roam freely on 430 acres of protected land. " * 10
+            )
         assert len(facts) == 2
         assert facts[0]["fact_type"] == "program"
         assert facts[1]["fact_type"] == "description"
@@ -256,7 +258,7 @@ class TestExtractKnowledge:
             "content_engine.crawlers.wordpress_crawler._call_claude",
             return_value="not valid json",
         ):
-            facts = crawler.extract_knowledge("test", "test body")
+            facts = crawler.extract_knowledge("test", "test body " * 50)
         assert facts == []
 
     def test_extract_valid_fact_types(self):
@@ -270,7 +272,9 @@ class TestExtractKnowledge:
             "content_engine.crawlers.wordpress_crawler._call_claude",
             return_value=sample,
         ):
-            facts = crawler.extract_knowledge("Events", "Sunday Feast every week")
+            facts = crawler.extract_knowledge(
+                "Events", "Sunday Feast every week at Gita Valley. " * 10
+            )
         assert facts[0]["fact_type"] in ("program", "event", "quote", "link", "description")
 
 

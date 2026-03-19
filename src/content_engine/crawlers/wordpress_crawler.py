@@ -137,13 +137,39 @@ class WordPressCrawler:
     # AI classification and extraction
     # ------------------------------------------------------------------
 
+    # Pages too short or clearly non-content
+    MIN_CONTENT_LENGTH = 200
+
+    # Max chars to send to Claude (balances cost vs coverage)
+    MAX_CLASSIFY_CHARS = 2000
+    MAX_EXTRACT_CHARS = 8000
+
+    @staticmethod
+    def _sample_content(text: str, max_chars: int) -> str:
+        """Smart content sampling for large pages.
+
+        For short text: use all of it.
+        For long text: take the first third, middle section, and last section
+        to capture intro, body, and conclusion.
+        """
+        if len(text) <= max_chars:
+            return text
+
+        chunk = max_chars // 3
+        start = text[:chunk]
+        mid_point = len(text) // 2
+        middle = text[mid_point - chunk // 2 : mid_point + chunk // 2]
+        end = text[-chunk:]
+        return f"{start}\n\n[...]\n\n{middle}\n\n[...]\n\n{end}"
+
     def classify_pillar(self, title: str, body_text: str, pillars: list[str]) -> str:
         """Use Claude CLI to classify a page into one of the known pillars."""
         pillar_list = ", ".join(pillars)
+        content = self._sample_content(body_text, self.MAX_CLASSIFY_CHARS)
         prompt = (
             f"Classify this web page into exactly one of these categories: {pillar_list}\n\n"
             f"Title: {title}\n"
-            f"Content (first 500 chars): {body_text[:500]}\n\n"
+            f"Content:\n{content}\n\n"
             f"Reply with ONLY the category name, nothing else."
         )
         raw = _call_claude(prompt).strip()
@@ -154,17 +180,30 @@ class WordPressCrawler:
 
     def extract_knowledge(self, title: str, body_text: str) -> list[dict]:
         """Use Claude CLI to extract structured facts from page content."""
+        if len(body_text) < self.MIN_CONTENT_LENGTH:
+            return []
+
+        content = self._sample_content(body_text, self.MAX_EXTRACT_CHARS)
         prompt = (
             "Extract key facts from this web page as a JSON array. "
             "Each item must have: fact_type (one of: program, event, quote, link, description), "
-            "content (the fact text), keywords (list of strings).\n\n"
+            "content (the fact text — be specific with names, numbers, dates), "
+            "keywords (list of strings).\n\n"
+            "Focus on: programs offered, events, notable quotes, specific facts about "
+            "the farm/community, and descriptions of activities or initiatives.\n"
+            "Skip generic marketing language.\n\n"
             f"Title: {title}\n"
-            f"Content (first 1000 chars): {body_text[:1000]}\n\n"
+            f"Content ({len(body_text)} chars total):\n{content}\n\n"
             "Reply with ONLY valid JSON, no markdown fences."
         )
         raw = _call_claude(prompt)
+        # Strip markdown code fences if present
+        text = raw.strip()
+        fence_match = re.search(r"```(?:json)?\s*([\s\S]+?)```", text)
+        if fence_match:
+            text = fence_match.group(1).strip()
         try:
-            facts = json.loads(raw)
+            facts = json.loads(text)
             if not isinstance(facts, list):
                 return []
             # Validate fact_types
