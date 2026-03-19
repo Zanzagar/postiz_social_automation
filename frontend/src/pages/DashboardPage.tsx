@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PillarChart } from "@/components/analytics/PillarChart";
 import { TopPostsTable } from "@/components/analytics/TopPostsTable";
 import { KnowledgeStatus } from "@/components/analytics/KnowledgeStatus";
+import { KnowledgeSearch } from "@/components/analytics/KnowledgeSearch";
 import {
   FileCheck,
   CalendarDays,
@@ -175,8 +176,11 @@ export function DashboardPage() {
         <TopPostsTable />
       </div>
 
-      {/* Knowledge base status */}
-      <KnowledgeStatus />
+      {/* Knowledge base */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <KnowledgeStatus />
+        <KnowledgeSearch />
+      </div>
     </div>
   );
 }

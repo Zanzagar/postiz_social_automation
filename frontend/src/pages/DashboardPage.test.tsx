@@ -19,6 +19,9 @@ vi.mock("@/components/analytics/TopPostsTable", () => ({
 vi.mock("@/components/analytics/KnowledgeStatus", () => ({
   KnowledgeStatus: () => <div data-testid="knowledge-status">KnowledgeStatus</div>,
 }));
+vi.mock("@/components/analytics/KnowledgeSearch", () => ({
+  KnowledgeSearch: () => <div data-testid="knowledge-search">KnowledgeSearch</div>,
+}));
 
 import { useDashboardData } from "@/hooks/useDashboardData";
 const mockUseDashboard = vi.mocked(useDashboardData);
