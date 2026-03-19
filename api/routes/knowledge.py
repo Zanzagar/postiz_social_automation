@@ -408,7 +408,6 @@ def _is_content_unchanged(db_path: str, url: str, site: str, new_hash: str) -> b
 async def _run_web_crawl():
     """Background task: crawl gitavalley.org and iskcongitanagari.org."""
     global _crawl_progress
-    from content_engine.crawlers.web_scraper import WebScraper
     from content_engine.crawlers.wordpress_crawler import WordPressCrawler
     from content_engine.pillars import get_active_pillar_names
 
@@ -454,13 +453,16 @@ async def _run_web_crawl():
         finally:
             await wp.close()
 
-        # --- BeautifulSoup scraper (iskcongitanagari.org) ---
-        scraper = WebScraper("https://iskcongitanagari.org", "iskcon")
+        # --- ISKCON Gita Nagari (also WordPress) ---
+        iskcon = WordPressCrawler(
+            base_url="https://www.iskcongitanagari.org",
+            site_name="iskcon",
+        )
         try:
             _crawl_progress.update(
-                source="iskcongitanagari.org", phase="crawling site", current=0, total=0
+                source="iskcongitanagari.org", phase="fetching pages from API", current=0, total=0
             )
-            pages = await scraper.crawl_site()
+            pages = await iskcon.crawl_all()
             _crawl_progress["total"] = len(pages)
 
             for i, page in enumerate(pages):
@@ -476,22 +478,18 @@ async def _run_web_crawl():
                 _crawl_progress.update(current=i + 1, phase=f"extracting: {page['title'][:30]}")
 
                 try:
-                    scraper.store_page_sync(db_path, page)
-                    if page["body_text"] and len(page["body_text"]) > 200:
-                        knowledge = wp.extract_knowledge(page["title"], page["body_text"])
-                        if knowledge:
-                            conn = sqlite3.connect(db_path)
-                            pid = conn.execute(
-                                "SELECT id FROM web_pages WHERE url = ? AND site = ?",
-                                (page["url"], page["site"]),
-                            ).fetchone()
-                            conn.close()
-                            if pid:
-                                wp.store_knowledge_sync(db_path, pid[0], knowledge)
+                    pillar = iskcon.classify_pillar(page["title"], page["body_text"], pillars)
+                    page_id = iskcon.store_page_sync(db_path, page, pillar=pillar)
+                    knowledge = iskcon.extract_knowledge(page["title"], page["body_text"])
+                    if knowledge:
+                        iskcon.store_knowledge_sync(db_path, page_id, knowledge, pillar=pillar)
                 except Exception:
                     logger.exception("Error processing ISKCON page %s", page["url"])
+                    iskcon.store_page_sync(db_path, page, pillar=None)
         except Exception:
-            logger.exception("ISKCON scraper failed")
+            logger.exception("ISKCON crawler failed")
+        finally:
+            await iskcon.close()
 
         logger.info("Crawl complete: %d processed, %d skipped (unchanged)", processed, skipped)
         _crawl_progress.update(

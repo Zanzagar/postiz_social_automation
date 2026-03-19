@@ -13,7 +13,7 @@ const SOURCE_ICONS: Record<string, typeof Globe> = {
 
 const SOURCE_LABELS: Record<string, string> = {
   gitavalley: "Gita Valley (WordPress)",
-  iskcon: "ISKCON Gita Nagari (Scraper)",
+  iskcon: "ISKCON Gita Nagari (WordPress)",
   facebook: "Facebook Page Posts",
   instagram: "Instagram Posts",
 };
