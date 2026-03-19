@@ -1,5 +1,6 @@
 """AI content iteration endpoints."""
 
+import asyncio
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -35,8 +36,9 @@ async def iterate_caption(
     captions = _parse_json_field(row.captions)
     old_caption = captions.get(req.platform)
 
-    # Call AI to iterate on the caption
-    new_caption = generator.iterate_single_caption(
+    # Call AI to iterate on the caption (run in thread to avoid blocking event loop)
+    new_caption = await asyncio.to_thread(
+        generator.iterate_single_caption,
         original_caption=old_caption,
         platform=req.platform,
         instruction=req.instruction,

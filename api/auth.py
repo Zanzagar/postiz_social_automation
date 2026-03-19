@@ -14,6 +14,8 @@ from app.auth import LOCKOUT_SECONDS, MAX_ATTEMPTS, verify_password
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # In-memory rate limiting: {ip: {"count": int, "lockout_until": float}}
+# NOTE: This is per-process and lost on restart. Acceptable for single-user
+# single-worker deployment. For multi-worker, move to SQLite or Redis.
 _failed_attempts: dict[str, dict] = {}
 
 ALGORITHM = "HS256"
@@ -29,10 +31,11 @@ class TokenResponse(BaseModel):
 
 
 def _get_client_ip(request: Request) -> str:
-    """Extract client IP, respecting X-Forwarded-For behind a proxy."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    """Extract client IP from the direct connection (ignores proxy headers).
+
+    X-Forwarded-For is trivially spoofable without a trusted proxy allowlist,
+    so we use the socket-level client address exclusively.
+    """
     return request.client.host if request.client else "unknown"
 
 

@@ -31,7 +31,14 @@ class TestTableCreation:
     def test_all_tables_exist(self, engine):
         inspector = inspect(engine)
         tables = set(inspector.get_table_names())
-        expected = {"users", "content_rows", "content_iterations", "templates", "publish_config"}
+        expected = {
+            "users",
+            "content_rows",
+            "content_iterations",
+            "templates",
+            "publish_config",
+            "pillars",
+        }
         assert expected == tables
 
     def test_users_columns(self, engine):
@@ -93,6 +100,7 @@ class TestTableCreation:
             "raw_text_template",
             "variables",
             "schedule_pattern",
+            "schedule_time",
             "default_segment_id",
             "created_by",
             "created_at",

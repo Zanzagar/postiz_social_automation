@@ -12,6 +12,7 @@ from api.dependencies import get_caption_generator, get_content_repo
 from api.repositories.content import ContentRepository
 from api.schemas import GenerateRequest, RepromptRequest
 from content_engine.models import ContentRow, ContentStatus, Platform
+from content_engine.validator import validate_external_url
 
 router = APIRouter(prefix="/api", tags=["generate"], dependencies=[Depends(get_current_user)])
 
@@ -20,8 +21,11 @@ def _build_content_row(req: GenerateRequest | RepromptRequest) -> ContentRow:
     """Build a ContentRow from request data."""
     platforms = {Platform(p): True for p in req.platforms}
     media = req.media_url
-    if media and not media.startswith(("http://", "https://")):
-        media = None
+    if media:
+        try:
+            validate_external_url(media)
+        except ValueError:
+            media = None
 
     pillar = None
     if hasattr(req, "content_pillar") and req.content_pillar:

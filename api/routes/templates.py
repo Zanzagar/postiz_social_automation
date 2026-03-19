@@ -140,10 +140,15 @@ async def generate_from_template(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    # Variable substitution
+    # Variable substitution (validate length and strip template syntax from values)
     raw_text = template.raw_text_template or ""
     for var_name, var_value in req.variable_values.items():
-        raw_text = raw_text.replace(f"{{{{{var_name}}}}}", var_value)
+        if len(var_value) > 500:
+            raise HTTPException(
+                status_code=400, detail=f"Variable '{var_name}' exceeds 500 character limit"
+            )
+        sanitized = var_value.replace("{{", "").replace("}}", "")
+        raw_text = raw_text.replace(f"{{{{{var_name}}}}}", sanitized)
 
     # Verify all variables substituted
     remaining = re.findall(r"\{\{(\w+)\}\}", raw_text)

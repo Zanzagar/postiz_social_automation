@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # --- Content ---
 
@@ -60,7 +60,7 @@ class CalendarResponse(BaseModel):
 
 
 class GenerateRequest(BaseModel):
-    raw_text: str
+    raw_text: str = Field(max_length=5000)
     media_url: str | None = None
     platforms: list[str]
     scheduled_date: str
@@ -68,11 +68,11 @@ class GenerateRequest(BaseModel):
 
 
 class RepromptRequest(BaseModel):
-    raw_text: str
+    raw_text: str = Field(max_length=5000)
     media_url: str | None = None
     platforms: list[str]
     scheduled_date: str
-    feedback: str
+    feedback: str = Field(max_length=2000)
 
 
 # --- Postiz ---
@@ -211,7 +211,7 @@ class TemplateResponse(BaseModel):
 
 
 class GenerateFromTemplateRequest(BaseModel):
-    variable_values: dict[str, str]
+    variable_values: dict[str, str] = Field(default_factory=dict)
     platforms: list[str]
     scheduled_date: str
     scheduled_time: str | None = None
@@ -235,7 +235,7 @@ class BatchGenerateResponse(BaseModel):
 class IterateRequest(BaseModel):
     content_row_id: int
     platform: str
-    instruction: str
+    instruction: str = Field(max_length=2000)
     mode: str = "refine"
 
 
