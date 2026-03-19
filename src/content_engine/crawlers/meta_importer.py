@@ -97,10 +97,9 @@ class MetaGraphImporter:
 
         url = f"{self.base_url}/{self.page_id}/posts"
         params = {
-            "fields": "id,message,created_time,attachments,shares,"
-            "likes.summary(true),comments.summary(true)",
+            "fields": "id,message,created_time,shares,likes.summary(true),comments.summary(true)",
             "access_token": self.access_token,
-            "limit": 100,
+            "limit": 25,
         }
 
         all_posts: list[dict] = []
@@ -173,12 +172,13 @@ class MetaGraphImporter:
     def store_post_sync(self, db_path: str, post: dict) -> None:
         """Insert a social history post, skipping duplicates."""
         conn = sqlite3.connect(db_path)
+        now = datetime.now(timezone.utc).isoformat()
         try:
             conn.execute(
                 """INSERT OR IGNORE INTO social_history
                    (platform, external_id, post_text, media_urls, hashtags,
-                    posted_at, likes, comments, shares, reach, pillar)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    posted_at, likes, comments, shares, reach, pillar, imported_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     post["platform"],
                     post["external_id"],
@@ -191,6 +191,7 @@ class MetaGraphImporter:
                     post.get("shares", 0),
                     post.get("reach", 0),
                     post.get("pillar"),
+                    now,
                 ),
             )
             conn.commit()
