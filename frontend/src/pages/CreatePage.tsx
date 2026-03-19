@@ -165,6 +165,19 @@ export function CreatePage() {
     setVariableValues(defaults);
   }
 
+  function resetForm() {
+    setSelectedTemplate(null);
+    setVariableValues({});
+    setRawText("");
+    setCaptions(null);
+    setContentRowId(null);
+    setError("");
+    setSavedMessage("");
+    setBatchResult(null);
+    setPlatformInstructions({});
+    setIteratePlatform("");
+  }
+
   function handleClearTemplate() {
     setSelectedTemplate(null);
     setVariableValues({});
@@ -360,8 +373,12 @@ export function CreatePage() {
         <Tabs
           value={mode}
           onValueChange={(v) => {
+            const hasContent = rawText.trim() || captions;
+            if (hasContent) {
+              if (!window.confirm("You have unsaved content. Discard and switch?")) return;
+            }
+            resetForm();
             setMode(v as CreateMode);
-            if (v === "freeform") handleClearTemplate();
           }}
         >
           <TabsList className="w-full">
@@ -621,83 +638,72 @@ export function CreatePage() {
         </p>
       )}
 
-      {/* Action area — unified for both single and batch */}
-      {selectedTemplate?.schedule_pattern && !captions ? (
-        /* Template with schedule: show both options in one card */
+      {/* Action buttons — hidden after captions are generated */}
+      {!captions && (
+        isGenerating ? (
+          <Button disabled className="w-full">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Working...
+          </Button>
+        ) : (
+          <div className="flex gap-2">
+            <Button
+              onClick={handleSaveAsIs}
+              disabled={selectedPlatforms.length === 0}
+              variant="outline"
+              className="flex-1"
+            >
+              <Save className="mr-2 h-4 w-4" />
+              Save as Draft
+            </Button>
+            <Button
+              onClick={handleGenerate}
+              disabled={selectedPlatforms.length === 0}
+              className="flex-1"
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Generate AI Captions
+            </Button>
+          </div>
+        )
+      )}
+
+      {/* Batch schedule — for templates with schedule pattern, always visible */}
+      {selectedTemplate?.schedule_pattern && !captions && (
         <Card>
-          <CardContent className="space-y-4 pt-4">
-            <div className="space-y-3">
-              {/* Option 1: Create one post now */}
-              {isGenerating ? (
-                <Button disabled className="w-full">
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Working...
-                </Button>
-              ) : (
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleSaveAsIs}
-                    disabled={selectedPlatforms.length === 0}
-                    variant="outline"
-                    className="flex-1"
-                  >
-                    <Save className="mr-2 h-4 w-4" />
-                    Save as Draft
-                  </Button>
-                  <Button
-                    onClick={handleGenerate}
-                    disabled={selectedPlatforms.length === 0}
-                    className="flex-1"
-                  >
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Generate AI Captions
-                  </Button>
-                </div>
-              )}
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">or</span>
-                </div>
-              </div>
-
-              {/* Option 2: Schedule multiple slots */}
-              <div className="flex gap-2">
-                <Button
-                  onClick={handleBatchSchedule}
-                  disabled={isBatchGenerating || selectedPlatforms.length === 0}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  {isBatchGenerating ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Scheduling...
-                    </>
-                  ) : (
-                    `Schedule ${batchWeeks} Upcoming Slots`
-                  )}
-                </Button>
-                <Input
-                  id="batch-weeks"
-                  type="number"
-                  min={1}
-                  max={12}
-                  value={batchWeeks}
-                  onChange={(e) => setBatchWeeks(parseInt(e.target.value) || 1)}
-                  className="w-16"
-                  aria-label="Number of weeks"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Creates {batchWeeks} draft slots{" "}
-                ({selectedTemplate.schedule_pattern.replace(":", " every ")}).
-                Fill in details for each individually in Drafts.
-              </p>
+          <CardContent className="space-y-3 pt-4">
+            <div className="flex gap-2">
+              <Button
+                onClick={handleBatchSchedule}
+                disabled={isBatchGenerating || selectedPlatforms.length === 0}
+                variant="outline"
+                className="flex-1"
+              >
+                {isBatchGenerating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Scheduling...
+                  </>
+                ) : (
+                  `Schedule ${batchWeeks} Upcoming Slots`
+                )}
+              </Button>
+              <Input
+                id="batch-weeks"
+                type="number"
+                min={1}
+                max={12}
+                value={batchWeeks}
+                onChange={(e) => setBatchWeeks(parseInt(e.target.value) || 1)}
+                className="w-16"
+                aria-label="Number of weeks"
+              />
             </div>
+            <p className="text-xs text-muted-foreground">
+              Creates {batchWeeks} draft slots{" "}
+              ({selectedTemplate.schedule_pattern.replace(":", " every ")}).
+              Fill in details for each individually in Drafts.
+            </p>
             {batchResult && (
               <p className="text-sm text-sage-600 rounded-md bg-sage-50 px-3 py-2">
                 {batchResult.created} draft slots created! Open each in Drafts to fill in details and generate captions.
@@ -705,32 +711,6 @@ export function CreatePage() {
             )}
           </CardContent>
         </Card>
-      ) : isGenerating ? (
-        <Button disabled className="w-full">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Working...
-        </Button>
-      ) : (
-        /* Freeform or template without schedule: two options */
-        <div className="flex gap-2">
-          <Button
-            onClick={handleSaveAsIs}
-            disabled={selectedPlatforms.length === 0}
-            variant="outline"
-            className="flex-1"
-          >
-            <Save className="mr-2 h-4 w-4" />
-            Save as Draft
-          </Button>
-          <Button
-            onClick={handleGenerate}
-            disabled={selectedPlatforms.length === 0}
-            className="flex-1"
-          >
-            <Sparkles className="mr-2 h-4 w-4" />
-            Generate AI Captions
-          </Button>
-        </div>
       )}
 
       {/* Progress */}
