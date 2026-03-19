@@ -68,14 +68,14 @@ AI recommends media from catalog for content rows.
 - Matching criteria: pillar match, tag relevance to content text, past engagement performance, recency (prefer fresh media, penalize recently-used)
 - Return top 5 suggestions with relevance scores
 - ContentEditor integration: "Suggested Media" panel shows recommended images, click to attach
-- Attach media to content row: updates content_rows.media_catalog_ids
+- Attach media to content row: updates content_rows.media_catalog_ids (NOTE: column already exists in Phase 1 schema as nullable JSON text)
 
 ### 6. Content Calendar AI Planning
 AI generates content calendars based on multiple signals.
 
 **Requirements:**
 - `POST /api/calendar/plan` endpoint: accepts date_range (start, end), platforms, and optional constraints
-- AI planner considers: pillar distribution targets (Cow Life 40%, Farm Ops 25%, Community 15%, Kitchen 10%, Spiritual 5%, CTA 5%), upcoming ISKCON festivals, engagement patterns from analytics, posting history gaps, template schedules, web knowledge (new programs/events), seasonal context, available high-performing media
+- AI planner considers: pillar distribution targets (loaded dynamically from `pillars` table — staff configures distribution weights per pillar, NOT hardcoded percentages), upcoming ISKCON festivals, engagement patterns from analytics, posting history gaps, template schedules, web knowledge (new programs/events), seasonal context, available high-performing media
 - Returns a proposed calendar: array of slots, each with date, time, pillar, topic idea, recommended media_id, target platforms
 - `GET /api/calendar/plan/{id}` endpoint: view a generated plan
 - `POST /api/calendar/plan/{id}/approve` endpoint: approve all or selected slots → creates content_rows in DRAFT status with source="plan"
@@ -93,16 +93,17 @@ Festival data source for calendar AI planning.
 - Dashboard calendar views show festival markers on relevant dates
 - File manually updated annually when ISKCON publishes the Vaishnava calendar
 
-### 8. Calendar Views Enhancement
-Monthly and weekly calendar views in addition to existing list view.
+### 8. Calendar Views — Festival Markers (Phase 1 built the core views)
+Add ISKCON festival markers to the existing calendar views.
+
+**NOTE:** Phase 1 already built Monthly view (colored pills + day detail dialog), Weekly view (default), and List view (date range filter) with tab toggle and click-to-edit via ContentEditor modal. This feature only adds festival integration.
 
 **Requirements:**
-- Monthly view: CSS grid (7 columns × 5-6 rows), day cells show content dots or small thumbnails color-coded by pillar. Click a day to expand and show all content for that day. Empty days visually distinct (lighter background). Festival markers shown as icons/badges.
-- Weekly view: day columns with time slots, content cards per day showing platform icons, pillar badge, thumbnail, status (draft/scheduled/posted). "Plan Week" button in this view.
-- List view: existing view, kept for quick scanning and bulk actions
-- Tab toggle at top of Calendar page to switch between Monthly/Weekly/List
-- All three views support click-to-edit via ContentEditor modal
-- Rebuild Calendar page through Magic MCP + frontend-design pipeline
+- Festival markers shown as icons/badges on Monthly view day cells
+- Festival names shown in Weekly view day headers
+- Festival filter in List view
+- All data from Feature 7 (ISKCON Festival Calendar) API
+- No full page rebuild needed — enhance existing CalendarPage.tsx
 
 ### 9. Media Adaptation
 Resize and crop media for platform-specific dimensions with optional text overlay.
@@ -117,15 +118,17 @@ Resize and crop media for platform-specific dimensions with optional text overla
 - Auto-adapt when media is attached to a content row (generate versions for all target platforms)
 - Implementation: Pillow (PIL) only — no ffmpeg, no video processing
 
-### 10. Suggestions Page Rebuild (Magic MCP)
-Rebuild Suggestions page with media suggestions and calendar planning entry point.
+### 10. Suggestions Page — Media & Knowledge Enhancement
+Enhance existing Suggestions page with media catalog integration and knowledge-based ideas.
+
+**NOTE:** Phase 1 already built SuggestionsPage with pillar badges, rationale text, media suggestions, and suggested dates. No full rebuild needed.
 
 **Requirements:**
-- Rebuild through Magic MCP + frontend-design pipeline
-- Suggestion cards show: idea text, pillar badge, rationale, suggested media thumbnail (from AI media suggestions)
-- Click suggestion → opens ContentEditor in `create` mode (in-place, no navigation)
-- "Plan Content Calendar" button linking to calendar planning flow
+- Enhance suggestion cards with: suggested media thumbnail from media catalog (Feature 5 AI media suggestions)
+- Click suggestion → opens ContentEditor in `create` mode (in-place, no navigation) — verify this works or add it
+- "Plan Content Calendar" button linking to calendar planning flow (Feature 6)
 - Knowledge-based suggestions: ideas reference web knowledge entries (programs, events from crawled sites)
+- No Magic MCP rebuild — enhance existing SuggestionsPage.tsx
 
 ## Success Criteria
 - Staff can browse, search, and manage a media catalog with AI-generated tags
