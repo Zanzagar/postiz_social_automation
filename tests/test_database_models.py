@@ -38,6 +38,12 @@ class TestTableCreation:
             "templates",
             "publish_config",
             "pillars",
+            # Phase 2
+            "web_pages",
+            "web_knowledge",
+            "social_history",
+            "analytics_cache",
+            "hashtag_performance",
         }
         assert expected == tables
 

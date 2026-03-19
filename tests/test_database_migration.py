@@ -39,6 +39,12 @@ class TestMigration:
             "templates",
             "publish_config",
             "alembic_version",
+            # Phase 2
+            "web_pages",
+            "web_knowledge",
+            "social_history",
+            "analytics_cache",
+            "hashtag_performance",
         }
         assert expected == tables
 
