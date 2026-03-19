@@ -4423,7 +4423,7 @@
         "dependencies": [
           "13"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -4431,9 +4431,10 @@
             "description": "Install recharts package and create the analytics component directory with shared types and utilities for all dashboard widgets.",
             "dependencies": [],
             "details": "1. Add recharts to package.json dependencies: `npm install recharts @types/recharts`\n2. Create `frontend/src/components/analytics/` directory\n3. Create `frontend/src/components/analytics/index.ts` barrel export file\n4. Create `frontend/src/components/analytics/types.ts` with shared TypeScript interfaces for analytics data (EngagementDataPoint, PillarStats, TimingCell, TopPost, PipelineStats)\n5. Create `frontend/src/components/analytics/colors.ts` with platform color constants matching existing design system (sage palette)\n6. Create `frontend/src/hooks/useAnalyticsData.ts` hook skeleton with react-query queries for /api/analytics/* endpoints (overview, pillars, timing, posts)\n7. Verify recharts types work with TypeScript strict mode",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "1. Verify recharts installs without conflicts\n2. Test TypeScript compilation passes with new types\n3. Test useAnalyticsData hook returns loading state initially\n4. Verify barrel export works: `import { EngagementChart } from '@/components/analytics'`",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-03-19T04:44:12.820Z"
           },
           {
             "id": 2,
@@ -4443,9 +4444,10 @@
               1
             ],
             "details": "1. Follow frontend workflow: invoke frontend-design skill for chart layout direction\n2. Use Magic MCP component_inspiration to find line chart dashboard examples\n3. Create `frontend/src/components/analytics/EngagementChart.tsx`\n4. Implement LineChart from recharts with:\n   - X-axis: date (formatted via date-fns)\n   - Y-axis: engagement count\n   - Multiple Line series: one per platform (Facebook, Instagram, TikTok) with platform colors\n   - Tooltip showing platform breakdown on hover\n   - Legend identifying each platform\n5. Add date range picker using existing react-day-picker (already in package.json)\n6. Props: data array, onDateRangeChange callback, isLoading boolean\n7. Implement loading skeleton state and empty state\n8. Use component_refiner to polish spacing, colors, responsiveness",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "1. Test renders with mock engagement data array\n2. Test date range picker updates chart (mock onDateRangeChange)\n3. Test loading skeleton displays when isLoading=true\n4. Test empty state shows when data is empty array\n5. Test platform legend renders all platforms",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-03-19T04:44:18.851Z"
           },
           {
             "id": 3,
@@ -4455,9 +4457,10 @@
               1
             ],
             "details": "1. Follow frontend workflow: invoke frontend-design skill for bar chart layout\n2. Use Magic MCP component_inspiration for bar chart dashboard examples\n3. Create `frontend/src/components/analytics/PillarChart.tsx`\n4. Implement BarChart from recharts with:\n   - X-axis: pillar names (dynamic from API, not hardcoded)\n   - Y-axis: average engagement\n   - Bar fill colors derived from pillar or using gradient\n   - Tooltip showing exact engagement value\n   - Responsive sizing with ResponsiveContainer\n5. Props: data array (pillar, avgEngagement, postCount), isLoading boolean\n6. Implement loading skeleton state and empty state ('No pillar data yet')\n7. Use component_refiner to ensure consistent styling with EngagementChart\n8. Consider horizontal bars if many pillars for better readability",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "1. Test renders with mock pillar data array\n2. Test handles dynamic pillar names (not hardcoded enum)\n3. Test loading skeleton displays correctly\n4. Test empty state shows appropriate message\n5. Test responsive behavior at different viewport widths",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-03-19T04:44:23.508Z"
           },
           {
             "id": 4,
@@ -4467,9 +4470,10 @@
               1
             ],
             "details": "1. Follow frontend workflow: invoke frontend-design skill for heatmap layout\n2. Use Magic MCP component_inspiration for heatmap/calendar grid examples\n3. Create `frontend/src/components/analytics/TimingHeatmap.tsx`\n4. Implement custom heatmap grid (recharts doesn't have built-in heatmap, use CSS grid or SVG):\n   - 7 columns (Sun-Sat)\n   - 24 rows (0-23 hours)\n   - Cell color intensity based on engagement score (sage color gradient: light sage -> dark sage)\n   - Tooltip on hover showing day, hour, and exact engagement value\n5. Props: data (2D array [day][hour] = score), isLoading boolean\n6. Add day labels (S M T W T F S) as column headers\n7. Add hour labels (12am, 1am, ..., 11pm) as row headers\n8. Implement loading skeleton and empty state\n9. Use component_refiner for color tuning and accessibility",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "1. Test renders 7x24 grid correctly\n2. Test color intensity varies with engagement value\n3. Test tooltip shows correct day/hour/value on hover\n4. Test loading skeleton displays correctly\n5. Test empty state when all values are zero",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-03-19T04:44:28.658Z"
           },
           {
             "id": 5,
@@ -4479,9 +4483,10 @@
               1
             ],
             "details": "1. Follow frontend workflow: invoke frontend-design skill for table and stats card layouts\n2. Use Magic MCP component_inspiration for data tables and metric cards\n3. Create `frontend/src/components/analytics/TopPostsTable.tsx`:\n   - Table columns: preview (truncated text), platform icon, likes, comments, shares, total\n   - Sortable by engagement metrics (click column header)\n   - Platform filter dropdown\n   - Limit to top 10 with 'View all' link\n   - Props: data array, onSort callback, isLoading\n4. Create `frontend/src/components/analytics/PipelineStats.tsx`:\n   - Enhanced version of existing dashboard stats (Pending Drafts, Scheduled, Posted)\n   - Add trend indicators: arrow up/down/flat with percentage change\n   - Add sparkline mini-charts using recharts AreaChart\n   - Props: stats object with current/previous values, isLoading\n5. Use component_refiner for both components\n6. Update barrel export in index.ts",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "1. Test TopPostsTable renders with mock posts data\n2. Test sorting changes row order\n3. Test platform filter reduces visible rows\n4. Test PipelineStats shows trend arrows correctly (up for positive, down for negative)\n5. Test loading states for both components",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-03-19T04:44:34.283Z"
           },
           {
             "id": 6,
@@ -4494,14 +4499,16 @@
               5
             ],
             "details": "1. Update `frontend/src/hooks/useDashboardData.ts` (or create `useAnalyticsData.ts`) to add queries for:\n   - GET /api/analytics/overview (for PipelineStats trends)\n   - GET /api/analytics/pillars (for PillarChart)\n   - GET /api/analytics/timing (for TimingHeatmap)\n   - GET /api/analytics/posts?sort=engagement (for TopPostsTable)\n2. Update DashboardPage.tsx layout:\n   - Keep existing Quick Create and System Health cards\n   - Replace/enhance stats cards with PipelineStats component\n   - Add new grid section for analytics widgets\n   - Responsive layout: 2 columns on desktop, stack on mobile\n3. Wire up EngagementChart with date range state management (useState for range)\n4. Wire up all widgets with loading/error/empty states\n5. Add section heading 'Analytics' above widgets\n6. Ensure graceful degradation if analytics endpoints return errors (show 'Analytics unavailable' card)\n7. Test full page loads correctly with backend running",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "1. E2E test: Dashboard page loads and displays analytics section\n2. Test each widget renders with API data (requires backend with analytics endpoints)\n3. Test loading states display while fetching\n4. Test error state displays when API fails (mock 500)\n5. Test empty states display when no analytics data exists\n6. Test date range picker updates EngagementChart\n7. Verify no regressions in existing dashboard functionality (Quick Create, Health Status)",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-03-19T04:44:39.444Z"
           }
         ],
         "complexity": 8,
         "recommendedSubtasks": 6,
-        "expansionPrompt": "Rebuild Dashboard with analytics: 1) Use frontend-design skill for creative direction on dashboard layout, 2) Create EngagementChart component with recharts line chart and date range picker, 3) Create PillarChart component with bar chart for pillar breakdown, 4) Create TimingHeatmap component with heatmap visualization, 5) Create TopPostsTable component with sorting and preview, 6) Update DashboardPage to compose widgets with API hooks and loading states"
+        "expansionPrompt": "Rebuild Dashboard with analytics: 1) Use frontend-design skill for creative direction on dashboard layout, 2) Create EngagementChart component with recharts line chart and date range picker, 3) Create PillarChart component with bar chart for pillar breakdown, 4) Create TimingHeatmap component with heatmap visualization, 5) Create TopPostsTable component with sorting and preview, 6) Update DashboardPage to compose widgets with API hooks and loading states",
+        "updatedAt": "2026-03-19T04:44:39.444Z"
       },
       {
         "id": "17",
@@ -4549,11 +4556,12 @@
           "8",
           "16"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [],
         "complexity": 4,
         "recommendedSubtasks": 2,
-        "expansionPrompt": "Add knowledge search widget: 1) Create KnowledgeSearch.tsx component with search input, loading state, and result display, 2) Add to DashboardPage and optionally integrate with ContentEditor for search-while-editing"
+        "expansionPrompt": "Add knowledge search widget: 1) Create KnowledgeSearch.tsx component with search input, loading state, and result display, 2) Add to DashboardPage and optionally integrate with ContentEditor for search-while-editing",
+        "updatedAt": "2026-03-19T04:47:27.769Z"
       },
       {
         "id": "20",
@@ -4566,7 +4574,7 @@
           "16",
           "19"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -4574,9 +4582,10 @@
             "description": "Build pytest fixtures that seed web_knowledge and analytics_cache tables with realistic test data for Phase 2 integration testing.",
             "dependencies": [],
             "details": "Create tests/e2e/conftest.py with fixtures:\n\n1. `seeded_knowledge` fixture:\n   - Insert 10-15 web_knowledge entries covering all fact_types (scripture_reference, farm_fact, event_detail, community_info)\n   - Include entries from both gitavalley.com and iskcongitanagari.org sources\n   - Cover all content pillars (spiritual_education, farm_community, events, behind_scenes, seasonal, collaborative)\n   - Set realistic embedding vectors for semantic search testing\n\n2. `seeded_analytics` fixture:\n   - Insert analytics_cache entries for overview, pillar_breakdown, timing_analysis, top_posts\n   - Include 30 days of mock engagement data\n   - Create realistic pillar distribution (40% spiritual, 25% farm, etc.)\n   - Include timing heatmap data for optimal posting times\n\n3. `db_session` fixture:\n   - Use SQLAlchemy async session with test database\n   - Handle transaction rollback after each test\n   - Ensure isolation between tests\n\nUse factory patterns for generating realistic test data with Faker library.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "1. Verify fixtures create expected number of records\n2. Test data matches expected schema\n3. Verify rollback cleans up after tests\n4. Test fixtures work in isolation and combination",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-03-19T04:49:30.373Z"
           },
           {
             "id": 2,
@@ -4586,9 +4595,10 @@
               1
             ],
             "details": "Create tests/e2e/test_api_integration.py:\n\n1. Knowledge API tests:\n   - `test_knowledge_status_endpoint`: Verify /api/knowledge/status returns {total_entries, last_crawl, sources_breakdown}\n   - `test_knowledge_search_basic`: Search with query string returns relevant results\n   - `test_knowledge_search_pillar_filter`: Filter by pillar returns only matching entries\n   - `test_knowledge_search_empty_results`: Non-matching query returns empty array gracefully\n   - `test_crawl_trigger_returns_job_id`: POST /api/knowledge/crawl returns job ID immediately\n\n2. Analytics API tests:\n   - `test_analytics_overview_default`: GET /api/analytics/overview returns 30-day summary\n   - `test_analytics_overview_date_range`: Custom days parameter filters correctly\n   - `test_analytics_pillars`: GET /api/analytics/pillars returns breakdown with percentages\n   - `test_analytics_timing`: GET /api/analytics/timing returns heatmap data structure\n   - `test_analytics_top_posts`: GET /api/analytics/top-posts returns sorted by engagement\n\n3. Error handling tests:\n   - Test invalid parameters return 422\n   - Test missing data returns empty results, not errors",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "1. Use seeded_knowledge and seeded_analytics fixtures\n2. Assert response status codes and JSON structure\n3. Verify data correctness against seeded values\n4. Test edge cases and error responses",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-03-19T04:49:35.423Z"
           },
           {
             "id": 3,
@@ -4598,9 +4608,10 @@
               1
             ],
             "details": "Create tests/e2e/test_dashboard_e2e.py with Playwright:\n\n1. Setup authenticated browser fixture:\n   - Create `authenticated_page` fixture that logs in or bypasses auth for test environment\n   - Configure Playwright to use test API backend\n   - Set up screenshot-on-failure for debugging\n\n2. Dashboard widget tests:\n   - `test_dashboard_loads_engagement_chart`: Navigate to /dashboard, wait for [data-testid=\"engagement-chart\"], verify chart SVG renders\n   - `test_dashboard_loads_pillar_chart`: Verify [data-testid=\"pillar-chart\"] renders with correct pillar segments\n   - `test_dashboard_loads_timing_heatmap`: Verify [data-testid=\"timing-heatmap\"] displays 7x24 grid\n   - `test_dashboard_shows_top_posts`: Verify top posts list renders with post titles and engagement counts\n\n3. Interactive tests:\n   - `test_date_range_selector`: Change date range and verify charts update\n   - `test_knowledge_search_from_dashboard`: Type in search, verify results panel appears\n   - `test_hashtag_suggestions_in_editor`: Navigate to content editor, verify hashtag chips appear\n\nUse page.wait_for_selector() with appropriate timeouts for async data loading.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "1. Run with seeded database\n2. Capture screenshots on assertion failures\n3. Test responsive breakpoints\n4. Verify no console errors during tests",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-03-19T04:49:40.321Z"
           },
           {
             "id": 4,
@@ -4611,21 +4622,23 @@
               2
             ],
             "details": "Create tests/e2e/test_knowledge_injection.py:\n\n1. Test knowledge context injection:\n   - `test_generation_includes_knowledge_context`: Seed knowledge with specific facts, generate caption for matching pillar, verify API receives knowledge context\n   - `test_scripture_references_injected`: Seed scripture_reference facts, generate spiritual_education content, verify references appear in prompt context\n   - `test_farm_facts_injected_for_farm_pillar`: Seed farm_fact entries, generate farm_community content, verify farm facts in context\n\n2. Mock AI response verification:\n   - Use respx or pytest-httpx to mock Claude/OpenAI API\n   - Capture the prompt sent to AI and verify knowledge context is included\n   - Verify prompt structure matches expected format with RAG context\n\n3. End-to-end generation test:\n   - `test_full_generation_with_knowledge`: POST /api/generate with image and pillar, verify response includes caption that could plausibly reference seeded knowledge\n   - `test_generation_without_knowledge`: Empty knowledge base still generates valid captions\n\n4. Analytics correlation test:\n   - `test_pillar_breakdown_aggregation`: Verify analytics correctly aggregates engagement by pillar from seeded data\n   - `test_timing_analysis_accuracy`: Verify timing recommendations match seeded engagement patterns",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "1. Mock external AI APIs to control responses\n2. Verify prompt construction includes knowledge\n3. Test with various pillar types\n4. Ensure graceful handling when knowledge base is empty",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-03-19T04:49:45.797Z"
           }
         ],
         "complexity": 6,
         "recommendedSubtasks": 4,
-        "expansionPrompt": "Create Phase 2 E2E tests: 1) Create test fixtures for seeding web_knowledge and analytics_cache tables, 2) Create API integration tests for /api/knowledge and /api/analytics endpoints, 3) Create Playwright E2E tests for Dashboard analytics widgets, 4) Create integration test for knowledge injection in caption generation"
+        "expansionPrompt": "Create Phase 2 E2E tests: 1) Create test fixtures for seeding web_knowledge and analytics_cache tables, 2) Create API integration tests for /api/knowledge and /api/analytics endpoints, 3) Create Playwright E2E tests for Dashboard analytics widgets, 4) Create integration test for knowledge injection in caption generation",
+        "updatedAt": "2026-03-19T04:49:45.797Z"
       }
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-03-19T04:39:11.584Z",
+      "lastModified": "2026-03-19T04:49:45.798Z",
       "taskCount": 20,
-      "completedCount": 17,
+      "completedCount": 20,
       "tags": [
         "phase2-intelligence"
       ]
