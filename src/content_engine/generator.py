@@ -74,8 +74,9 @@ _DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 class CaptionGenerator:
     """Generate platform-specific captions using Claude Code CLI."""
 
-    def __init__(self, data_dir: Path = _DEFAULT_DATA_DIR) -> None:
+    def __init__(self, data_dir: Path = _DEFAULT_DATA_DIR, db_path: str | None = None) -> None:
         self.data_dir = data_dir
+        self.db_path = db_path or str(data_dir / "gvsa.db")
         self.learning_context = self._load_learning_context()
 
     def generate_captions(
@@ -192,6 +193,11 @@ class CaptionGenerator:
             parts.append(json.dumps(self.learning_context, indent=2))
             parts.append("")
 
+        # Knowledge base context
+        knowledge_ctx = self._get_knowledge_context(row.content_pillar)
+        if knowledge_ctx:
+            parts.append(knowledge_ctx)
+
         # Content info
         parts.append("CONTENT TO POST:")
         parts.append(f"- Raw text: {row.raw_text}")
@@ -267,3 +273,12 @@ class CaptionGenerator:
         if path.exists():
             return json.loads(path.read_text())
         return {}
+
+    def _get_knowledge_context(self, pillar: str | None = None) -> str:
+        """Query knowledge base for relevant facts and examples."""
+        try:
+            from content_engine.crawlers.knowledge_context import get_knowledge_context
+
+            return get_knowledge_context(self.db_path, pillar=pillar)
+        except Exception:
+            return ""
