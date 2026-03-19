@@ -22,12 +22,19 @@ export function KnowledgeStatus() {
   });
 
   const sources = data?.sources ?? [];
+  const crawlStatus = crawlMutation.isPending ? "Crawling..." :
+    crawlMutation.isSuccess ? "Started!" :
+    crawlMutation.isError ? "Error" : null;
+  const importStatus = importMutation.isPending ? "Importing..." :
+    importMutation.isSuccess ? "Started!" :
+    importMutation.isError ? "Error" : null;
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base">Knowledge Base</CardTitle>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {crawlStatus && <span className="text-xs text-muted-foreground">{crawlStatus}</span>}
           <Button
             size="sm"
             variant="outline"
@@ -37,6 +44,7 @@ export function KnowledgeStatus() {
             <Globe className="mr-1 h-3 w-3" />
             Crawl
           </Button>
+          {importStatus && <span className="text-xs text-muted-foreground">{importStatus}</span>}
           <Button
             size="sm"
             variant="outline"

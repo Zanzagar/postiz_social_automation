@@ -34,7 +34,7 @@ class WordPressCrawler:
 
     def __init__(
         self,
-        base_url: str = "https://gitavalley.com",
+        base_url: str = "https://gitavalley.org",
         site_name: str = "gitavalley",
         per_page: int = 100,
     ):
@@ -211,8 +211,8 @@ class WordPressCrawler:
             page_id = existing[0]
         else:
             cursor = conn.execute(
-                """INSERT INTO web_pages (url, site, title, body_text, pillar, content_hash, last_crawled)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO web_pages (url, site, title, body_text, pillar, content_hash, last_crawled, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     page_data["url"],
                     page_data["site"],
@@ -220,6 +220,7 @@ class WordPressCrawler:
                     page_data["body_text"],
                     pillar,
                     page_data["content_hash"],
+                    now,
                     now,
                 ),
             )

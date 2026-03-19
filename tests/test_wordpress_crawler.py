@@ -34,7 +34,7 @@ SAMPLE_PAGE = {
 class TestWordPressCrawlerInit:
     def test_default_base_url(self):
         crawler = WordPressCrawler()
-        assert "gitavalley.com" in crawler.base_url
+        assert "gitavalley.org" in crawler.base_url
 
     def test_custom_base_url(self):
         crawler = WordPressCrawler(base_url="https://example.com")
