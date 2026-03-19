@@ -46,6 +46,7 @@ def phase2_db(tmp_path):
             web_page_id INTEGER REFERENCES web_pages(id),
             fact_type TEXT NOT NULL,
             content TEXT NOT NULL,
+            topic TEXT,
             pillar TEXT,
             keywords TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
