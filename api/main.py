@@ -7,19 +7,20 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.auth import router as auth_router
 from api.dependencies import get_settings
+from api.routes.analytics import router as analytics_router
+from api.routes.calendar_plan import router as calendar_plan_router
 from api.routes.content import router as content_router
+from api.routes.festivals import router as festivals_router
 from api.routes.generate import router as generate_router
 from api.routes.health import router as health_router
 from api.routes.iterate import router as iterate_router
+from api.routes.knowledge import router as knowledge_router
+from api.routes.media import router as media_router
 from api.routes.pillars import router as pillars_router
 from api.routes.postiz import router as postiz_router
 from api.routes.settings import router as settings_router
 from api.routes.templates import router as templates_router
-from api.routes.analytics import router as analytics_router
-from api.routes.knowledge import router as knowledge_router
 from api.routes.upload import router as upload_router
-from api.routes.festivals import router as festivals_router
-from api.routes.media import router as media_router
 
 
 @asynccontextmanager
@@ -67,6 +68,7 @@ app.include_router(knowledge_router)
 app.include_router(upload_router)
 app.include_router(festivals_router)
 app.include_router(media_router)
+app.include_router(calendar_plan_router)
 
 
 @app.get("/")
