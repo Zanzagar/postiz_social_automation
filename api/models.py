@@ -211,3 +211,67 @@ class PublishConfig(Base):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
+
+
+# --- Phase 3: Media & Planning ---
+
+
+class MediaCatalog(Base):
+    __tablename__ = "media_catalog"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    filename: Mapped[str] = mapped_column(String(500), nullable=False)
+    original_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    local_path: Mapped[str] = mapped_column(Text, nullable=False)
+    postiz_media_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    thumbnail_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    topic: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    pillar: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source: Mapped[str] = mapped_column(String(50), nullable=False)  # upload/drive/social_import
+    usage_count: Mapped[int] = mapped_column(Integer, default=0)
+    avg_engagement: Mapped[float] = mapped_column(Float, default=0.0)
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class MediaTag(Base):
+    __tablename__ = "media_tags"
+    __table_args__ = (UniqueConstraint("media_id", "tag", name="uq_media_tag"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    media_id: Mapped[int] = mapped_column(Integer, ForeignKey("media_catalog.id"), nullable=False)
+    tag: Mapped[str] = mapped_column(String(100), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)  # ai/manual
+
+
+class MediaPerformance(Base):
+    __tablename__ = "media_performance"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    media_id: Mapped[int] = mapped_column(Integer, ForeignKey("media_catalog.id"), nullable=False)
+    content_row_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("content_rows.id"), nullable=True
+    )
+    platform: Mapped[str] = mapped_column(String(50), nullable=False)
+    engagement_score: Mapped[float] = mapped_column(Float, default=0.0)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class MediaAdapted(Base):
+    __tablename__ = "media_adapted"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    media_id: Mapped[int] = mapped_column(Integer, ForeignKey("media_catalog.id"), nullable=False)
+    platform: Mapped[str] = mapped_column(String(50), nullable=False)
+    format: Mapped[str] = mapped_column(String(20), nullable=False)  # post/story/carousel
+    adapted_path: Mapped[str] = mapped_column(Text, nullable=False)
+    width: Mapped[int] = mapped_column(Integer, nullable=False)
+    height: Mapped[int] = mapped_column(Integer, nullable=False)
+    has_text_overlay: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
