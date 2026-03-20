@@ -4,10 +4,11 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from api.models import Base, ContentRow
+from api.models import Base, ContentRow, MediaCatalog
 
 
 @pytest.fixture(autouse=True)
@@ -138,3 +139,69 @@ class TestDetachMedia:
             headers=auth_headers,
         )
         assert resp.status_code == 200
+
+
+class TestAutoAdapt:
+    def test_attach_triggers_adaptation(self, client, auth_headers, db_engine, tmp_path):
+        """When media is attached, adapted versions should be generated."""
+        # Create a real image + media record
+        media_dir = tmp_path / "media"
+        media_dir.mkdir(exist_ok=True)
+        (media_dir / "adapted").mkdir(exist_ok=True)
+        img = Image.new("RGB", (1920, 1080), color=(100, 150, 200))
+        file_path = media_dir / "test.jpg"
+        img.save(file_path, format="JPEG")
+
+        with Session(db_engine) as s:
+            m = MediaCatalog(
+                filename="test.jpg",
+                local_path=str(file_path),
+                mime_type="image/jpeg",
+                width=1920,
+                height=1080,
+                file_size=50000,
+                source="upload",
+            )
+            s.add(m)
+            s.flush()
+            media_id = m.id
+            s.commit()
+
+        # Create content row with facebook platform
+        cr_id = _seed_content_row(db_engine)
+
+        # Attach media
+        resp = client.put(
+            f"/api/content/{cr_id}/attach-media?media_id={media_id}",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert media_id in resp.json()["media_catalog_ids"]
+
+        # Check adapted versions were created
+        data = resp.json()
+        assert "adapted_count" in data
+        assert data["adapted_count"] >= 1
+
+    def test_attach_skips_adapt_if_no_image(self, client, auth_headers, db_engine):
+        """If the media file doesn't exist, attach still works but no adapt."""
+        with Session(db_engine) as s:
+            m = MediaCatalog(
+                filename="missing.jpg",
+                local_path="/nonexistent/missing.jpg",
+                mime_type="image/jpeg",
+                file_size=50000,
+                source="upload",
+            )
+            s.add(m)
+            s.flush()
+            media_id = m.id
+            s.commit()
+
+        cr_id = _seed_content_row(db_engine)
+        resp = client.put(
+            f"/api/content/{cr_id}/attach-media?media_id={media_id}",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["adapted_count"] == 0
