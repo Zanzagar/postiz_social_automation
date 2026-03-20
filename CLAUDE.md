@@ -12,11 +12,18 @@ Automation layer for Gita Valley (ISKCON Gita Nagari) social media scheduling us
 ## Structure
 
 ```
+api/                  # FastAPI backend
+  routes/             # Endpoint modules (content, media, calendar_plan, drive, etc.)
+  models.py           # SQLAlchemy models (19 tables)
+  schemas.py          # Pydantic request/response schemas
+  repositories/       # Data access layer
+frontend/             # React SPA (Vite + Tailwind + shadcn/ui)
+  src/pages/          # Page components (Dashboard, Create, Calendar, Media, etc.)
+  src/components/     # Reusable components (ContentEditor, CalendarPlanDialog, etc.)
+  src/lib/api.ts      # Typed API client
+src/content_engine/   # Content generation engine + CLI scripts
+data/                 # SQLite DB + ISKCON festival calendar
 docker-compose.yaml   # Postiz + PostgreSQL + Redis + Temporal
-dynamicconfig/        # Temporal dynamic configuration
-docs/                 # Research docs, audits, plans
-.claude/rules/        # Auto-loaded behavior rules (synced from template)
-.claude/hooks/        # Automation hooks (18 hooks enabled)
 .taskmaster/          # Task Master data (tasks, PRDs, reports)
 ```
 
@@ -84,8 +91,48 @@ task-master tags list --ready           # Tags with actionable task counts
 
 ## Current Focus
 
-- [ ] Dogfood Test 4, Run 2 — testing full v2.3.1 template workflow
-- [ ] Phase 0: Bootstrap (in progress)
+- [x] Phase 1: Content Creation Power (20/20 tasks, merged PR #5)
+- [x] Phase 2: Intelligence Layer (20/20 tasks, merged PR #6)
+- [x] Phase 3: Media & Planning (20/20 tasks, on feature/phase3-media-planning)
+- [ ] Phase 4: Platform & Users
+- [ ] Phase 5: Polish & Mobile
+
+## Phase 3 New Endpoints
+
+```
+# Media catalog
+POST   /api/media/upload              # Upload with AI tagging
+POST   /api/media/import-url          # Import from URL
+GET    /api/media                     # Browse with filters (tag, pillar, source, sort)
+GET    /api/media/{id}                # Detail with tags, usage, performance
+PUT    /api/media/{id}/tags           # Add/remove tags
+DELETE /api/media/{id}                # Delete with file cleanup
+GET    /api/media/suggest             # AI media suggestions for content
+POST   /api/media/{id}/adapt          # Platform-specific image versions
+PUT    /api/content/{id}/attach-media # Attach media to content (auto-adapts)
+PUT    /api/content/{id}/detach-media # Detach media from content
+
+# Google Drive
+GET    /api/media/drive/browse        # Browse Drive folder
+POST   /api/media/import-drive        # Batch import from Drive
+
+# Calendar planning
+POST   /api/calendar/plan             # AI-generate content calendar (Claude CLI)
+GET    /api/calendar/plan/{id}        # View plan
+GET    /api/calendar/plans            # List plans (filter by status)
+POST   /api/calendar/plan/{id}/approve # Convert slots to content rows
+DELETE /api/calendar/plan/{id}        # Delete draft plan
+
+# Festivals
+GET    /api/festivals                 # ISKCON festival calendar
+```
+
+## CLI Scripts
+
+```bash
+# Social media import (requires META_PAGE_ACCESS_TOKEN)
+python -m content_engine.scripts.import_social_media
+```
 
 ## Superpowers (Required)
 
