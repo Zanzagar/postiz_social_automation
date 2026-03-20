@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type CalendarEntry, type ContentRow } from "@/lib/api";
+import { api, type CalendarEntry, type ContentRow, type Festival } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ContentEditor } from "@/components/content/ContentEditor";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Star } from "lucide-react";
 import {
   format,
   parseISO,
@@ -128,6 +128,21 @@ export function CalendarPage() {
     return map;
   }, [pillars]);
 
+  // Fetch festivals for the current year range
+  const { data: festivals = [] } = useQuery({
+    queryKey: ["festivals"],
+    queryFn: () => api.getFestivals(),
+  });
+
+  const festivalsByDate = useMemo(() => {
+    const map: Record<string, Festival[]> = {};
+    for (const f of festivals) {
+      if (!map[f.date]) map[f.date] = [];
+      map[f.date].push(f);
+    }
+    return map;
+  }, [festivals]);
+
   if (isLoading) {
     return (
       <div className="space-y-4 p-6">
@@ -232,6 +247,7 @@ export function CalendarPage() {
           currentDate={currentDate}
           entries={entries}
           pillarColors={pillarColors}
+          festivalsByDate={festivalsByDate}
           onEntryClick={handleEntryClick}
         />
       )}
@@ -240,6 +256,7 @@ export function CalendarPage() {
           currentDate={currentDate}
           entries={entries}
           pillarColors={pillarColors}
+          festivalsByDate={festivalsByDate}
           onEntryClick={handleEntryClick}
         />
       )}
@@ -282,11 +299,13 @@ function MonthlyGrid({
   currentDate,
   entries,
   pillarColors,
+  festivalsByDate,
   onEntryClick,
 }: {
   currentDate: Date;
   entries: CalendarEntry[];
   pillarColors: Record<string, string>;
+  festivalsByDate: Record<string, Festival[]>;
   onEntryClick: (entry: CalendarEntry) => void;
 }) {
   const [expandedDay, setExpandedDay] = useState<{
@@ -340,9 +359,11 @@ function MonthlyGrid({
           {days.map((day) => {
             const dateKey = format(day, "yyyy-MM-dd");
             const dayEntries = entriesByDate[dateKey] ?? [];
+            const dayFestivals = festivalsByDate[dateKey] ?? [];
             const inMonth = isSameMonth(day, currentDate);
             const isToday = isSameDay(day, new Date());
             const hasEntries = dayEntries.length > 0;
+            const hasFestival = dayFestivals.length > 0;
             const overflow = dayEntries.length - MAX_VISIBLE;
 
             return (
@@ -374,6 +395,18 @@ function MonthlyGrid({
                     </span>
                   )}
                 </div>
+
+                {/* Festival markers */}
+                {hasFestival && dayFestivals.map((f) => (
+                  <div
+                    key={f.name}
+                    className="mb-0.5 flex items-center gap-1 rounded bg-amber-50 px-1 py-0.5 text-[10px] text-amber-700 border border-amber-200"
+                    title={f.significance}
+                  >
+                    <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" />
+                    <span className="truncate">{f.name}</span>
+                  </div>
+                ))}
 
                 {/* Entry pills */}
                 <div className="space-y-0.5">
@@ -483,11 +516,13 @@ function WeeklyView({
   currentDate,
   entries,
   pillarColors,
+  festivalsByDate,
   onEntryClick,
 }: {
   currentDate: Date;
   entries: CalendarEntry[];
   pillarColors: Record<string, string>;
+  festivalsByDate: Record<string, Festival[]>;
   onEntryClick: (entry: CalendarEntry) => void;
 }) {
   const weekDays = useMemo(() => {
@@ -511,6 +546,7 @@ function WeeklyView({
       {weekDays.map((day) => {
         const dateKey = format(day, "yyyy-MM-dd");
         const dayEntries = entriesByDate[dateKey] ?? [];
+        const dayFestivals = festivalsByDate[dateKey] ?? [];
         const isToday = isSameDay(day, new Date());
 
         return (
@@ -529,6 +565,16 @@ function WeeklyView({
                 {format(day, "d")}
               </div>
             </div>
+            {dayFestivals.map((f) => (
+              <div
+                key={f.name}
+                className="flex items-center gap-1 rounded bg-amber-50 px-1.5 py-1 text-[10px] text-amber-700 border border-amber-200"
+                title={f.significance}
+              >
+                <Star className="h-2.5 w-2.5 flex-shrink-0 fill-amber-400 text-amber-400" />
+                <span className="truncate">{f.name}</span>
+              </div>
+            ))}
             <div className="space-y-1">
               {dayEntries.map((entry) => (
                 <button

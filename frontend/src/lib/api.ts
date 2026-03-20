@@ -407,6 +407,15 @@ export interface MediaBrowseParams {
   per_page?: number;
 }
 
+export interface Festival {
+  name: string;
+  date: string;
+  significance: string;
+  suggested_content_angles: string[];
+  topic: string;
+  content_pillar: string;
+}
+
 export interface MediaSuggestion {
   media_id: number;
   thumbnail_path: string | null;
@@ -686,6 +695,13 @@ export const api = {
     return request<{ deleted: boolean; id: number }>(`/api/media/${id}`, {
       method: "DELETE",
     });
+  },
+
+  getFestivals(from?: string, to?: string) {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    return request<Festival[]>(`/api/festivals?${params}`);
   },
 
   suggestMedia(contentRowId: number) {
