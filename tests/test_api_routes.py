@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.models import Base
-from content_engine.models import ContentPillar, Platform, Suggestion
+from content_engine.models import Platform, Suggestion
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +38,7 @@ def _make_suggestion() -> Suggestion:
     return Suggestion(
         suggested_date=datetime(2026, 3, 20),
         content_idea="Post about spring calves",
-        suggested_pillar=ContentPillar.COW_LIFE,
+        suggested_pillar="Cow Life",
         rationale="No cow content in 5 days",
         media_suggestion="Photo of new calves in pasture",
         status="suggested",

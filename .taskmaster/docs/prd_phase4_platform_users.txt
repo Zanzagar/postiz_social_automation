@@ -18,7 +18,7 @@ Replace single shared password with individual user accounts.
 
 **Requirements:**
 - `users` table already exists from Phase 1 (id, username, display_name, password_hash, created_at)
-- Upgrade Login page: username + password form (rebuild through Magic MCP pipeline — this was deferred to Phase 5 originally but makes sense here since we're changing auth)
+- Modify Login page: add username field to existing LoginPage.tsx (already built with Magic MCP in Phase 1 — modify, don't rebuild)
 - Update JWT auth to include user_id in token claims
 - Update `POST /api/auth/login` to authenticate against users table
 - Seed initial admin user during migration (username from env var or interactive setup)
@@ -49,12 +49,13 @@ Different messaging for different audience segments, integrated into AI generati
   - Local community: friendly/accessible/farm-focused, farm visit/CSA share/family program vocabulary, platform affinity Facebook/Instagram
   - General public: professional/wellness-oriented, sustainable living/animal welfare/mindfulness vocabulary, platform affinity LinkedIn/TikTok
 - CRUD endpoints: GET/POST/PUT/DELETE `/api/segments`
-- Each content_row has optional audience_segment_id (nullable column exists from Phase 1)
+- Each content_row has optional audience_segment_id (nullable column already exists in Phase 1 schema)
+- Each template has optional default_segment_id (nullable column already exists in Phase 1 schema)
 - ContentEditor and Create page: audience segment dropdown
-- Templates: default_segment_id field (nullable column exists from Phase 1)
 - When generating/iterating captions: if segment is set, inject segment's tone_instructions, vocabulary, and avoid_terms into Claude prompt alongside brand rules and platform instructions
 - If no segment set: default behavior based on platform's natural audience (e.g., LinkedIn → general public tone)
 - Calendar AI planning (Phase 3): consider audience mix balance when suggesting content ("this week is heavy on devotee content, suggest a general public post")
+- NOTE: Pillar references in audience segmentation should use the dynamic `pillars` table (Phase 1), not hardcoded names
 - Settings page: manage audience segments (create, edit, delete)
 
 ### 4. Postiz MCP Integration (Optional)

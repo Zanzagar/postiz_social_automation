@@ -277,6 +277,7 @@ describe("api templates CRUD", () => {
       { name: "topic", type: "text" },
     ],
     schedule_pattern: "weekly",
+    schedule_time: null,
     default_segment_id: null,
     created_at: "2026-03-17T12:00:00",
     updated_at: null,

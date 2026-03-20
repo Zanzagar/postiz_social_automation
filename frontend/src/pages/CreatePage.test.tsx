@@ -33,8 +33,8 @@ import { api, request } from "@/lib/api";
 const mockRequest = vi.mocked(request);
 const mockSendToPostiz = vi.mocked(api.sendToPostiz);
 const mockGetTemplates = vi.mocked(api.getTemplates);
-const mockGenerateFromTemplate = vi.mocked(api.generateFromTemplate);
-const mockIterate = vi.mocked(api.iterate);
+vi.mocked(api.generateFromTemplate);
+vi.mocked(api.iterate);
 
 function renderCreate() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -59,6 +59,7 @@ const sampleTemplates = [
       { name: "topic", type: "text" },
     ],
     schedule_pattern: null,
+    schedule_time: null,
     default_segment_id: null,
     created_at: "2026-03-17T12:00:00",
     updated_at: null,

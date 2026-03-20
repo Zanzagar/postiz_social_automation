@@ -7,7 +7,7 @@ from pathlib import Path
 
 from content_engine.generator import CaptionGenerator
 from content_engine.intelligence import ContentIntelligence
-from content_engine.models import ContentPillar, ContentStatus
+from content_engine.models import ContentStatus
 from content_engine.postiz import PostizClient
 from content_engine.sheets import SheetsClient
 from content_engine.validator import ContentValidator
@@ -215,7 +215,7 @@ def suggest_pipeline(
         # Simplify pillar balance: pillar_name -> actual_pct
         pillar_balance: dict[str, float] = {}
         for pillar, stats in pillar_balance_raw.items():
-            pillar_name = pillar.value if isinstance(pillar, ContentPillar) else str(pillar)
+            pillar_name = str(pillar)
             pillar_balance[pillar_name] = stats["actual"]
 
         logger.info(
@@ -291,7 +291,7 @@ def learn_pipeline(
             result.skipped += 1
             continue
 
-        pillar = row.content_pillar or ContentPillar.COW_LIFE
+        pillar = row.content_pillar or "Cow Life"
 
         for post_id in row.postiz_ids.split(","):
             post_id = post_id.strip()

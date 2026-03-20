@@ -1,12 +1,20 @@
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useDashboardData } from "@/hooks/useDashboardData";
+import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PillarChart } from "@/components/analytics/PillarChart";
+import { TopPostsTable } from "@/components/analytics/TopPostsTable";
+import { KnowledgeStatus } from "@/components/analytics/KnowledgeStatus";
+import { KnowledgeSearch } from "@/components/analytics/KnowledgeSearch";
 import {
   FileCheck,
   CalendarDays,
   CheckCircle,
   PenSquare,
+  TrendingUp,
+  Eye,
 } from "lucide-react";
 
 const statusColor: Record<string, string> = {
@@ -23,6 +31,11 @@ export function DashboardPage() {
     services,
     isLoading,
   } = useDashboardData();
+
+  const analytics = useQuery({
+    queryKey: ["analytics", "overview"],
+    queryFn: () => api.getAnalyticsOverview(),
+  });
 
   if (isLoading) {
     return (
@@ -124,6 +137,49 @@ export function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Analytics overview cards */}
+      {analytics.data && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Engagement
+              </CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold">{analytics.data.total_engagement.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">avg {analytics.data.avg_engagement} per post</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Reach
+              </CardTitle>
+              <Eye className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold">{analytics.data.total_reach.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">{analytics.data.total_impressions.toLocaleString()} impressions</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Analytics charts and widgets */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <PillarChart />
+        <TopPostsTable />
+      </div>
+
+      {/* Knowledge base */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <KnowledgeStatus />
+        <KnowledgeSearch />
       </div>
     </div>
   );

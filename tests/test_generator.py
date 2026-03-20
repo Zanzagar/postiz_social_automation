@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from content_engine.generator import BRAND_RULES, PLATFORM_INSTRUCTIONS, CaptionGenerator
-from content_engine.models import ContentPillar, ContentRow, ContentStatus, Platform, Suggestion
+from content_engine.models import ContentRow, ContentStatus, Platform, Suggestion
 
 SAMPLE_CLAUDE_OUTPUT = json.dumps(
     {
@@ -31,7 +31,7 @@ def sample_row():
     return ContentRow(
         row_number=2,
         date=datetime(2026, 3, 1),
-        content_pillar=ContentPillar.COW_LIFE,
+        content_pillar="Cow Life",
         raw_text="Baby calf born this morning!",
         media_url="https://drive.google.com/file/d/abc123",
         platforms={Platform.INSTAGRAM: True, Platform.FACEBOOK: True, Platform.TIKTOK: False},
@@ -130,7 +130,7 @@ class TestInferPillar:
         )
 
         pillar = generator.infer_pillar("Our cows enjoying the morning sunshine")
-        assert pillar == ContentPillar.COW_LIFE
+        assert pillar == "Cow Life"
 
     @patch("content_engine.generator.subprocess.run")
     def test_returns_community_for_event_text(self, mock_run, generator) -> None:
@@ -141,7 +141,7 @@ class TestInferPillar:
         )
 
         pillar = generator.infer_pillar("Join us for the spring festival")
-        assert pillar == ContentPillar.COMMUNITY
+        assert pillar == "Community"
 
 
 class TestGenerateSuggestions:
@@ -170,7 +170,7 @@ class TestGenerateSuggestions:
 
         assert len(suggestions) == 1
         assert isinstance(suggestions[0], Suggestion)
-        assert suggestions[0].suggested_pillar == ContentPillar.FARM_OPS
+        assert suggestions[0].suggested_pillar == "Farm Ops"
 
 
 class TestLearningContext:

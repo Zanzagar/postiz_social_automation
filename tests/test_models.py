@@ -6,7 +6,6 @@ import pytest
 from pydantic import ValidationError
 
 from content_engine.models import (
-    ContentPillar,
     ContentRow,
     ContentStatus,
     LearningContext,
@@ -25,14 +24,6 @@ class TestEnums:
         assert ContentStatus.POSTED == "posted"
         assert ContentStatus.ERROR == "error"
 
-    def test_content_pillar_values(self) -> None:
-        assert ContentPillar.COW_LIFE == "Cow Life"
-        assert ContentPillar.FARM_OPS == "Farm Ops"
-        assert ContentPillar.COMMUNITY == "Community"
-        assert ContentPillar.KITCHEN == "Kitchen"
-        assert ContentPillar.SPIRITUAL == "Spiritual"
-        assert ContentPillar.CTA == "CTA"
-
     def test_platform_values(self) -> None:
         assert Platform.INSTAGRAM == "instagram"
         assert Platform.FACEBOOK == "facebook"
@@ -46,7 +37,7 @@ class TestContentRow:
         row = ContentRow(
             row_number=1,
             date=datetime(2026, 3, 1, 10, 0),
-            content_pillar=ContentPillar.COW_LIFE,
+            content_pillar="Cow Life",
             raw_text="Baby calf born this morning!",
             media_url="https://drive.google.com/file/d/abc123",
             platforms={Platform.INSTAGRAM: True, Platform.FACEBOOK: True},
@@ -112,7 +103,7 @@ class TestSuggestion:
         s = Suggestion(
             suggested_date=datetime(2026, 3, 15),
             content_idea="Spring planting photo series",
-            suggested_pillar=ContentPillar.FARM_OPS,
+            suggested_pillar="Farm Ops",
             rationale="Spring content performs 2x better historically",
             media_suggestion="Photos of seedlings being planted",
         )
@@ -131,7 +122,7 @@ class TestPostPerformance:
         p = PostPerformance(
             post_id="post_123",
             platform=Platform.INSTAGRAM,
-            pillar=ContentPillar.COW_LIFE,
+            pillar="Cow Life",
             posted_at=datetime(2026, 2, 20, 14, 0),
             likes=150,
             comments=23,
@@ -145,7 +136,7 @@ class TestPostPerformance:
         p = PostPerformance(
             post_id="post_456",
             platform=Platform.FACEBOOK,
-            pillar=ContentPillar.SPIRITUAL,
+            pillar="Spiritual",
             posted_at=datetime(2026, 2, 20),
         )
         assert p.likes == 0

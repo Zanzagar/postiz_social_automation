@@ -13,7 +13,6 @@ import {
   Save,
   Plus,
   Pencil,
-  Trash2,
   GripVertical,
   Check,
   X,
@@ -235,7 +234,7 @@ function PillarManager() {
     }
   }
 
-  async function handleDelete(pillar: Pillar) {
+  async function _handleDelete(pillar: Pillar) {
     try {
       await api.deletePillar(pillar.id);
       queryClient.invalidateQueries({ queryKey: ["pillars"] });
@@ -243,6 +242,7 @@ function PillarManager() {
       setError(err instanceof Error ? err.message : "Delete failed");
     }
   }
+  void _handleDelete;
 
   if (isLoading) {
     return (

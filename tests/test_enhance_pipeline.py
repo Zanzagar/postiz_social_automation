@@ -3,7 +3,7 @@
 from datetime import datetime
 from unittest.mock import MagicMock
 
-from content_engine.models import ContentPillar, ContentRow, ContentStatus, Platform
+from content_engine.models import ContentRow, ContentStatus, Platform
 
 
 def _make_row(
@@ -25,7 +25,7 @@ def _make_row(
     return ContentRow(
         row_number=row_number,
         date=datetime(2026, 3, 1),
-        content_pillar=ContentPillar.COW_LIFE,
+        content_pillar="Cow Life",
         raw_text=raw_text,
         media_url=media_url,
         platforms=platforms,

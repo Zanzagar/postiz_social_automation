@@ -262,6 +262,87 @@ export interface PublishConfigResponse {
   platforms: PlatformPublishConfig[];
 }
 
+// --- Analytics Types ---
+
+export interface AnalyticsOverview {
+  total_posts: number;
+  total_engagement: number;
+  avg_engagement: number;
+  total_reach: number;
+  total_impressions: number;
+}
+
+export interface PillarBreakdown {
+  pillar: string;
+  post_count: number;
+  total_engagement: number;
+  avg_engagement: number;
+  total_reach: number;
+}
+
+export interface TopPost {
+  id: number;
+  pillar: string;
+  raw_text: string;
+  date: string;
+  platform: string;
+  engagement: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  reach: number;
+}
+
+export interface KnowledgeSource {
+  name: string;
+  type: string;
+  page_count?: number;
+  post_count?: number;
+  last_crawled?: string;
+  last_imported?: string;
+}
+
+export interface KnowledgeStatusResponse {
+  sources: KnowledgeSource[];
+  knowledge_entries: number;
+}
+
+export interface KnowledgeStats {
+  total_pages: number;
+  total_knowledge: number;
+  pages_with_knowledge: number;
+  pages_without_knowledge: number;
+  by_type: Array<{ type: string; count: number }>;
+  by_topic: Array<{ topic: string; count: number }>;
+  by_pillar: Array<{ pillar: string; count: number }>;
+  coverage_gaps: Array<{ title: string; site: string; url: string; fact_count: number }>;
+}
+
+export interface KnowledgeEntry {
+  id: number;
+  fact_type: string;
+  content: string;
+  topic: string;
+  pillar: string;
+  keywords: string[];
+  page_title: string;
+  page_url: string;
+  site: string;
+}
+
+export interface BrowseResponse {
+  results: KnowledgeEntry[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export interface GraphData {
+  nodes: Array<{ id: string; label: string; type: string; size: number; site?: string }>;
+  links: Array<{ source: string; target: string }>;
+}
+
 // --- API Functions ---
 
 export const api = {
@@ -399,7 +480,7 @@ export const api = {
 
   batchGenerateFromTemplate(
     templateId: number,
-    data: { variable_values: Record<string, string>; platforms: string[]; weeks: number },
+    data: { variable_values: Record<string, string>; platforms: string[]; weeks: number; scheduled_time?: string },
   ) {
     return request<{ created: number; drafts: ContentRow[] }>(
       `/api/templates/${templateId}/generate-batch`,
@@ -446,6 +527,64 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ platforms }),
     });
+  },
+
+  // Analytics
+  getAnalyticsOverview() {
+    return request<AnalyticsOverview>("/api/analytics/overview");
+  },
+
+  getPillarBreakdown() {
+    return request<{ pillars: PillarBreakdown[] }>("/api/analytics/pillars");
+  },
+
+  getTopPosts(limit = 10) {
+    return request<{ posts: TopPost[] }>(`/api/analytics/top-posts?limit=${limit}`);
+  },
+
+  // Knowledge
+  getKnowledgeStatus() {
+    return request<KnowledgeStatusResponse>("/api/knowledge/status");
+  },
+
+  triggerCrawl() {
+    return request<{ status: string }>("/api/knowledge/crawl", { method: "POST" });
+  },
+
+  triggerSocialImport() {
+    return request<{ status: string }>("/api/knowledge/import-social", { method: "POST" });
+  },
+
+  getKnowledgeStats() {
+    return request<KnowledgeStats>("/api/knowledge/stats");
+  },
+
+  browseKnowledge(params: { pillar?: string; topic?: string; fact_type?: string; site?: string; page?: number }) {
+    const searchParams = new URLSearchParams();
+    if (params.pillar) searchParams.set("pillar", params.pillar);
+    if (params.topic) searchParams.set("topic", params.topic);
+    if (params.fact_type) searchParams.set("fact_type", params.fact_type);
+    if (params.site) searchParams.set("site", params.site);
+    if (params.page) searchParams.set("page", String(params.page));
+    return request<BrowseResponse>(`/api/knowledge/browse?${searchParams}`);
+  },
+
+  getKnowledgeGraph() {
+    return request<GraphData>("/api/knowledge/graph");
+  },
+
+  getCrawlProgress() {
+    return request<{ running: boolean; source: string; current: number; total: number; phase: string }>(
+      "/api/knowledge/progress",
+    );
+  },
+
+  searchKnowledge(q: string, pillar?: string) {
+    const params = new URLSearchParams({ q });
+    if (pillar) params.set("pillar", pillar);
+    return request<{ results: Array<{ id: number; fact_type: string; content: string; pillar: string; page_title: string; page_url: string; site: string }>; count: number }>(
+      `/api/knowledge/search?${params}`,
+    );
   },
 };
 

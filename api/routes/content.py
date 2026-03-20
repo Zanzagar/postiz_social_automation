@@ -49,6 +49,7 @@ def _row_to_response(row) -> ContentRowResponse:
         posted_at=row.posted_at,
         error_msg=None,
         source=row.source or "manual",
+        auto_publish_at=row.auto_publish_at,
     )
 
 

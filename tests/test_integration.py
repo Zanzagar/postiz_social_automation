@@ -12,7 +12,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from content_engine.models import (
-    ContentPillar,
     ContentRow,
     ContentStatus,
     Platform,
@@ -35,7 +34,7 @@ def _make_row(**overrides) -> ContentRow:
     defaults = {
         "row_number": 2,
         "date": datetime(2026, 3, 1),
-        "content_pillar": ContentPillar.COW_LIFE,
+        "content_pillar": "Cow Life",
         "raw_text": "Lakshmi enjoying the morning sun",
         "media_url": None,
         "platforms": {Platform.INSTAGRAM: True, Platform.FACEBOOK: True},
@@ -79,7 +78,7 @@ def mock_generator() -> MagicMock:
         Suggestion(
             suggested_date=datetime(2026, 3, 5),
             content_idea="Photo of new calves",
-            suggested_pillar=ContentPillar.COW_LIFE,
+            suggested_pillar="Cow Life",
             rationale="Cow Life underrepresented",
             media_suggestion="Photo of calves",
         )
@@ -95,8 +94,8 @@ def mock_intelligence() -> MagicMock:
         {"date": "2026-03-06"},
     ]
     intel.analyze_pillar_balance.return_value = {
-        ContentPillar.COW_LIFE: {"actual": 0.15, "target": 0.25},
-        ContentPillar.FARM_OPS: {"actual": 0.30, "target": 0.25},
+        "Cow Life": {"actual": 0.15, "target": 0.25},
+        "Farm Ops": {"actual": 0.30, "target": 0.25},
     }
     intel.get_upcoming_events.return_value = []
     return intel
@@ -299,7 +298,7 @@ class TestLearnPipelineIntegration:
         mock_postiz.get_post_analytics.return_value = PostPerformance(
             post_id="post-1",
             platform=Platform.INSTAGRAM,
-            pillar=ContentPillar.COW_LIFE,
+            pillar="Cow Life",
             posted_at=datetime(2026, 3, 1),
             likes=42,
             comments=5,
@@ -410,7 +409,7 @@ class TestCrossPipelineIntegration:
         mock_postiz.get_post_analytics.return_value = PostPerformance(
             post_id="draft-123",
             platform=Platform.INSTAGRAM,
-            pillar=ContentPillar.COW_LIFE,
+            pillar="Cow Life",
             posted_at=datetime(2026, 3, 1),
             likes=100,
         )

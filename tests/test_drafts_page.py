@@ -12,7 +12,7 @@ Tests verify:
 from datetime import datetime
 from pathlib import Path
 
-from content_engine.models import ContentPillar, ContentRow, ContentStatus, Platform
+from content_engine.models import ContentRow, ContentStatus, Platform
 
 
 def _make_draft(**overrides) -> ContentRow:
@@ -20,7 +20,7 @@ def _make_draft(**overrides) -> ContentRow:
     defaults = {
         "row_number": 2,
         "date": datetime(2026, 3, 1),
-        "content_pillar": ContentPillar.COW_LIFE,
+        "content_pillar": "Cow Life",
         "raw_text": "Lakshmi enjoying the morning sun",
         "media_url": None,
         "platforms": {
