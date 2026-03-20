@@ -179,3 +179,53 @@ async def approve_draft(
             pass
 
     return ApproveResponse(success=True, postiz_ids=draft_ids)
+
+
+@router.put("/content/{row_id}/attach-media")
+async def attach_media(
+    row_id: int,
+    media_id: int,
+    repo: ContentRepository = Depends(get_content_repo),
+):
+    """Attach a media catalog item to a content row."""
+    row = await repo.get_content_row(row_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Row {row_id} not found.")
+
+    current_ids: list[int] = []
+    if row.media_catalog_ids:
+        try:
+            current_ids = json.loads(row.media_catalog_ids)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    if media_id not in current_ids:
+        current_ids.append(media_id)
+
+    row.media_catalog_ids = json.dumps(current_ids)
+    await repo.session.commit()
+    return {"media_catalog_ids": current_ids}
+
+
+@router.put("/content/{row_id}/detach-media")
+async def detach_media(
+    row_id: int,
+    media_id: int,
+    repo: ContentRepository = Depends(get_content_repo),
+):
+    """Detach a media catalog item from a content row."""
+    row = await repo.get_content_row(row_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Row {row_id} not found.")
+
+    current_ids: list[int] = []
+    if row.media_catalog_ids:
+        try:
+            current_ids = json.loads(row.media_catalog_ids)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    current_ids = [mid for mid in current_ids if mid != media_id]
+    row.media_catalog_ids = json.dumps(current_ids) if current_ids else None
+    await repo.session.commit()
+    return {"media_catalog_ids": current_ids}

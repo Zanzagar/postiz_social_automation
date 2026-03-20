@@ -407,6 +407,14 @@ export interface MediaBrowseParams {
   per_page?: number;
 }
 
+export interface MediaSuggestion {
+  media_id: number;
+  thumbnail_path: string | null;
+  filename: string;
+  relevance_score: number;
+  match_reasons: string[];
+}
+
 // --- API Functions ---
 
 export const api = {
@@ -678,6 +686,26 @@ export const api = {
     return request<{ deleted: boolean; id: number }>(`/api/media/${id}`, {
       method: "DELETE",
     });
+  },
+
+  suggestMedia(contentRowId: number) {
+    return request<{ suggestions: MediaSuggestion[] }>(
+      `/api/media/suggest?content_row_id=${contentRowId}`,
+    );
+  },
+
+  attachMedia(contentRowId: number, mediaId: number) {
+    return request<{ media_catalog_ids: number[] }>(
+      `/api/content/${contentRowId}/attach-media?media_id=${mediaId}`,
+      { method: "PUT" },
+    );
+  },
+
+  detachMedia(contentRowId: number, mediaId: number) {
+    return request<{ media_catalog_ids: number[] }>(
+      `/api/content/${contentRowId}/detach-media?media_id=${mediaId}`,
+      { method: "PUT" },
+    );
   },
 };
 

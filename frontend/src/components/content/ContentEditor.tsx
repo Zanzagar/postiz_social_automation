@@ -31,6 +31,7 @@ import {
   Copy,
   Save,
 } from "lucide-react";
+import { SuggestedMediaPanel } from "@/components/content/SuggestedMediaPanel";
 
 // --- Platform config ---
 
@@ -101,6 +102,7 @@ export function ContentEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [expandedIter, setExpandedIter] = useState<Set<number>>(new Set());
+  const [attachedMediaIds, setAttachedMediaIds] = useState<number[]>([]);
   const prevRowIdRef = useRef<number | null>(null);
 
   // Repurpose state
@@ -748,6 +750,15 @@ export function ContentEditor({
               })}
             </div>
           </div>
+        )}
+
+        {/* Suggested Media Panel */}
+        {contentRow && mode !== "create" && (
+          <SuggestedMediaPanel
+            contentRowId={contentRow.row_number}
+            attachedMediaIds={attachedMediaIds}
+            onAttachChange={setAttachedMediaIds}
+          />
         )}
 
         {/* Footer actions */}
