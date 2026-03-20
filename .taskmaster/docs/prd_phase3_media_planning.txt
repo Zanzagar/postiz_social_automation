@@ -8,7 +8,10 @@ Phase 1 established SQLite and content iteration. Phase 2 added web intelligence
 
 ## Prerequisites
 - Phase 1 complete: SQLite database, ContentEditor, templates
-- Phase 2 complete: analytics pipeline, knowledge base, social history (media URLs from social imports available)
+- Phase 2 complete: analytics pipeline, knowledge base (1,089 entries, 12 topics), social history (100 FB posts)
+- **NOTE:** social_history.media_urls is empty — Graph API attachments field was dropped to avoid 403 pagination errors. Media import (Feature 4) must fetch media per-post via separate Graph API calls, not from stored URLs.
+- **NOTE:** Knowledge base now has a `topic` field (source-faithful categorization) separate from `pillar` (content scheduling). Features referencing knowledge should query by topic, not pillar.
+- **NOTE:** Both gitavalley.org and iskcongitanagari.org are WordPress sites — BeautifulSoup scraper is unused, both use WP REST API.
 - Google Drive API access via existing service account
 - Postiz upload API available (POST /upload, POST /upload-from-url)
 
@@ -18,7 +21,8 @@ Phase 1 established SQLite and content iteration. Phase 2 added web intelligence
 Central media catalog with metadata, stored locally with Postiz as storage backend.
 
 **Requirements:**
-- `media_catalog` table: id, filename, original_url, local_path, postiz_media_id, thumbnail_path, mime_type, width, height, file_size, tags (JSON), pillar, source (upload/drive/social_import), usage_count, avg_engagement, created_by, created_at
+- `media_catalog` table: id, filename, original_url, local_path, postiz_media_id, thumbnail_path, mime_type, width, height, file_size, tags (JSON), topic, pillar, source (upload/drive/social_import), usage_count, avg_engagement, created_by, created_at
+- **NOTE:** `topic` uses the Phase 2 taxonomy (Cow Protection, Ahimsa Dairy, Farm Products, Sustainability, Retreats & Visits, People & Team, Education & Programs, History & Mission, Fundraising, Spiritual Life, Events & Festivals, General Information). `pillar` remains for scheduling distribution.
 - `media_tags` table: id, media_id, tag, confidence, source (ai/manual). UNIQUE(media_id, tag)
 - `media_performance` table: id, media_id, content_row_id, platform, engagement_score, fetched_at
 - `POST /api/media/upload` endpoint: accept file upload, store locally in media/ directory, generate thumbnail via Pillow, upload to Postiz via POST /upload, AI-classify tags and pillar via Claude CLI, insert into media_catalog
@@ -53,19 +57,22 @@ Browse and import media from a linked Google Drive folder.
 Import media from Phase 2 social history into the catalog.
 
 **Requirements:**
-- Process media_urls from `social_history` table entries
-- Download images/videos from Facebook and Instagram via their CDN URLs
+- **UPDATED:** `social_history.media_urls` is currently empty (Graph API attachments dropped in Phase 2). Must fetch media per-post:
+  - For each social_history entry, call `GET /{post_id}?fields=attachments` to get media URLs
+  - Respect 30 req/hour Postiz rate limit (use separate Meta rate tracker)
+  - Download images/videos from Facebook CDN URLs
 - Catalog each piece with source="social_import", linked to the social_history entry
 - Carry over engagement data from the social_history entry as initial performance data
-- Run as a one-time migration after Phase 2 social history is populated
+- Run as a background CLI script (NOT a FastAPI background task — Claude CLI calls block the event loop, see Phase 2 lesson)
 - Background job: can run incrementally as new social posts are imported
+- **NOTE:** Full Facebook history (1,613 posts) requires Meta app review for `pages_read_engagement` permission. Currently limited to ~100 posts. See `memory/project_meta_app_review.md`.
 
 ### 5. AI Media Suggestions
 AI recommends media from catalog for content rows.
 
 **Requirements:**
 - `GET /api/media/suggest?content_row_id=` endpoint: given a content row (with pillar, raw_text, platforms), search media catalog for best matches
-- Matching criteria: pillar match, tag relevance to content text, past engagement performance, recency (prefer fresh media, penalize recently-used)
+- Matching criteria: topic match (primary — more precise than pillar), pillar match (secondary), tag relevance to content text, past engagement performance, recency (prefer fresh media, penalize recently-used)
 - Return top 5 suggestions with relevance scores
 - ContentEditor integration: "Suggested Media" panel shows recommended images, click to attach
 - Attach media to content row: updates content_rows.media_catalog_ids (NOTE: column already exists in Phase 1 schema as nullable JSON text)
@@ -75,8 +82,9 @@ AI generates content calendars based on multiple signals.
 
 **Requirements:**
 - `POST /api/calendar/plan` endpoint: accepts date_range (start, end), platforms, and optional constraints
-- AI planner considers: pillar distribution targets (loaded dynamically from `pillars` table — staff configures distribution weights per pillar, NOT hardcoded percentages), upcoming ISKCON festivals, engagement patterns from analytics, posting history gaps, template schedules, web knowledge (new programs/events), seasonal context, available high-performing media
-- Returns a proposed calendar: array of slots, each with date, time, pillar, topic idea, recommended media_id, target platforms
+- AI planner considers: pillar distribution targets (loaded dynamically from `pillars` table — staff configures distribution weights per pillar, NOT hardcoded percentages), upcoming ISKCON festivals, engagement patterns from analytics, posting history gaps, template schedules, web knowledge entries by topic (query `web_knowledge` table with topic filter for relevant programs/events/facts), seasonal context, available high-performing media
+- Returns a proposed calendar: array of slots, each with date, time, pillar, topic (from Phase 2 taxonomy), content idea, recommended media_id, target platforms
+- **NOTE:** analytics_cache will be empty until content is published through Postiz and engagement synced. Planner should gracefully degrade when analytics data is unavailable.
 - `GET /api/calendar/plan/{id}` endpoint: view a generated plan
 - `POST /api/calendar/plan/{id}/approve` endpoint: approve all or selected slots → creates content_rows in DRAFT status with source="plan"
 - Calendar page integration: "Plan Week" and "Plan Month" buttons, plan review in calendar view, click any slot to edit via ContentEditor
@@ -86,7 +94,7 @@ AI generates content calendars based on multiple signals.
 Festival data source for calendar AI planning.
 
 **Requirements:**
-- `data/iskcon_calendar.json` file: array of festivals with name, date, significance, suggested_content_angles (array of strings), content_pillar
+- `data/iskcon_calendar.json` file: array of festivals with name, date, significance, suggested_content_angles (array of strings), topic (from Phase 2 taxonomy, typically "Spiritual Life" or "Events & Festivals"), content_pillar
 - Key festivals: Janmashtami, Ratha Yatra, Gaura Purnima, Rama Navami, Govardhan Puja, Diwali, Nrsimha Chaturdashi, Radhastami, Appearance/Disappearance days of major acharyas
 - `GET /api/festivals?from=&to=` endpoint: return festivals within date range
 - AI planner uses festival data: "Janmashtami is in 3 weeks — schedule a 5-post series leading up to it"
@@ -127,7 +135,7 @@ Enhance existing Suggestions page with media catalog integration and knowledge-b
 - Enhance suggestion cards with: suggested media thumbnail from media catalog (Feature 5 AI media suggestions)
 - Click suggestion → opens ContentEditor in `create` mode (in-place, no navigation) — verify this works or add it
 - "Plan Content Calendar" button linking to calendar planning flow (Feature 6)
-- Knowledge-based suggestions: ideas reference web knowledge entries (programs, events from crawled sites)
+- Knowledge-based suggestions: ideas reference web knowledge entries by topic (e.g., topic="Retreats & Visits" for retreat promotion, topic="Cow Protection" for cow content). Use the 12-topic taxonomy, not pillar, for knowledge queries.
 - No Magic MCP rebuild — enhance existing SuggestionsPage.tsx
 
 ## Success Criteria
