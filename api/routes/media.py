@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import get_current_user
 from api.dependencies import get_db, get_settings
-from api.models import ContentRow, MediaCatalog, MediaPerformance, MediaTag
+from api.models import ContentRow, MediaAdapted, MediaCatalog, MediaPerformance, MediaTag
 from api.schemas import (
     MediaBrowseResponse,
     MediaDeleteResponse,
@@ -590,3 +590,114 @@ async def delete_media(
     await session.commit()
 
     return MediaDeleteResponse(deleted=True, id=media_id)
+
+
+# ── Adaptation ───────────────────────────────────────────────────────────
+
+PLATFORM_DIMENSIONS: dict[str, dict[str, tuple[int, int]]] = {
+    "instagram": {
+        "post": (1080, 1080),
+        "story": (1080, 1920),
+    },
+    "facebook": {
+        "post": (1200, 630),
+        "story": (1080, 1920),
+    },
+    "tiktok": {
+        "story": (1080, 1920),
+    },
+    "linkedin": {
+        "post": (1200, 627),
+    },
+}
+
+
+class AdaptRequest(BaseModel):
+    platforms: list[str]
+    formats: list[str]
+
+
+def _smart_crop(image: Image.Image, target_w: int, target_h: int) -> Image.Image:
+    """Center-crop and resize to target dimensions."""
+    img_w, img_h = image.size
+    target_ratio = target_w / target_h
+    img_ratio = img_w / img_h
+
+    if img_ratio > target_ratio:
+        # Image is wider — crop sides
+        new_w = int(img_h * target_ratio)
+        left = (img_w - new_w) // 2
+        crop_box = (left, 0, left + new_w, img_h)
+    else:
+        # Image is taller — crop top/bottom
+        new_h = int(img_w / target_ratio)
+        top = (img_h - new_h) // 2
+        crop_box = (0, top, img_w, top + new_h)
+
+    cropped = image.crop(crop_box)
+    return cropped.resize((target_w, target_h), Image.LANCZOS)
+
+
+@router.post("/media/{media_id}/adapt")
+async def adapt_media(
+    media_id: int,
+    req: AdaptRequest,
+    session: AsyncSession = Depends(get_db),
+):
+    """Generate platform-specific image versions using smart crop."""
+    result = await session.execute(select(MediaCatalog).where(MediaCatalog.id == media_id))
+    media = result.scalar_one_or_none()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    src_path = Path(media.local_path)
+    if not src_path.exists():
+        raise HTTPException(status_code=400, detail="Source image file not found")
+
+    # Ensure adapted directory exists
+    adapted_dir = src_path.parent / "adapted"
+    adapted_dir.mkdir(parents=True, exist_ok=True)
+
+    with Image.open(src_path) as src_img:
+        adapted_results = []
+        for platform in req.platforms:
+            dims = PLATFORM_DIMENSIONS.get(platform, {})
+            for fmt in req.formats:
+                target = dims.get(fmt)
+                if not target:
+                    continue
+                target_w, target_h = target
+
+                # Smart crop + resize
+                adapted_img = _smart_crop(src_img, target_w, target_h)
+
+                # Save
+                out_name = f"{media_id}_{platform}_{fmt}.jpg"
+                out_path = adapted_dir / out_name
+                adapted_img.save(out_path, format="JPEG", quality=90)
+
+                # DB record
+                record = MediaAdapted(
+                    media_id=media_id,
+                    platform=platform,
+                    format=fmt,
+                    adapted_path=str(out_path),
+                    width=target_w,
+                    height=target_h,
+                )
+                session.add(record)
+                await session.flush()
+
+                adapted_results.append(
+                    {
+                        "id": record.id,
+                        "platform": platform,
+                        "format": fmt,
+                        "adapted_path": str(out_path),
+                        "width": target_w,
+                        "height": target_h,
+                    }
+                )
+
+    await session.commit()
+    return {"adapted": adapted_results}
