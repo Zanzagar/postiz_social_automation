@@ -262,6 +262,72 @@ class BatchGenerateResponse(BaseModel):
     drafts: list[ContentRowResponse]
 
 
+# --- Media Browse/Search ---
+
+
+class MediaTagResponse(BaseModel):
+    id: int
+    tag: str
+    confidence: float
+    source: str
+
+
+class MediaItemResponse(BaseModel):
+    id: int
+    filename: str
+    local_path: str
+    thumbnail_path: str | None = None
+    mime_type: str
+    width: int | None = None
+    height: int | None = None
+    file_size: int | None = None
+    pillar: str | None = None
+    source: str
+    usage_count: int = 0
+    avg_engagement: float = 0.0
+    created_at: datetime
+
+
+class MediaBrowseResponse(BaseModel):
+    items: list[MediaItemResponse]
+    total: int
+    page: int
+    per_page: int
+    total_pages: int
+
+
+class MediaUsageResponse(BaseModel):
+    content_row_id: int
+    date: datetime | None = None
+    status: str
+    pillar: str | None = None
+
+
+class MediaPerformanceResponse(BaseModel):
+    id: int
+    platform: str
+    engagement_score: float
+    content_row_id: int | None = None
+    fetched_at: datetime
+
+
+class MediaDetailResponse(BaseModel):
+    media: MediaItemResponse
+    tags: list[MediaTagResponse]
+    usage: list[MediaUsageResponse]
+    performance: list[MediaPerformanceResponse]
+
+
+class MediaTagUpdateRequest(BaseModel):
+    add: list[str] = []
+    remove: list[str] = []
+
+
+class MediaDeleteResponse(BaseModel):
+    deleted: bool
+    id: int
+
+
 # --- Iteration ---
 
 

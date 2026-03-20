@@ -2,20 +2,32 @@
 
 import json
 import logging
+import math
 import subprocess
 import uuid
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from PIL import Image
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import get_current_user
 from api.dependencies import get_db, get_settings
-from api.models import MediaCatalog, MediaTag
+from api.models import ContentRow, MediaCatalog, MediaPerformance, MediaTag
+from api.schemas import (
+    MediaBrowseResponse,
+    MediaDeleteResponse,
+    MediaDetailResponse,
+    MediaItemResponse,
+    MediaPerformanceResponse,
+    MediaTagResponse,
+    MediaTagUpdateRequest,
+    MediaUsageResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +226,8 @@ async def upload_media(
     if not file.content_type or file.content_type not in ALLOWED_TYPES:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported file type: {file.content_type}. Allowed: {', '.join(ALLOWED_TYPES)}",
+            detail=f"Unsupported file type: {file.content_type}. "
+            f"Allowed: {', '.join(ALLOWED_TYPES)}",
         )
 
     content = await file.read()
@@ -240,3 +253,238 @@ async def import_media_url(
         raise HTTPException(status_code=400, detail=f"Unsupported type from URL: {mime_type}")
 
     return await _process_and_catalog(content, filename, mime_type, "import_url", req.url, session)
+
+
+# ── Browse / Search ─────────────────────────────────────────────────────
+
+
+@router.get("/media", response_model=MediaBrowseResponse)
+async def browse_media(
+    tag: str | None = None,
+    pillar: str | None = None,
+    source: str | None = None,
+    sort: str = Query("date", pattern="^(date|engagement|usage_count)$"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    session: AsyncSession = Depends(get_db),
+):
+    """Browse and search the media catalog with pagination and filters."""
+    query = select(MediaCatalog)
+
+    if source:
+        query = query.where(MediaCatalog.source == source)
+    if pillar:
+        query = query.where(MediaCatalog.pillar == pillar)
+    if tag:
+        query = query.join(MediaTag, MediaTag.media_id == MediaCatalog.id).where(
+            MediaTag.tag == tag
+        )
+
+    # Count total before pagination
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await session.execute(count_query)).scalar() or 0
+
+    # Sort
+    if sort == "engagement":
+        query = query.order_by(MediaCatalog.avg_engagement.desc())
+    elif sort == "usage_count":
+        query = query.order_by(MediaCatalog.usage_count.desc())
+    else:
+        query = query.order_by(MediaCatalog.created_at.desc())
+
+    # Paginate
+    offset = (page - 1) * per_page
+    query = query.offset(offset).limit(per_page)
+    result = await session.execute(query)
+    items = result.scalars().all()
+
+    total_pages = max(1, math.ceil(total / per_page)) if total > 0 else 0
+
+    return MediaBrowseResponse(
+        items=[
+            MediaItemResponse(
+                id=m.id,
+                filename=m.filename,
+                local_path=m.local_path,
+                thumbnail_path=m.thumbnail_path,
+                mime_type=m.mime_type,
+                width=m.width,
+                height=m.height,
+                file_size=m.file_size,
+                pillar=m.pillar,
+                source=m.source,
+                usage_count=m.usage_count,
+                avg_engagement=m.avg_engagement,
+                created_at=m.created_at,
+            )
+            for m in items
+        ],
+        total=total,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+    )
+
+
+# ── Detail ───────────────────────────────────────────────────────────────
+
+
+@router.get("/media/{media_id}", response_model=MediaDetailResponse)
+async def get_media_detail(
+    media_id: int,
+    session: AsyncSession = Depends(get_db),
+):
+    """Get detailed media info including tags, usage history, and performance."""
+    result = await session.execute(select(MediaCatalog).where(MediaCatalog.id == media_id))
+    media = result.scalar_one_or_none()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    # Tags
+    tags_result = await session.execute(select(MediaTag).where(MediaTag.media_id == media_id))
+    tags = tags_result.scalars().all()
+
+    # Usage: content rows that reference this media ID
+    usage_result = await session.execute(select(ContentRow))
+    all_rows = usage_result.scalars().all()
+    usage = []
+    for row in all_rows:
+        if row.media_catalog_ids:
+            try:
+                ids = json.loads(row.media_catalog_ids)
+                if media_id in ids:
+                    usage.append(
+                        MediaUsageResponse(
+                            content_row_id=row.id,
+                            date=row.date,
+                            status=row.status,
+                            pillar=row.pillar,
+                        )
+                    )
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    # Performance
+    perf_result = await session.execute(
+        select(MediaPerformance).where(MediaPerformance.media_id == media_id)
+    )
+    performance = perf_result.scalars().all()
+
+    return MediaDetailResponse(
+        media=MediaItemResponse(
+            id=media.id,
+            filename=media.filename,
+            local_path=media.local_path,
+            thumbnail_path=media.thumbnail_path,
+            mime_type=media.mime_type,
+            width=media.width,
+            height=media.height,
+            file_size=media.file_size,
+            pillar=media.pillar,
+            source=media.source,
+            usage_count=media.usage_count,
+            avg_engagement=media.avg_engagement,
+            created_at=media.created_at,
+        ),
+        tags=[
+            MediaTagResponse(id=t.id, tag=t.tag, confidence=t.confidence, source=t.source)
+            for t in tags
+        ],
+        usage=usage,
+        performance=[
+            MediaPerformanceResponse(
+                id=p.id,
+                platform=p.platform,
+                engagement_score=p.engagement_score,
+                content_row_id=p.content_row_id,
+                fetched_at=p.fetched_at,
+            )
+            for p in performance
+        ],
+    )
+
+
+# ── Tag Management ───────────────────────────────────────────────────────
+
+
+@router.put("/media/{media_id}/tags")
+async def update_media_tags(
+    media_id: int,
+    req: MediaTagUpdateRequest,
+    session: AsyncSession = Depends(get_db),
+):
+    """Add and/or remove tags from a media item."""
+    result = await session.execute(select(MediaCatalog).where(MediaCatalog.id == media_id))
+    media = result.scalar_one_or_none()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    # Remove tags
+    if req.remove:
+        await session.execute(
+            sa_delete(MediaTag).where(MediaTag.media_id == media_id, MediaTag.tag.in_(req.remove))
+        )
+
+    # Add tags (skip duplicates)
+    if req.add:
+        existing_result = await session.execute(
+            select(MediaTag.tag).where(MediaTag.media_id == media_id)
+        )
+        existing_tags = {row[0] for row in existing_result}
+        for tag_name in req.add:
+            if tag_name not in existing_tags:
+                session.add(
+                    MediaTag(
+                        media_id=media_id,
+                        tag=tag_name,
+                        confidence=1.0,
+                        source="manual",
+                    )
+                )
+
+    await session.commit()
+
+    # Return updated tag list
+    tags_result = await session.execute(select(MediaTag).where(MediaTag.media_id == media_id))
+    tags = tags_result.scalars().all()
+
+    return {
+        "tags": [
+            MediaTagResponse(
+                id=t.id, tag=t.tag, confidence=t.confidence, source=t.source
+            ).model_dump()
+            for t in tags
+        ]
+    }
+
+
+# ── Delete ───────────────────────────────────────────────────────────────
+
+
+@router.delete("/media/{media_id}", response_model=MediaDeleteResponse)
+async def delete_media(
+    media_id: int,
+    session: AsyncSession = Depends(get_db),
+):
+    """Delete a media item, its tags, and clean up local files."""
+    result = await session.execute(select(MediaCatalog).where(MediaCatalog.id == media_id))
+    media = result.scalar_one_or_none()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    # Clean up files (ignore if already gone)
+    for path_str in (media.local_path, media.thumbnail_path):
+        if path_str:
+            p = Path(path_str)
+            if p.exists():
+                p.unlink()
+
+    # Remove related tags and performance records
+    await session.execute(sa_delete(MediaTag).where(MediaTag.media_id == media_id))
+    await session.execute(sa_delete(MediaPerformance).where(MediaPerformance.media_id == media_id))
+
+    # Remove the catalog entry
+    await session.delete(media)
+    await session.commit()
+
+    return MediaDeleteResponse(deleted=True, id=media_id)
