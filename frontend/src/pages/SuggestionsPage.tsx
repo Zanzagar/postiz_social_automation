@@ -1,15 +1,20 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type Suggestion, type ContentRow } from "@/lib/api";
+import { Link } from "react-router-dom";
+import { api, type Suggestion, type ContentRow, type MediaItem } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ContentEditor } from "@/components/content/ContentEditor";
-import { Lightbulb } from "lucide-react";
+import {
+  CalendarPlus,
+  FileImage,
+  Image as ImageIcon,
+  Lightbulb,
+} from "lucide-react";
 
 function suggestionToContentRow(s: Suggestion): ContentRow {
-  // row_number -1 signals this is a synthetic row (not yet persisted)
-  // ContentEditor in create mode should create a new row, not edit row -1
   return {
     row_number: -1,
     date: s.suggested_date,
@@ -26,6 +31,42 @@ function suggestionToContentRow(s: Suggestion): ContentRow {
     source: "suggestion",
     auto_publish_at: null,
   };
+}
+
+function SuggestionMediaThumbs({ pillar }: { pillar: string }) {
+  const { data } = useQuery({
+    queryKey: ["media", "browse", "pillar", pillar],
+    queryFn: () => api.getMedia({ pillar, per_page: 2, sort: "engagement" }),
+    staleTime: 60_000,
+  });
+
+  const items = data?.items ?? [];
+  if (items.length === 0) return null;
+
+  return (
+    <div className="flex gap-1.5 mt-2">
+      {items.map((m: MediaItem) => (
+        <div
+          key={m.id}
+          className="h-10 w-10 rounded overflow-hidden bg-muted flex-shrink-0"
+          title={m.filename}
+        >
+          {m.thumbnail_path ? (
+            <img
+              src={`/media/thumbnails/${m.thumbnail_path.split("/").pop()}`}
+              alt={m.filename}
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <FileImage className="h-4 w-4 text-muted-foreground/30" />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function SuggestionsPage() {
@@ -55,13 +96,27 @@ export function SuggestionsPage() {
         <p className="mt-1 text-muted-foreground">
           AI suggestions will appear here as content gaps are detected.
         </p>
+        <Button asChild variant="outline" className="mt-4 gap-2">
+          <Link to="/calendar">
+            <CalendarPlus className="h-4 w-4" />
+            Plan Content Calendar
+          </Link>
+        </Button>
       </div>
     );
   }
 
   return (
     <div className="space-y-4 p-6">
-      <h1 className="text-2xl font-bold text-sage-800">Content Suggestions</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-sage-800">Content Suggestions</h1>
+        <Button asChild variant="outline" size="sm" className="gap-2">
+          <Link to="/calendar">
+            <CalendarPlus className="h-4 w-4" />
+            Plan Calendar
+          </Link>
+        </Button>
+      </div>
 
       {suggestions.map((s) => (
         <Card
@@ -75,15 +130,22 @@ export function SuggestionsPage() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p className="text-muted-foreground">{s.rationale}</p>
-            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-              <span>Date: {s.suggested_date}</span>
-              <span>Media: {s.media_suggestion}</span>
+            <div className="flex items-center justify-between">
+              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                <span>Date: {s.suggested_date}</span>
+                {s.media_suggestion && (
+                  <span className="flex items-center gap-1">
+                    <ImageIcon className="h-3 w-3" />
+                    {s.media_suggestion}
+                  </span>
+                )}
+              </div>
+              <SuggestionMediaThumbs pillar={s.suggested_pillar} />
             </div>
           </CardContent>
         </Card>
       ))}
 
-      {/* ContentEditor in create mode */}
       <ContentEditor
         contentRow={selectedSuggestion}
         mode="create"
