@@ -18,7 +18,15 @@ vi.mock("@/lib/api", () => ({
 import { api } from "@/lib/api";
 const mockGetCalendar = vi.mocked(api.getCalendar);
 
-const sampleEntries = [
+const sampleEntries: Array<{
+  row_number: number;
+  date: string;
+  content_pillar: string;
+  raw_text: string;
+  status: string;
+  platforms: Record<string, boolean>;
+  captions: Record<string, string | null>;
+}> = [
   {
     row_number: 1,
     date: "2026-03-17",

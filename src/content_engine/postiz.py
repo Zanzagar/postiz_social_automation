@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlparse
 
 import requests
 
-from content_engine.models import ContentPillar, Platform, PostPerformance
+from content_engine.models import Platform, PostPerformance
 from content_engine.validator import validate_external_url
 
 logger = logging.getLogger(__name__)
@@ -217,7 +217,7 @@ class PostizClient:
     def get_post_analytics(
         self,
         post_id: str,
-        pillar: ContentPillar,
+        pillar: str,
     ) -> PostPerformance:
         """Get engagement metrics for a published post."""
         data = self._request("GET", f"/posts/{post_id}")

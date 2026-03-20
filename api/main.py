@@ -11,10 +11,12 @@ from api.routes.content import router as content_router
 from api.routes.generate import router as generate_router
 from api.routes.health import router as health_router
 from api.routes.iterate import router as iterate_router
+from api.routes.pillars import router as pillars_router
 from api.routes.postiz import router as postiz_router
 from api.routes.settings import router as settings_router
 from api.routes.templates import router as templates_router
-from api.routes.pillars import router as pillars_router
+from api.routes.analytics import router as analytics_router
+from api.routes.knowledge import router as knowledge_router
 from api.routes.upload import router as upload_router
 
 
@@ -57,7 +59,9 @@ app.include_router(templates_router)
 app.include_router(settings_router)
 app.include_router(pillars_router)
 app.include_router(postiz_router)
+app.include_router(analytics_router)
 app.include_router(health_router)
+app.include_router(knowledge_router)
 app.include_router(upload_router)
 
 

@@ -15,7 +15,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from content_engine.models import (
-    ContentPillar,
     ContentRow,
     ContentStatus,
     Platform,
@@ -40,7 +39,7 @@ class TestLearnPipeline:
             status=ContentStatus.POSTED,
             captions={Platform.INSTAGRAM: "IG caption"},
             postiz_ids=postiz_ids,
-            content_pillar=ContentPillar.COW_LIFE,
+            content_pillar="Cow Life",
         )
 
     def test_pulls_analytics_for_posted_rows(self, tmp_path: Path) -> None:
@@ -52,7 +51,7 @@ class TestLearnPipeline:
         perf = PostPerformance(
             post_id="post_1",
             platform=Platform.INSTAGRAM,
-            pillar=ContentPillar.COW_LIFE,
+            pillar="Cow Life",
             posted_at=datetime(2026, 2, 20),
             likes=50,
             comments=10,
@@ -66,7 +65,7 @@ class TestLearnPipeline:
             data_dir=tmp_path,
         )
 
-        postiz.get_post_analytics.assert_called_once_with("post_1", ContentPillar.COW_LIFE)
+        postiz.get_post_analytics.assert_called_once_with("post_1", "Cow Life")
         assert result.processed == 1
 
     def test_skips_already_known_post_ids(self, tmp_path: Path) -> None:
@@ -110,7 +109,7 @@ class TestLearnPipeline:
         perf = PostPerformance(
             post_id="post_1",
             platform=Platform.INSTAGRAM,
-            pillar=ContentPillar.COW_LIFE,
+            pillar="Cow Life",
             posted_at=datetime(2026, 2, 20),
         )
         postiz.get_post_analytics.return_value = perf
@@ -134,7 +133,7 @@ class TestLearnPipeline:
         perf = PostPerformance(
             post_id="post_1",
             platform=Platform.INSTAGRAM,
-            pillar=ContentPillar.COW_LIFE,
+            pillar="Cow Life",
             posted_at=datetime(2026, 2, 20),
             likes=50,
             comments=10,
@@ -177,7 +176,7 @@ class TestLearnPipeline:
         perf = PostPerformance(
             post_id="post_2",
             platform=Platform.INSTAGRAM,
-            pillar=ContentPillar.COW_LIFE,
+            pillar="Cow Life",
             posted_at=datetime(2026, 2, 20),
         )
         postiz.get_post_analytics.side_effect = [

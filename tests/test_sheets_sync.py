@@ -18,8 +18,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.models import Base
 from api.repositories.content import ContentRepository
-from content_engine.models import ContentPillar, ContentStatus, Platform
 from content_engine.models import ContentRow as SheetContentRow
+from content_engine.models import ContentStatus, Platform
 
 
 @pytest_asyncio.fixture
@@ -46,7 +46,7 @@ def _make_sheet_row(
     raw_text: str = "Test content",
     status: ContentStatus = ContentStatus.READY,
     date: datetime | None = None,
-    pillar: ContentPillar | None = ContentPillar.SPIRITUAL,
+    pillar: str | None = "Spiritual",
     platforms: dict | None = None,
     captions: dict | None = None,
 ) -> SheetContentRow:

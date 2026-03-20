@@ -72,29 +72,29 @@ Enable "Add to Home Screen" and offline capabilities.
 - No push notifications (using email digest instead)
 - Test on mobile browsers: Chrome Android, Safari iOS
 
-### 5. Login Page Rebuild (Magic MCP)
-Rebuild Login page if not already done in Phase 4 (when multi-user auth was added).
+### 5. Login Page Polish (if needed)
+Verify Login page works well after Phase 4 multi-user changes.
+
+**NOTE:** LoginPage.tsx was built with Magic MCP in Phase 1 and modified in Phase 4 for multi-user. This feature is a verification/polish pass, not a rebuild.
 
 **Requirements:**
-- If Phase 4 already rebuilt Login during multi-user implementation, skip this
-- Otherwise: rebuild through frontend-design → component_inspiration → component_builder → component_refiner
-- Clean, welcoming design with Gita Valley branding
-- Username and password fields (matching Phase 4 multi-user auth)
-- Error states for invalid credentials
-- Remember me option (extend JWT expiry)
+- Verify username + password form works correctly after Phase 4 changes
+- Clean, welcoming design with Gita Valley branding (should already exist from Phase 1)
+- Error states for invalid credentials (should already exist)
+- Remember me option (extend JWT expiry) — add if not done in Phase 4
 - Responsive: works on mobile (PWA first-screen)
 
-### 6. Health Page Rebuild (Magic MCP)
-Rebuild Health page through Magic MCP pipeline.
+### 6. Health Page — Add New Service Checks
+Extend existing Health page with checks for Phase 2-4 services.
+
+**NOTE:** HealthPage.tsx was built in Phase 1 with service status cards, auto-refresh, and manual refresh button. No full rebuild needed.
 
 **Requirements:**
-- Rebuild through frontend-design → component_inspiration → component_builder → component_refiner
-- Show service status for: SQLite database, Postiz API, Google Sheets adapter, Claude CLI, WordPress MCP, Meta Graph API, SMTP server
-- Each service: name, status (healthy/degraded/down), last checked, response time
-- Auto-refresh every 60 seconds
-- Manual refresh button
-- Health history: simple sparkline or status dots showing last 24 hours (stored in memory, not database)
-- Alert banner if any critical service is down
+- Add service checks for: WordPress MCP (Phase 2), Meta Graph API (Phase 2), SMTP server (Phase 5 email digest)
+- Existing checks already cover: SQLite database, Postiz API, Google Sheets adapter, Claude CLI
+- Each service: name, status (healthy/degraded/down), last checked, response time (existing pattern)
+- Health history: simple sparkline or status dots showing last 24 hours (stored in memory, not database) — new enhancement
+- Alert banner if any critical service is down — new enhancement
 
 ## SQLite Schema (Phase 5 additions)
 - `notification_prefs`: id, user_id, email, digest_frequency, enabled_types (JSON), updated_at

@@ -9,6 +9,7 @@ import {
   FileText,
   Settings,
   Activity,
+  BookOpen,
   LogOut,
   ExternalLink,
 } from "lucide-react";
@@ -21,6 +22,7 @@ const navItems = [
   { to: "/calendar", label: "Calendar", icon: CalendarDays },
   { to: "/suggestions", label: "Suggestions", icon: Lightbulb },
   { to: "/templates", label: "Templates", icon: FileText },
+  { to: "/knowledge", label: "Knowledge", icon: BookOpen },
   { to: "/settings", label: "Settings", icon: Settings },
   { to: "/health", label: "Health", icon: Activity },
 ];

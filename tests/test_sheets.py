@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from content_engine.models import ContentPillar, ContentRow, ContentStatus, Platform, Suggestion
+from content_engine.models import ContentRow, ContentStatus, Platform, Suggestion
 from content_engine.sheets import SheetsClient
 
 # Column layout: A=date, B=pillar, C=raw_text, D=media_url,
@@ -171,7 +171,7 @@ class TestSuggestions:
         suggestion = Suggestion(
             suggested_date=datetime(2026, 3, 15),
             content_idea="Spring planting photo series",
-            suggested_pillar=ContentPillar.FARM_OPS,
+            suggested_pillar="Farm Ops",
             rationale="Spring content performs well",
             media_suggestion="Photos of seedlings",
         )

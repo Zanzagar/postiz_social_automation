@@ -13,7 +13,7 @@ export function AutoPublishCountdown({
 }: AutoPublishCountdownProps) {
   const [timeLeft, setTimeLeft] = useState("");
   const [isExpired, setIsExpired] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+  const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   useEffect(() => {
     if (!publishAt) return;

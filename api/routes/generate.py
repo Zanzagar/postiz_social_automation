@@ -29,12 +29,7 @@ def _build_content_row(req: GenerateRequest | RepromptRequest) -> ContentRow:
 
     pillar = None
     if hasattr(req, "content_pillar") and req.content_pillar:
-        try:
-            from content_engine.models import ContentPillar
-
-            pillar = ContentPillar(req.content_pillar)
-        except ValueError:
-            pillar = None
+        pillar = req.content_pillar
 
     return ContentRow(
         row_number=0,

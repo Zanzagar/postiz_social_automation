@@ -4,7 +4,11 @@
 Add web presence intelligence, analytics, and hashtag tracking to the Gita Valley social media automation system. This phase makes the AI smarter by crawling websites and social history, pulling engagement data from Postiz, and tracking hashtag performance — all feeding back into content generation prompts.
 
 ## Background
-Phase 1 established SQLite as the source of truth and added content iteration, templates, and auto-publish. The AI generates captions using brand rules and platform instructions, but has no awareness of the temple's web presence, historical social performance, or hashtag effectiveness. This phase closes that gap.
+Phase 1 established SQLite as the source of truth and added content iteration, templates, auto-publish, dynamic content pillars (CRUD API with `pillars` table), and a React SPA frontend with 9 pages. The AI generates captions using brand rules and platform instructions, but has no awareness of the temple's web presence, historical social performance, or hashtag effectiveness. This phase closes that gap.
+
+## Phase 1 Cleanup (required before new features)
+- **Remove `ContentPillar` enum** from `src/content_engine/models.py` — Phase 1 made pillars dynamic (freeform strings in `pillars` table with CRUD API). The hardcoded enum (`COW_LIFE`, `FARM_OPS`, etc.) is dead code that will break AI classification if used. All pillar references must use the dynamic pillar list from `GET /api/pillars`.
+- **Fix `auto_publish_at` mismatch** — `ContentRowResponse` schema has an `auto_publish_at` field but no corresponding column exists in the `content_rows` database table. Either add the column via Alembic migration (if auto-publish scheduling is needed) or remove the field from the schema.
 
 ## Prerequisites
 - Phase 1 complete: SQLite database, content_rows table, FastAPI endpoints reading/writing SQLite
@@ -19,7 +23,7 @@ Crawl gitavalley.com via WordPress MCP to build a knowledge base of programs, ev
 **Requirements:**
 - Use WordPress MCP to pull all published pages and posts from gitavalley.com
 - Extract: title, body text, categories, featured images, URLs
-- AI-classify each page into a content pillar (Cow Life, Farm Ops, Community, Kitchen, Spiritual, CTA)
+- AI-classify each page into a content pillar (from dynamic `pillars` table via `GET /api/pillars`, NOT the hardcoded enum)
 - Extract structured knowledge: programs offered, events, quotes, useful links, descriptions
 - Store in `web_pages` table (url, site="gitavalley", title, body_text, pillar, content_hash, last_crawled)
 - Store extracted facts in `web_knowledge` table (web_page_id, fact_type, content, pillar, keywords)
@@ -31,7 +35,7 @@ Crawl iskcongitanagari.org via BeautifulSoup to capture spiritual and ISKCON com
 
 **Requirements:**
 - HTTP requests + BeautifulSoup to crawl all accessible pages
-- Same extraction and classification pipeline as gitavalley.com
+- Same extraction and classification pipeline as gitavalley.com (using dynamic pillar list)
 - Store in same `web_pages` and `web_knowledge` tables with site="iskcon"
 - Respect robots.txt and rate-limit requests (1 request/second)
 - Periodic re-crawl: weekly via scheduler
@@ -42,7 +46,7 @@ Import historical Facebook and Instagram posts with engagement data.
 **Requirements:**
 - Use Meta Graph API to pull all posts from Facebook page (facebook.com/gitavalley) and Instagram account (instagram.com/gita.valley)
 - Extract per post: text, media URLs, hashtags, posted_at, likes, comments, shares, reach
-- AI-classify each post into a content pillar
+- AI-classify each post into a content pillar (from dynamic `pillars` table)
 - Store in `social_history` table: platform, external_id, post_text, media_urls (JSON), hashtags (JSON), posted_at, engagement metrics, pillar, imported_at
 - UNIQUE constraint on (platform, external_id) to prevent duplicate imports
 - One-time historical import + daily sync for new posts via scheduler
@@ -64,7 +68,8 @@ Robust error handling for all three intelligence sources.
 Inject relevant knowledge into Claude CLI prompts during caption generation.
 
 **Requirements:**
-- When generating captions (existing generate endpoint and new iterate endpoint), query web_knowledge for entries matching the content's pillar
+- When generating captions, query web_knowledge for entries matching the content's `pillar` field (string column on content_rows)
+- Injection point: extend the `CaptionGenerator` class (or a wrapper) to query knowledge before building the Claude prompt. The existing `_build_content_row()` in `generate.py` builds the engine model; knowledge context should be injected into the generator's prompt construction, not at the API route level.
 - Inject relevant facts, quotes, and cross-promotion links into the Claude prompt
 - Include relevant social history examples: "Here are past Instagram posts about this topic that performed well: ..."
 - Knowledge injection is additive — it extends the existing brand rules and platform instructions, not replaces them

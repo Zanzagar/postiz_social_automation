@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from content_engine.models import ContentPillar
 from content_engine.postiz import (
     MAX_IMAGE_SIZE,
     MAX_VIDEO_SIZE,
@@ -145,7 +144,7 @@ class TestGetPostAnalytics:
 
         perf = client.get_post_analytics(
             post_id="post_123",
-            pillar=ContentPillar.COW_LIFE,
+            pillar="Cow Life",
         )
 
         assert perf.post_id == "post_123"

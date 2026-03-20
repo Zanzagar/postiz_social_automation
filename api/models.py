@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -41,6 +41,7 @@ class ContentRow(Base):
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     media_catalog_ids: Mapped[str | None] = mapped_column(Text, nullable=True)  # Phase 3
     audience_segment_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Phase 4
+    auto_publish_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     sheet_row_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sheet_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
@@ -103,6 +104,97 @@ class Pillar(Base):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
+
+
+# --- Phase 2: Intelligence Layer ---
+
+
+class WebPage(Base):
+    __tablename__ = "web_pages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    site: Mapped[str] = mapped_column(String(50), nullable=False)  # "gitavalley", "iskcon"
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    body_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pillar: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_crawled: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class WebKnowledge(Base):
+    __tablename__ = "web_knowledge"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    web_page_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("web_pages.id"), nullable=True
+    )
+    fact_type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # "program", "event", "quote", "link", "description"
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    topic: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    pillar: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    keywords: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class SocialHistory(Base):
+    __tablename__ = "social_history"
+    __table_args__ = (UniqueConstraint("platform", "external_id", name="uq_social_platform_extid"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    platform: Mapped[str] = mapped_column(String(50), nullable=False)  # "facebook", "instagram"
+    external_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    post_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    media_urls: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    hashtags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    likes: Mapped[int] = mapped_column(Integer, default=0)
+    comments: Mapped[int] = mapped_column(Integer, default=0)
+    shares: Mapped[int] = mapped_column(Integer, default=0)
+    reach: Mapped[int] = mapped_column(Integer, default=0)
+    pillar: Mapped[str | None] = mapped_column(String(50), nullable=True)  # AI-classified
+    imported_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class AnalyticsCache(Base):
+    __tablename__ = "analytics_cache"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    content_row_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("content_rows.id"), nullable=True
+    )
+    platform: Mapped[str] = mapped_column(String(50), nullable=False)
+    postiz_post_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    likes: Mapped[int] = mapped_column(Integer, default=0)
+    shares: Mapped[int] = mapped_column(Integer, default=0)
+    comments: Mapped[int] = mapped_column(Integer, default=0)
+    reach: Mapped[int] = mapped_column(Integer, default=0)
+    impressions: Mapped[int] = mapped_column(Integer, default=0)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class HashtagPerformance(Base):
+    __tablename__ = "hashtag_performance"
+    __table_args__ = (UniqueConstraint("hashtag", "platform", name="uq_hashtag_platform"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hashtag: Mapped[str] = mapped_column(String(255), nullable=False)
+    platform: Mapped[str] = mapped_column(String(50), nullable=False)
+    times_used: Mapped[int] = mapped_column(Integer, default=0)
+    total_engagement: Mapped[int] = mapped_column(Integer, default=0)
+    avg_engagement: Mapped[float] = mapped_column(Float, default=0.0)
+    trend: Mapped[str] = mapped_column(String(20), default="stable")  # "up", "down", "stable"
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+# --- Phase 1: Core ---
 
 
 class PublishConfig(Base):

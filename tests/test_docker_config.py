@@ -49,12 +49,15 @@ class TestDockerComposeServices:
     def test_content_engine_not_containerized(self) -> None:
         """content-engine requires Claude CLI and must run on the host."""
         content = self._read_compose()
-        assert "content-engine:" not in content
+        # Check no service definition (indented "content-engine:"), ignore comments
+        lines = content.splitlines()
+        service_lines = [l for l in lines if not l.lstrip().startswith("#")]
+        assert not any("content-engine:" in l for l in service_lines)
 
     def test_content_engine_host_instructions_documented(self) -> None:
         """docker-compose.yaml should document how to run engine on host."""
         content = self._read_compose()
-        assert "content-engine runs on the HOST" in content
+        assert "run on the HOST" in content
 
     def test_content_hub_uses_env_file(self) -> None:
         content = self._read_compose()

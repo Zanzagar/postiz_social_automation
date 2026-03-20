@@ -1,6 +1,5 @@
 """Testable helpers for the Suggestions page."""
 
-
 from content_engine.models import Suggestion
 
 
@@ -20,7 +19,7 @@ def filter_suggestions(
     result = suggestions
 
     if pillar_filter and pillar_filter != "All":
-        result = [s for s in result if s.suggested_pillar.value == pillar_filter]
+        result = [s for s in result if s.suggested_pillar == pillar_filter]
 
     if status_filter:
         result = [s for s in result if s.status == status_filter]

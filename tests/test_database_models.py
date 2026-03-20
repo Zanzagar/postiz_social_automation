@@ -38,6 +38,12 @@ class TestTableCreation:
             "templates",
             "publish_config",
             "pillars",
+            # Phase 2
+            "web_pages",
+            "web_knowledge",
+            "social_history",
+            "analytics_cache",
+            "hashtag_performance",
         }
         assert expected == tables
 
@@ -66,6 +72,7 @@ class TestTableCreation:
             "created_by",
             "media_catalog_ids",
             "audience_segment_id",
+            "auto_publish_at",
             "sheet_row_number",
             "sheet_synced_at",
             "created_at",

@@ -4,12 +4,12 @@ import json
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
-from content_engine.models import ContentPillar, ContentRow, ContentStatus, Platform
+from content_engine.models import ContentRow, ContentStatus, Platform
 
 
 def _make_posted_row(
     row_number: int,
-    pillar: ContentPillar,
+    pillar: str,
     date: datetime,
 ) -> ContentRow:
     """Helper for a posted ContentRow."""
@@ -36,12 +36,12 @@ class TestTargetWeights:
     def test_cow_life_is_largest(self):
         from content_engine.intelligence import TARGET_PILLAR_WEIGHTS
 
-        assert TARGET_PILLAR_WEIGHTS[ContentPillar.COW_LIFE] == 0.40
+        assert TARGET_PILLAR_WEIGHTS["Cow Life"] == 0.40
 
     def test_all_pillars_present(self):
         from content_engine.intelligence import TARGET_PILLAR_WEIGHTS
 
-        for pillar in ContentPillar:
+        for pillar in ["Cow Life", "Farm Ops", "Community", "Kitchen", "Spiritual", "CTA"]:
             assert pillar in TARGET_PILLAR_WEIGHTS
 
 
@@ -58,8 +58,8 @@ class TestCalendarGapAnalysis:
 
         # Content on day 1 and 3, gap on day 2
         sheets.get_all_content_rows.return_value = [
-            _make_posted_row(2, ContentPillar.COW_LIFE, today + timedelta(days=1)),
-            _make_posted_row(3, ContentPillar.FARM_OPS, today + timedelta(days=3)),
+            _make_posted_row(2, "Cow Life", today + timedelta(days=1)),
+            _make_posted_row(3, "Farm Ops", today + timedelta(days=3)),
         ]
 
         intel = ContentIntelligence(sheets=sheets, postiz=postiz, data_dir=tmp_path)
@@ -79,7 +79,7 @@ class TestCalendarGapAnalysis:
 
         # Content every day for 3 days
         sheets.get_all_content_rows.return_value = [
-            _make_posted_row(i, ContentPillar.COW_LIFE, today + timedelta(days=i)) for i in range(3)
+            _make_posted_row(i, "Cow Life", today + timedelta(days=i)) for i in range(3)
         ]
 
         intel = ContentIntelligence(sheets=sheets, postiz=postiz, data_dir=tmp_path)
@@ -110,20 +110,11 @@ class TestPillarBalance:
         today = datetime.now()
         # 10 posts: 4 cow, 2 farm, 2 community, 1 kitchen, 1 spiritual
         rows = (
-            [
-                _make_posted_row(i, ContentPillar.COW_LIFE, today - timedelta(days=i))
-                for i in range(4)
-            ]
-            + [
-                _make_posted_row(10 + i, ContentPillar.FARM_OPS, today - timedelta(days=i))
-                for i in range(2)
-            ]
-            + [
-                _make_posted_row(20 + i, ContentPillar.COMMUNITY, today - timedelta(days=i))
-                for i in range(2)
-            ]
-            + [_make_posted_row(30, ContentPillar.KITCHEN, today)]
-            + [_make_posted_row(31, ContentPillar.SPIRITUAL, today)]
+            [_make_posted_row(i, "Cow Life", today - timedelta(days=i)) for i in range(4)]
+            + [_make_posted_row(10 + i, "Farm Ops", today - timedelta(days=i)) for i in range(2)]
+            + [_make_posted_row(20 + i, "Community", today - timedelta(days=i)) for i in range(2)]
+            + [_make_posted_row(30, "Kitchen", today)]
+            + [_make_posted_row(31, "Spiritual", today)]
         )
 
         sheets.get_all_content_rows.return_value = rows
@@ -132,8 +123,8 @@ class TestPillarBalance:
         balance = intel.analyze_pillar_balance(days_back=30)
 
         # Should return actual distribution
-        assert ContentPillar.COW_LIFE in balance
-        assert balance[ContentPillar.COW_LIFE]["actual"] == 0.4  # 4/10
+        assert "Cow Life" in balance
+        assert balance["Cow Life"]["actual"] == 0.4  # 4/10
 
     def test_empty_calendar_returns_zeros(self, tmp_path):
         from content_engine.intelligence import ContentIntelligence
@@ -145,7 +136,7 @@ class TestPillarBalance:
         intel = ContentIntelligence(sheets=sheets, postiz=postiz, data_dir=tmp_path)
         balance = intel.analyze_pillar_balance(days_back=30)
 
-        for pillar in ContentPillar:
+        for pillar in ["Cow Life", "Farm Ops", "Community", "Kitchen", "Spiritual", "CTA"]:
             assert balance[pillar]["actual"] == 0.0
 
 
