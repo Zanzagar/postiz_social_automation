@@ -20,7 +20,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ContentEditor } from "@/components/content/ContentEditor";
-import { CalendarDays, ChevronLeft, ChevronRight, Star } from "lucide-react";
+import { CalendarPlanDialog } from "@/components/calendar/CalendarPlanDialog";
+import { CalendarDays, CalendarPlus, ChevronLeft, ChevronRight, Star } from "lucide-react";
 import {
   format,
   parseISO,
@@ -106,6 +107,7 @@ export function CalendarPage() {
   const [selectedContent, setSelectedContent] = useState<ContentRow | null>(
     null,
   );
+  const [planDialogOpen, setPlanDialogOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["calendar"],
@@ -177,16 +179,27 @@ export function CalendarPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-sage-800">Content Calendar</h1>
 
-        <Tabs
-          value={view}
-          onValueChange={(v) => setView(v as CalendarView)}
-        >
-          <TabsList>
-            <TabsTrigger value="monthly">Monthly</TabsTrigger>
-            <TabsTrigger value="weekly">Weekly</TabsTrigger>
-            <TabsTrigger value="list">List</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setPlanDialogOpen(true)}
+          >
+            <CalendarPlus className="h-4 w-4" />
+            AI Plan
+          </Button>
+          <Tabs
+            value={view}
+            onValueChange={(v) => setView(v as CalendarView)}
+          >
+            <TabsList>
+              <TabsTrigger value="monthly">Monthly</TabsTrigger>
+              <TabsTrigger value="weekly">Weekly</TabsTrigger>
+              <TabsTrigger value="list">List</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </div>
 
       {/* Navigation for monthly/weekly */}
@@ -279,6 +292,24 @@ export function CalendarPage() {
           queryClient.invalidateQueries({ queryKey: ["calendar"] });
           setSelectedContent(null);
         }}
+      />
+
+      {/* Calendar Plan Dialog */}
+      <CalendarPlanDialog
+        open={planDialogOpen}
+        onOpenChange={setPlanDialogOpen}
+        defaultStart={format(
+          view === "monthly"
+            ? startOfMonth(currentDate)
+            : startOfWeek(currentDate),
+          "yyyy-MM-dd",
+        )}
+        defaultEnd={format(
+          view === "monthly"
+            ? endOfMonth(currentDate)
+            : endOfWeek(currentDate),
+          "yyyy-MM-dd",
+        )}
       />
     </div>
   );

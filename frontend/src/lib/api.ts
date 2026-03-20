@@ -407,6 +407,26 @@ export interface MediaBrowseParams {
   per_page?: number;
 }
 
+export interface CalendarPlanSlot {
+  date: string;
+  time: string | null;
+  pillar: string | null;
+  topic: string | null;
+  content_idea: string;
+  recommended_media_id: number | null;
+  target_platforms: string[];
+}
+
+export interface CalendarPlanResponse {
+  id: number;
+  date_range_start: string;
+  date_range_end: string;
+  platforms: string[];
+  slots: CalendarPlanSlot[];
+  status: string;
+  created_at: string;
+}
+
 export interface Festival {
   name: string;
   date: string;
@@ -695,6 +715,38 @@ export const api = {
     return request<{ deleted: boolean; id: number }>(`/api/media/${id}`, {
       method: "DELETE",
     });
+  },
+
+  // Calendar Plans
+  createCalendarPlan(data: {
+    date_range_start: string;
+    date_range_end: string;
+    platforms: string[];
+    constraints?: string;
+  }) {
+    return request<CalendarPlanResponse>("/api/calendar/plan", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  getCalendarPlan(id: number) {
+    return request<CalendarPlanResponse>(`/api/calendar/plan/${id}`);
+  },
+
+  getCalendarPlans(status?: string) {
+    const params = status ? `?status=${status}` : "";
+    return request<{ plans: CalendarPlanResponse[] }>(`/api/calendar/plans${params}`);
+  },
+
+  approveCalendarPlan(id: number, slotIndices?: number[]) {
+    return request<{ created_count: number; content_row_ids: number[] }>(
+      `/api/calendar/plan/${id}/approve`,
+      {
+        method: "POST",
+        body: JSON.stringify({ slot_indices: slotIndices ?? null }),
+      },
+    );
   },
 
   getFestivals(from?: string, to?: string) {
