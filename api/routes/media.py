@@ -326,6 +326,108 @@ async def browse_media(
     )
 
 
+# ── Suggest ──────────────────────────────────────────────────────────────
+
+# Stop words for keyword extraction
+_STOP_WORDS = frozenset(
+    "a an the and or but in on at to for of is it that this with from by as are "
+    "was were be been being have has had do does did will would shall should may "
+    "might can could about up out if not no so very just than them their our your "
+    "we they he she its his her my me us".split()
+)
+
+
+def _extract_keywords(text: str) -> set[str]:
+    """Extract meaningful keywords from text for media matching."""
+    words = set()
+    for word in text.lower().split():
+        # Strip punctuation
+        cleaned = "".join(c for c in word if c.isalnum())
+        if cleaned and len(cleaned) > 2 and cleaned not in _STOP_WORDS:
+            words.add(cleaned)
+    return words
+
+
+@router.get("/media/suggest")
+async def suggest_media(
+    content_row_id: int = Query(...),
+    session: AsyncSession = Depends(get_db),
+):
+    """Recommend media from catalog based on content row context."""
+    # Fetch the content row
+    row_result = await session.execute(select(ContentRow).where(ContentRow.id == content_row_id))
+    row = row_result.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Content row not found")
+
+    # Extract keywords from raw text
+    keywords = _extract_keywords(row.raw_text or "")
+
+    # Fetch all media with their tags
+    media_result = await session.execute(select(MediaCatalog))
+    all_media = media_result.scalars().all()
+
+    if not all_media:
+        return {"suggestions": []}
+
+    # Fetch all tags grouped by media_id
+    tags_result = await session.execute(select(MediaTag))
+    all_tags = tags_result.scalars().all()
+    tags_by_media: dict[int, list[str]] = {}
+    for t in all_tags:
+        tags_by_media.setdefault(t.media_id, []).append(t.tag)
+
+    # Score each media item
+    scored = []
+    for media in all_media:
+        score = 0.0
+        reasons: list[str] = []
+
+        # Pillar match (+2)
+        if row.pillar and media.pillar and media.pillar == row.pillar:
+            score += 2.0
+            reasons.append("pillar match")
+
+        # Topic match (+3)
+        if media.topic and row.raw_text and media.topic.lower() in row.raw_text.lower():
+            score += 3.0
+            reasons.append("topic match")
+
+        # Tag matching (+1 per match)
+        media_tags = set(tags_by_media.get(media.id, []))
+        matching_tags = keywords & media_tags
+        score += len(matching_tags)
+        for tag in sorted(matching_tags):
+            reasons.append(f"tag: {tag}")
+
+        # Engagement score (0-2 range)
+        engagement_bonus = min(media.avg_engagement * 2.0, 2.0)
+        score += engagement_bonus
+        if engagement_bonus > 0.5:
+            reasons.append("high engagement")
+
+        # Freshness: prefer less-used media
+        if media.usage_count == 0:
+            score += 1.0
+            reasons.append("unused")
+        elif media.usage_count > 5:
+            score -= 0.5
+
+        scored.append(
+            {
+                "media_id": media.id,
+                "thumbnail_path": media.thumbnail_path,
+                "filename": media.filename,
+                "relevance_score": round(score, 2),
+                "match_reasons": reasons,
+            }
+        )
+
+    # Sort by score descending, return top 5
+    scored.sort(key=lambda x: x["relevance_score"], reverse=True)
+    return {"suggestions": scored[:5]}
+
+
 # ── Detail ───────────────────────────────────────────────────────────────
 
 
