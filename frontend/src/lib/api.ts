@@ -343,6 +343,70 @@ export interface GraphData {
   links: Array<{ source: string; target: string }>;
 }
 
+// --- Media Types ---
+
+export interface MediaItem {
+  id: number;
+  filename: string;
+  local_path: string;
+  thumbnail_path: string | null;
+  mime_type: string;
+  width: number | null;
+  height: number | null;
+  file_size: number | null;
+  pillar: string | null;
+  source: string;
+  usage_count: number;
+  avg_engagement: number;
+  created_at: string;
+}
+
+export interface MediaBrowseResponse {
+  items: MediaItem[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export interface MediaTag {
+  id: number;
+  tag: string;
+  confidence: number;
+  source: string;
+}
+
+export interface MediaUsage {
+  content_row_id: number;
+  date: string | null;
+  status: string;
+  pillar: string | null;
+}
+
+export interface MediaPerformance {
+  id: number;
+  platform: string;
+  engagement_score: number;
+  content_row_id: number | null;
+  fetched_at: string;
+}
+
+export interface MediaDetailResponse {
+  media: MediaItem;
+  tags: MediaTag[];
+  usage: MediaUsage[];
+  performance: MediaPerformance[];
+}
+
+export interface MediaBrowseParams {
+  tag?: string;
+  pillar?: string;
+  source?: string;
+  sort?: string;
+  page?: number;
+  per_page?: number;
+}
+
 // --- API Functions ---
 
 export const api = {
@@ -585,6 +649,35 @@ export const api = {
     return request<{ results: Array<{ id: number; fact_type: string; content: string; pillar: string; page_title: string; page_url: string; site: string }>; count: number }>(
       `/api/knowledge/search?${params}`,
     );
+  },
+
+  // Media
+  getMedia(params: MediaBrowseParams = {}) {
+    const searchParams = new URLSearchParams();
+    if (params.tag) searchParams.set("tag", params.tag);
+    if (params.pillar) searchParams.set("pillar", params.pillar);
+    if (params.source) searchParams.set("source", params.source);
+    if (params.sort) searchParams.set("sort", params.sort);
+    if (params.page) searchParams.set("page", String(params.page));
+    if (params.per_page) searchParams.set("per_page", String(params.per_page));
+    return request<MediaBrowseResponse>(`/api/media?${searchParams}`);
+  },
+
+  getMediaDetail(id: number) {
+    return request<MediaDetailResponse>(`/api/media/${id}`);
+  },
+
+  updateMediaTags(id: number, add: string[], remove: string[]) {
+    return request<{ tags: MediaTag[] }>(`/api/media/${id}/tags`, {
+      method: "PUT",
+      body: JSON.stringify({ add, remove }),
+    });
+  },
+
+  deleteMedia(id: number) {
+    return request<{ deleted: boolean; id: number }>(`/api/media/${id}`, {
+      method: "DELETE",
+    });
   },
 };
 
