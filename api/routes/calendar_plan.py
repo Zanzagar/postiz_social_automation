@@ -6,12 +6,13 @@ import subprocess
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import get_current_user
 from api.dependencies import get_db
-from api.models import CalendarPlan, MediaCatalog, Pillar, WebKnowledge
+from api.models import CalendarPlan, ContentRow, MediaCatalog, Pillar, WebKnowledge
 from api.routes.festivals import _load_festivals
 from api.schemas import CalendarPlanCreate, CalendarPlanResponse, CalendarPlanSlot
 
@@ -229,3 +230,161 @@ async def create_calendar_plan(
         status=plan.status,
         created_at=plan.created_at.isoformat(),
     )
+
+
+def _plan_to_response(plan: CalendarPlan) -> CalendarPlanResponse:
+    """Convert a CalendarPlan DB record to response model."""
+    slots_data = json.loads(plan.plan_data) if plan.plan_data else []
+    platforms = json.loads(plan.platforms) if plan.platforms else []
+    return CalendarPlanResponse(
+        id=plan.id,
+        date_range_start=plan.date_range_start.strftime("%Y-%m-%d"),
+        date_range_end=plan.date_range_end.strftime("%Y-%m-%d"),
+        platforms=platforms,
+        slots=[
+            CalendarPlanSlot(
+                date=s.get("date", ""),
+                time=s.get("time"),
+                pillar=s.get("pillar"),
+                topic=s.get("topic"),
+                content_idea=s.get("content_idea", ""),
+                recommended_media_id=s.get("recommended_media_id"),
+                target_platforms=s.get("target_platforms", []),
+            )
+            for s in slots_data
+        ],
+        status=plan.status,
+        created_at=plan.created_at.isoformat(),
+    )
+
+
+# ── View ─────────────────────────────────────────────────────────────
+
+
+@router.get("/plan/{plan_id}")
+async def get_plan(
+    plan_id: int,
+    session: AsyncSession = Depends(get_db),
+):
+    """Get a calendar plan by ID with full slot details."""
+    result = await session.execute(select(CalendarPlan).where(CalendarPlan.id == plan_id))
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return _plan_to_response(plan)
+
+
+# ── List ─────────────────────────────────────────────────────────────
+
+
+@router.get("/plans")
+async def list_plans(
+    status: str | None = None,
+    session: AsyncSession = Depends(get_db),
+):
+    """List all calendar plans, optionally filtered by status."""
+    query = select(CalendarPlan).order_by(CalendarPlan.created_at.desc())
+    if status:
+        query = query.where(CalendarPlan.status == status)
+    result = await session.execute(query)
+    plans = result.scalars().all()
+    return {"plans": [_plan_to_response(p) for p in plans]}
+
+
+# ── Approve ──────────────────────────────────────────────────────────
+
+
+class ApproveRequest(BaseModel):
+    slot_indices: list[int] | None = None
+    auto_schedule: bool = False
+
+
+@router.post("/plan/{plan_id}/approve")
+async def approve_plan(
+    plan_id: int,
+    req: ApproveRequest,
+    session: AsyncSession = Depends(get_db),
+):
+    """Approve plan slots and create content rows from them."""
+    result = await session.execute(select(CalendarPlan).where(CalendarPlan.id == plan_id))
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    if plan.status == "approved":
+        raise HTTPException(status_code=400, detail="Plan already fully approved")
+
+    slots_data = json.loads(plan.plan_data) if plan.plan_data else []
+    indices = req.slot_indices if req.slot_indices is not None else list(range(len(slots_data)))
+
+    content_row_ids = []
+    for idx in indices:
+        if idx < 0 or idx >= len(slots_data):
+            continue
+        slot = slots_data[idx]
+
+        # Build platforms dict
+        platforms = {p: True for p in slot.get("target_platforms", [])}
+
+        # Parse date
+        slot_date = None
+        if slot.get("date"):
+            try:
+                slot_date = datetime.strptime(slot["date"], "%Y-%m-%d")
+            except ValueError:
+                pass
+
+        # Media catalog IDs
+        media_ids = None
+        if slot.get("recommended_media_id"):
+            media_ids = json.dumps([slot["recommended_media_id"]])
+
+        row = ContentRow(
+            date=slot_date,
+            pillar=slot.get("pillar"),
+            raw_text=slot.get("content_idea", ""),
+            platforms=json.dumps(platforms),
+            captions=json.dumps({}),
+            status="draft",
+            source="plan",
+            media_catalog_ids=media_ids,
+        )
+        session.add(row)
+        await session.flush()
+        content_row_ids.append(row.id)
+
+    # Update plan status
+    if req.slot_indices is None or len(indices) >= len(slots_data):
+        plan.status = "approved"
+    else:
+        plan.status = "partial"
+
+    await session.commit()
+
+    return {
+        "created_count": len(content_row_ids),
+        "content_row_ids": content_row_ids,
+    }
+
+
+# ── Delete ───────────────────────────────────────────────────────────
+
+
+@router.delete("/plan/{plan_id}")
+async def delete_plan(
+    plan_id: int,
+    session: AsyncSession = Depends(get_db),
+):
+    """Delete a calendar plan (draft only)."""
+    result = await session.execute(select(CalendarPlan).where(CalendarPlan.id == plan_id))
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    if plan.status != "draft":
+        raise HTTPException(
+            status_code=400,
+            detail="Only draft plans can be deleted",
+        )
+
+    await session.delete(plan)
+    await session.commit()
+    return {"deleted": True, "id": plan_id}
