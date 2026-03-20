@@ -162,6 +162,36 @@ class PillarUpdateRequest(BaseModel):
     target_distribution: float | None = None
 
 
+# --- Calendar Plans ---
+
+
+class CalendarPlanSlot(BaseModel):
+    date: str
+    time: str | None = None
+    pillar: str | None = None
+    topic: str | None = None
+    content_idea: str
+    recommended_media_id: int | None = None
+    target_platforms: list[str] = []
+
+
+class CalendarPlanCreate(BaseModel):
+    date_range_start: str
+    date_range_end: str
+    platforms: list[str] = []
+    constraints: str | None = None
+
+
+class CalendarPlanResponse(BaseModel):
+    id: int
+    date_range_start: str
+    date_range_end: str
+    platforms: list[str]
+    slots: list[CalendarPlanSlot]
+    status: str
+    created_at: str
+
+
 # --- Publish Config ---
 
 

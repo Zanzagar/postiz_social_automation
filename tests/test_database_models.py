@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from api.models import (
     Base,
+    CalendarPlan,
     ContentIteration,
     ContentRow,
     MediaAdapted,
@@ -60,6 +61,7 @@ class TestTableCreation:
             "media_tags",
             "media_performance",
             "media_adapted",
+            "calendar_plans",
         }
         assert expected == tables
 
@@ -507,5 +509,44 @@ class TestMediaAdaptedModel:
             "width",
             "height",
             "has_text_overlay",
+            "created_at",
+        }
+
+
+class TestCalendarPlanModel:
+    def test_create_plan(self, session):
+        plan = CalendarPlan(
+            date_range_start=datetime(2026, 4, 1, tzinfo=UTC),
+            date_range_end=datetime(2026, 4, 7, tzinfo=UTC),
+            platforms=json.dumps(["instagram", "facebook"]),
+            plan_data=json.dumps(
+                [
+                    {
+                        "date": "2026-04-01",
+                        "pillar": "spiritual_education",
+                        "content_idea": "Morning verse",
+                    },
+                ]
+            ),
+            status="draft",
+        )
+        session.add(plan)
+        session.commit()
+
+        assert plan.id is not None
+        assert plan.status == "draft"
+        assert plan.created_at is not None
+
+    def test_plan_columns(self, engine):
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("calendar_plans")}
+        assert columns == {
+            "id",
+            "date_range_start",
+            "date_range_end",
+            "platforms",
+            "plan_data",
+            "status",
+            "created_by",
             "created_at",
         }

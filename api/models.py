@@ -217,6 +217,19 @@ class PublishConfig(Base):
 # --- Phase 3: Media & Planning ---
 
 
+class CalendarPlan(Base):
+    __tablename__ = "calendar_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date_range_start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    date_range_end: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    platforms: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    plan_data: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of slots
+    status: Mapped[str] = mapped_column(String(20), default="draft")  # draft/approved/partial
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
 class MediaCatalog(Base):
     __tablename__ = "media_catalog"
 
