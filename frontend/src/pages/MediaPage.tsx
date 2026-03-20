@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DriveImportDialog } from "@/components/media/DriveImportDialog";
 import {
   Image as ImageIcon,
   X,
@@ -29,6 +30,7 @@ import {
   FileImage,
   Eye,
   Trash2,
+  HardDrive,
 } from "lucide-react";
 
 function formatBytes(bytes: number | null): string {
@@ -365,6 +367,7 @@ export function MediaPage() {
   const [sort, setSort] = useState("date");
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [driveDialogOpen, setDriveDialogOpen] = useState(false);
 
   const pillars = useQuery({
     queryKey: ["pillars"],
@@ -394,11 +397,22 @@ export function MediaPage() {
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Media Library</h1>
-        <p className="text-sm text-muted-foreground">
-          Browse and manage your media catalog
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Media Library</h1>
+          <p className="text-sm text-muted-foreground">
+            Browse and manage your media catalog
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setDriveDialogOpen(true)}
+        >
+          <HardDrive className="h-4 w-4" />
+          Import from Drive
+        </Button>
       </div>
 
       {/* Filters */}
@@ -525,6 +539,11 @@ export function MediaPage() {
         mediaId={selectedMediaId}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
+      />
+
+      <DriveImportDialog
+        open={driveDialogOpen}
+        onOpenChange={setDriveDialogOpen}
       />
     </div>
   );

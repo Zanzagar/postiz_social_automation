@@ -717,6 +717,23 @@ export const api = {
     });
   },
 
+  // Drive
+  browseDrive(folderId: string, pageToken?: string) {
+    const params = new URLSearchParams({ folder_id: folderId });
+    if (pageToken) params.set("page_token", pageToken);
+    return request<{
+      files: Array<{ id: string; name: string; mime_type: string; size: number; thumbnail_link: string | null }>;
+      next_page_token: string | null;
+    }>(`/api/media/drive/browse?${params}`);
+  },
+
+  importFromDrive(fileIds: string[]) {
+    return request<{ imported: number; errors: Array<{ file_id: string; error: string }>; skipped: string[] }>(
+      "/api/media/import-drive",
+      { method: "POST", body: JSON.stringify({ file_ids: fileIds }) },
+    );
+  },
+
   // Calendar Plans
   createCalendarPlan(data: {
     date_range_start: string;
