@@ -19,6 +19,7 @@ from api.routes.analytics import router as analytics_router
 from api.routes.knowledge import router as knowledge_router
 from api.routes.upload import router as upload_router
 from api.routes.festivals import router as festivals_router
+from api.routes.media import router as media_router
 
 
 @asynccontextmanager
@@ -65,6 +66,7 @@ app.include_router(health_router)
 app.include_router(knowledge_router)
 app.include_router(upload_router)
 app.include_router(festivals_router)
+app.include_router(media_router)
 
 
 @app.get("/")
