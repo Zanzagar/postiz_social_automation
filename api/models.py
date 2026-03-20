@@ -98,6 +98,7 @@ class Pillar(Base):
     color: Mapped[str | None] = mapped_column(String(20), nullable=True)  # hex color for UI
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    target_distribution: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0.0–1.0
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,

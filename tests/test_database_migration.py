@@ -50,6 +50,7 @@ class TestMigration:
             "media_tags",
             "media_performance",
             "media_adapted",
+            "pillars",
         }
         assert expected == tables
 

@@ -142,6 +142,7 @@ class PillarResponse(BaseModel):
     color: str | None = None
     is_active: bool = True
     sort_order: int = 0
+    target_distribution: float | None = None
 
 
 class PillarCreateRequest(BaseModel):
@@ -149,6 +150,7 @@ class PillarCreateRequest(BaseModel):
     description: str | None = None
     color: str | None = None
     sort_order: int = 0
+    target_distribution: float | None = None
 
 
 class PillarUpdateRequest(BaseModel):
@@ -157,6 +159,7 @@ class PillarUpdateRequest(BaseModel):
     color: str | None = None
     is_active: bool | None = None
     sort_order: int | None = None
+    target_distribution: float | None = None
 
 
 # --- Publish Config ---
