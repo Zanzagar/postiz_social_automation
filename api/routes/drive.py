@@ -212,21 +212,31 @@ async def sync_drive(
         try:
             if is_video:
                 # Videos: catalog metadata only, don't download full file
-                # Download Drive thumbnail for preview
+                # Fetch thumbnail via authenticated Drive API
                 thumb_path_str = None
                 try:
-                    thumb_url = file_info.get("thumbnail_link")
+                    thumb_resp = (
+                        service.files().get(fileId=file_id, fields="thumbnailLink").execute()
+                    )
+                    thumb_url = thumb_resp.get("thumbnailLink")
                     if thumb_url:
-                        import httpx
+                        import google.auth.transport.requests
 
-                        resp = httpx.get(thumb_url, timeout=15, follow_redirects=True)
-                        if resp.status_code == 200:
+                        thumb_url = thumb_url.replace("=s220", "=s400")
+                        creds = service._http.credentials
+                        auth_session = google.auth.transport.requests.AuthorizedSession(creds)
+                        resp = auth_session.get(thumb_url)
+                        if resp.status_code == 200 and len(resp.content) > 100:
                             thumb_name = f"thumb_{uuid.uuid4().hex}.jpg"
                             thumb_path = media_dir / "thumbnails" / thumb_name
                             thumb_path.write_bytes(resp.content)
                             thumb_path_str = str(thumb_path)
                 except Exception:
-                    logger.warning("Failed to fetch Drive thumbnail for %s", filename)
+                    logger.warning(
+                        "Failed to fetch Drive thumbnail for %s",
+                        filename,
+                        exc_info=True,
+                    )
 
                 catalog = MediaCatalog(
                     filename=filename,

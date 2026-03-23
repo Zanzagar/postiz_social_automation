@@ -43,7 +43,7 @@ ALLOWED_TYPES = {
     "video/webm",
 }
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB (videos need more)
-THUMBNAIL_SIZE = (200, 200)
+THUMBNAIL_SIZE = (400, 400)
 
 
 def _get_media_dir() -> Path:
