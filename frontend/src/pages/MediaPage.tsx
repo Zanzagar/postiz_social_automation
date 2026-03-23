@@ -28,7 +28,6 @@ import {
   Calendar,
   TrendingUp,
   FileImage,
-  Eye,
   Trash2,
   HardDrive,
 } from "lucide-react";
