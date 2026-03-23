@@ -10,7 +10,7 @@ import logging
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -139,16 +139,54 @@ def _download_drive_file(service, file_id: str) -> bytes:
 
 
 @router.get("/file/{file_id}")
-async def proxy_drive_file(file_id: str):
-    """Proxy a Drive file through the backend for authenticated access."""
+async def proxy_drive_file(file_id: str, request: Request):
+    """Proxy a Drive file with range request support for video streaming."""
     try:
         service = get_drive_service()
-        meta = service.files().get(fileId=file_id, fields="mimeType,name").execute()
+        meta = service.files().get(fileId=file_id, fields="mimeType,name,size").execute()
+        mime = meta.get("mimeType", "application/octet-stream")
+        name = meta.get("name", "file")
+        total_size = int(meta.get("size", 0))
+
+        range_header = request.headers.get("range")
+
+        if range_header and total_size:
+            # Parse Range: bytes=start-end
+            range_spec = range_header.replace("bytes=", "")
+            parts = range_spec.split("-")
+            start = int(parts[0]) if parts[0] else 0
+            end = int(parts[1]) if parts[1] else min(start + 2 * 1024 * 1024, total_size) - 1
+            end = min(end, total_size - 1)
+            length = end - start + 1
+
+            # Download partial content from Drive
+
+            req = service.files().get_media(fileId=file_id)
+            req.headers["Range"] = f"bytes={start}-{end}"
+            content = req.execute()
+
+            return StreamingResponse(
+                io.BytesIO(content),
+                status_code=206,
+                media_type=mime,
+                headers={
+                    "Content-Range": f"bytes {start}-{end}/{total_size}",
+                    "Content-Length": str(length),
+                    "Accept-Ranges": "bytes",
+                    "Content-Disposition": f'inline; filename="{name}"',
+                },
+            )
+
+        # No range — full download (images, small files)
         content = _download_drive_file(service, file_id)
         return StreamingResponse(
             io.BytesIO(content),
-            media_type=meta.get("mimeType", "application/octet-stream"),
-            headers={"Content-Disposition": f'inline; filename="{meta.get("name", "file")}"'},
+            media_type=mime,
+            headers={
+                "Content-Length": str(len(content)),
+                "Accept-Ranges": "bytes",
+                "Content-Disposition": f'inline; filename="{name}"',
+            },
         )
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Drive file not found: {e}")
