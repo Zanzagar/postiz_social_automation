@@ -183,9 +183,28 @@ function MediaDetailDialog({
             </DialogHeader>
 
             <div className="space-y-6">
-              {/* Image preview */}
+              {/* Media preview */}
               <div className="aspect-video w-full overflow-hidden rounded-lg border border-border bg-muted">
-                {media.local_path ? (
+                {media.mime_type.startsWith("video/") ? (
+                  media.local_path.startsWith("drive://") ? (
+                    <video
+                      src={`/api/media/drive/file/${media.local_path.replace("drive://", "")}`}
+                      poster={
+                        media.thumbnail_path
+                          ? `/media/thumbnails/${media.thumbnail_path.split("/").pop()}`
+                          : undefined
+                      }
+                      controls
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <video
+                      src={`/media/${media.local_path.split("/").pop()}`}
+                      controls
+                      className="h-full w-full object-contain"
+                    />
+                  )
+                ) : media.local_path ? (
                   <img
                     src={
                       media.local_path.startsWith("drive://")
