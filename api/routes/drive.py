@@ -14,7 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.auth import get_current_user
 from api.dependencies import get_db, get_settings
 from api.models import MediaCatalog, MediaTag
-from api.routes.media import THUMBNAIL_SIZE, _classify_media_tags, _upload_to_postiz
+from api.routes.media import (
+    THUMBNAIL_SIZE,
+    _classify_media_tags,
+    _generate_thumbnail,
+    _upload_to_postiz,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -200,58 +205,89 @@ async def sync_drive(
     for file_info in new_files:
         file_id = file_info["id"]
         drive_url = f"drive://{file_id}"
+        filename = file_info["name"]
+        mime = file_info.get("mime_type", "")
+        is_video = mime.startswith("video/")
 
         try:
-            content = _download_drive_file(service, file_id)
-            filename = file_info["name"]
-            ext = filename.rsplit(".", 1)[-1] if "." in filename else "jpg"
-            stored_name = f"{uuid.uuid4().hex}.{ext}"
-            file_path = media_dir / stored_name
-            file_path.write_bytes(content)
+            if is_video:
+                # Videos: catalog metadata only, don't download full file
+                # Download Drive thumbnail for preview
+                thumb_path_str = None
+                try:
+                    thumb_url = file_info.get("thumbnail_link")
+                    if thumb_url:
+                        import httpx
 
-            width = height = None
-            try:
-                with Image.open(file_path) as img:
-                    width, height = img.size
-            except Exception:
-                pass
+                        resp = httpx.get(thumb_url, timeout=15, follow_redirects=True)
+                        if resp.status_code == 200:
+                            thumb_name = f"thumb_{uuid.uuid4().hex}.jpg"
+                            thumb_path = media_dir / "thumbnails" / thumb_name
+                            thumb_path.write_bytes(resp.content)
+                            thumb_path_str = str(thumb_path)
+                except Exception:
+                    logger.warning("Failed to fetch Drive thumbnail for %s", filename)
 
-            thumb_path = media_dir / "thumbnails" / f"thumb_{stored_name}"
-            try:
-                with Image.open(file_path) as img:
-                    img.thumbnail(THUMBNAIL_SIZE, Image.LANCZOS)
-                    img.save(thumb_path)
-            except Exception:
-                thumb_path = None
-
-            tag_results = _classify_media_tags(str(file_path))
-
-            catalog = MediaCatalog(
-                filename=filename,
-                original_url=drive_url,
-                local_path=str(file_path),
-                thumbnail_path=str(thumb_path) if thumb_path else None,
-                mime_type=file_info.get("mime_type", "image/jpeg"),
-                width=width,
-                height=height,
-                file_size=len(content),
-                tags=json.dumps([t["tag"] for t in tag_results]) if tag_results else None,
-                source="drive",
-            )
-            session.add(catalog)
-            await session.flush()
-
-            for t in tag_results:
-                session.add(
-                    MediaTag(
-                        media_id=catalog.id,
-                        tag=t["tag"],
-                        confidence=t.get("confidence", 0.5),
-                        source="ai",
-                    )
+                catalog = MediaCatalog(
+                    filename=filename,
+                    original_url=drive_url,
+                    local_path=drive_url,  # No local file — reference only
+                    thumbnail_path=thumb_path_str,
+                    mime_type=mime,
+                    file_size=file_info.get("size", 0),
+                    source="drive",
                 )
+                session.add(catalog)
+                imported += 1
+            else:
+                # Images: download, thumbnail, AI tag
+                content = _download_drive_file(service, file_id)
+                ext = filename.rsplit(".", 1)[-1] if "." in filename else "jpg"
+                stored_name = f"{uuid.uuid4().hex}.{ext}"
+                file_path = media_dir / stored_name
+                file_path.write_bytes(content)
 
-            imported += 1
+                width = height = None
+                try:
+                    with Image.open(file_path) as img:
+                        width, height = img.size
+                except Exception:
+                    pass
+
+                thumb_path = media_dir / "thumbnails" / f"thumb_{stored_name}"
+                try:
+                    _generate_thumbnail(file_path, thumb_path)
+                except Exception:
+                    thumb_path = None
+
+                tag_results = _classify_media_tags(str(file_path))
+
+                catalog = MediaCatalog(
+                    filename=filename,
+                    original_url=drive_url,
+                    local_path=str(file_path),
+                    thumbnail_path=str(thumb_path) if thumb_path else None,
+                    mime_type=mime or "image/jpeg",
+                    width=width,
+                    height=height,
+                    file_size=len(content),
+                    tags=json.dumps([t["tag"] for t in tag_results]) if tag_results else None,
+                    source="drive",
+                )
+                session.add(catalog)
+                await session.flush()
+
+                for t in tag_results:
+                    session.add(
+                        MediaTag(
+                            media_id=catalog.id,
+                            tag=t["tag"],
+                            confidence=t.get("confidence", 0.5),
+                            source="ai",
+                        )
+                    )
+
+                imported += 1
         except Exception as e:
             logger.warning("Drive sync failed for %s: %s", file_id, e)
             errors.append({"file_id": file_id, "error": str(e)})
