@@ -201,12 +201,17 @@ class WordPressCrawler:
             "Retreats & Visits, People & Team, Education & Programs, "
             "History & Mission, Fundraising, General Information"
         )
+        pillars = (
+            "Spiritual Education, Farm & Community, Events, "
+            "Behind the Scenes, Seasonal, Collaborative"
+        )
         prompt = (
             "Extract key facts from this web page content as a JSON array. "
             "Each item must have:\n"
             "- fact_type (one of: program, event, quote, link, description)\n"
             "- content (the fact text — be specific with names, numbers, dates)\n"
             "- topic (one of: " + topics + ")\n"
+            "- pillar (one of: " + pillars + ")\n"
             "- keywords (list of strings)\n\n"
             "Focus on: programs offered, events, notable quotes, specific facts about "
             "the farm/community, and descriptions of activities or initiatives.\n"
@@ -321,10 +326,15 @@ class WordPressCrawler:
     def store_knowledge_sync(
         self, db_path: str, page_id: int, knowledge: list[dict], pillar: str | None = None
     ) -> None:
-        """Store extracted knowledge entries for a page."""
+        """Store extracted knowledge entries for a page.
+
+        Uses per-fact pillar from extraction if available, falls back to
+        the page-level pillar parameter.
+        """
         conn = sqlite3.connect(db_path)
         now = datetime.now(timezone.utc).isoformat()
         for fact in knowledge:
+            fact_pillar = fact.get("pillar") or pillar
             conn.execute(
                 """INSERT INTO web_knowledge (web_page_id, fact_type, content, topic, pillar, keywords, created_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
@@ -333,7 +343,7 @@ class WordPressCrawler:
                     fact["fact_type"],
                     fact["content"],
                     fact.get("topic"),
-                    pillar,
+                    fact_pillar,
                     json.dumps(fact.get("keywords", [])),
                     now,
                 ),
