@@ -1,9 +1,11 @@
 """FastAPI application entry point."""
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from api.auth import router as auth_router
 from api.dependencies import get_settings
@@ -73,6 +75,12 @@ app.include_router(media_router)
 app.include_router(calendar_plan_router)
 app.include_router(drive_router)
 app.include_router(drive_import_router)
+
+
+# Serve media files (thumbnails, adapted images)
+_media_dir = Path("media")
+if _media_dir.exists():
+    app.mount("/media", StaticFiles(directory="media"), name="media")
 
 
 @app.get("/")
