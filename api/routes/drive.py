@@ -138,7 +138,11 @@ def _download_drive_file(service, file_id: str) -> bytes:
 # ── Proxy (serve Drive files through backend) ───────────────────────
 
 
-@router.get("/file/{file_id}")
+# Separate router without auth — file IDs are unguessable (33-char random)
+file_router = APIRouter(prefix="/api/media/drive", tags=["drive-files"])
+
+
+@file_router.get("/file/{file_id}")
 async def proxy_drive_file(file_id: str, request: Request):
     """Proxy a Drive file with range request support for video streaming."""
     try:

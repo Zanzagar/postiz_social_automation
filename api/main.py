@@ -12,6 +12,7 @@ from api.dependencies import get_settings
 from api.routes.analytics import router as analytics_router
 from api.routes.calendar_plan import router as calendar_plan_router
 from api.routes.content import router as content_router
+from api.routes.drive import file_router as drive_file_router
 from api.routes.drive import import_router as drive_import_router
 from api.routes.drive import router as drive_router
 from api.routes.festivals import router as festivals_router
@@ -76,6 +77,7 @@ app.include_router(media_router)
 app.include_router(calendar_plan_router)
 app.include_router(drive_router)
 app.include_router(drive_import_router)
+app.include_router(drive_file_router)
 app.include_router(media_health_router)
 
 
