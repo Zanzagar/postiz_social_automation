@@ -14,14 +14,14 @@ def get_knowledge_context(
     db_path: str,
     pillar: str | None = None,
     max_facts: int = 10,
-    max_examples: int = 3,
-    max_chars: int = 2000,
+    max_examples: int = 5,
+    max_chars: int = 3000,
 ) -> str:
     """Build a knowledge context string for prompt injection.
 
     Args:
         db_path: Path to the SQLite database.
-        pillar: Optional pillar to filter by. If None, returns all.
+        pillar: Optional pillar to filter by (falls back to unfiltered).
         max_facts: Maximum number of knowledge facts to include.
         max_examples: Maximum number of social post examples to include.
         max_chars: Approximate character budget for the context.
@@ -39,35 +39,9 @@ def get_knowledge_context(
     parts: list[str] = []
     char_count = 0
 
-    # --- Knowledge facts ---
+    # --- Social history examples FIRST (most important for voice matching) ---
     try:
-        facts = []
-        if pillar:
-            facts = conn.execute(
-                "SELECT fact_type, content FROM web_knowledge WHERE pillar = ? LIMIT ?",
-                (pillar, max_facts),
-            ).fetchall()
-        # Fall back to unfiltered if pillar match is empty (most entries have NULL pillar)
-        if not facts:
-            facts = conn.execute(
-                "SELECT fact_type, content FROM web_knowledge LIMIT ?",
-                (max_facts,),
-            ).fetchall()
-
-        if facts:
-            parts.append("KNOWLEDGE BASE FACTS:")
-            for fact in facts:
-                line = f"- [{fact['fact_type']}] {fact['content']}"
-                if char_count + len(line) > max_chars:
-                    break
-                parts.append(line)
-                char_count += len(line)
-            parts.append("")
-    except sqlite3.OperationalError:
-        pass
-
-    # --- Social history examples (high-engagement) ---
-    try:
+        examples = []
         if pillar:
             examples = conn.execute(
                 """SELECT post_text, platform, likes + comments + shares as engagement
@@ -76,7 +50,7 @@ def get_knowledge_context(
                    ORDER BY engagement DESC LIMIT ?""",
                 (pillar, max_examples),
             ).fetchall()
-        else:
+        if not examples:
             examples = conn.execute(
                 """SELECT post_text, platform, likes + comments + shares as engagement
                    FROM social_history
@@ -86,11 +60,45 @@ def get_knowledge_context(
             ).fetchall()
 
         if examples:
-            parts.append("HIGH-PERFORMING POST EXAMPLES:")
+            parts.append("VOICE REFERENCE — Match the tone and length of these real posts:")
             for ex in examples:
-                line = (
-                    f"- [{ex['platform']}, {ex['engagement']} engagements] {ex['post_text'][:200]}"
-                )
+                text = ex["post_text"][:300]
+                line = f'- [{ex["platform"]}, {ex["engagement"]} engagements] "{text}"'
+                if char_count + len(line) > max_chars:
+                    break
+                parts.append(line)
+                char_count += len(line)
+            parts.append("")
+    except sqlite3.OperationalError:
+        pass
+
+    # --- Knowledge facts (skip generic/empty ones) ---
+    try:
+        facts = []
+        if pillar:
+            facts = conn.execute(
+                """SELECT fact_type, content FROM web_knowledge
+                   WHERE pillar = ?
+                   AND content IS NOT NULL AND length(content) > 20
+                   AND content NOT LIKE '%shopping cart%'
+                   AND content NOT LIKE '%page is a%'
+                   LIMIT ?""",
+                (pillar, max_facts),
+            ).fetchall()
+        if not facts:
+            facts = conn.execute(
+                """SELECT fact_type, content FROM web_knowledge
+                   WHERE content IS NOT NULL AND length(content) > 20
+                   AND content NOT LIKE '%shopping cart%'
+                   AND content NOT LIKE '%page is a%'
+                   LIMIT ?""",
+                (max_facts,),
+            ).fetchall()
+
+        if facts:
+            parts.append("KNOWLEDGE BASE FACTS:")
+            for fact in facts:
+                line = f"- [{fact['fact_type']}] {fact['content']}"
                 if char_count + len(line) > max_chars:
                     break
                 parts.append(line)
