@@ -257,6 +257,10 @@ class CaptionGenerator:
         """Build prompt for content suggestion generation."""
         parts = [BRAND_RULES, ""]
 
+        knowledge_ctx = self._get_knowledge_context()
+        if knowledge_ctx:
+            parts.append(knowledge_ctx)
+
         if self.learning_context:
             parts.append("PERFORMANCE CONTEXT:")
             parts.append(json.dumps(self.learning_context, indent=2))
