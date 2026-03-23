@@ -176,18 +176,39 @@ class CaptionGenerator:
     ) -> str:
         """Regenerate a single platform caption based on user instruction."""
         platform_rules = PLATFORM_INSTRUCTIONS.get(Platform(platform), "")
-        prompt = (
-            f"{BRAND_RULES}\n\n"
-            f"ORIGINAL CAPTION ({platform}):\n"
-            f"{original_caption or '(none)'}\n\n"
-            f"ORIGINAL POST IDEA:\n{raw_text}\n\n"
-            f"{'CONTENT PILLAR: ' + pillar if pillar else ''}\n\n"
-            f"USER INSTRUCTION:\n{instruction}\n\n"
-            f"PLATFORM RULES FOR {platform.upper()}:\n{platform_rules}\n\n"
-            f"Generate an improved caption for {platform} based on the user instruction.\n"
-            f"Respond with ONLY the caption text, no explanations."
+
+        # Include knowledge context so iterations are as informed as generation
+        knowledge_ctx = self._get_knowledge_context(pillar)
+
+        parts = [
+            BRAND_RULES,
+            "",
+        ]
+        if knowledge_ctx:
+            parts.append(knowledge_ctx)
+        if self.learning_context:
+            parts.append("PERFORMANCE CONTEXT:")
+            parts.append(json.dumps(self.learning_context, indent=2))
+            parts.append("")
+
+        parts.extend(
+            [
+                f"ORIGINAL CAPTION ({platform}):",
+                original_caption or "(none)",
+                "",
+                f"ORIGINAL POST IDEA:\n{raw_text}",
+                "",
+                f"CONTENT PILLAR: {pillar}" if pillar else "",
+                "",
+                f"USER INSTRUCTION:\n{instruction}",
+                "",
+                f"PLATFORM RULES FOR {platform.upper()}:\n{platform_rules}",
+                "",
+                f"Generate an improved caption for {platform} based on the user instruction.",
+                "Respond with ONLY the caption text, no explanations.",
+            ]
         )
-        return _call_claude(prompt)
+        return _call_claude("\n".join(parts))
 
     def _build_prompt(self, row: ContentRow, platforms: list[Platform]) -> str:
         """Build the full caption generation prompt."""
