@@ -26,6 +26,7 @@ def _call_claude(prompt: str) -> str:
         text=True,
         timeout=300,
         stdin=subprocess.DEVNULL,
+        cwd="/tmp",  # Avoid loading project .claude/ rules/plugins
     )
     return result.stdout.strip()
 

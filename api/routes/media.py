@@ -99,6 +99,7 @@ def _classify_media_tags(image_path: str) -> list[dict]:
             text=True,
             timeout=120,
             stdin=subprocess.DEVNULL,
+            cwd="/tmp",  # Avoid loading project .claude/ rules/plugins
         )
         if result.returncode == 0:
             # Strip markdown fences if present

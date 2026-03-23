@@ -33,6 +33,7 @@ def _run_claude(prompt: str) -> str:
         text=True,
         timeout=120,
         stdin=subprocess.DEVNULL,
+        cwd="/tmp",  # Avoid loading project .claude/ rules/plugins
     )
     if result.returncode != 0:
         raise RuntimeError(f"Claude CLI failed: {result.stderr[:200]}")

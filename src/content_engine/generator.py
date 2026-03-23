@@ -49,6 +49,10 @@ PLATFORM_INSTRUCTIONS: dict[Platform, str] = {
 
 CLI_TIMEOUT = 120  # seconds
 
+# Run claude -p from /tmp so it doesn't load the project's .claude/ directory
+# (rules, hooks, plugins, 1000+ session files) which adds 40s+ of startup.
+_CLEAN_CWD = "/tmp"
+
 
 def _call_claude(prompt: str) -> str:
     """Call Claude Code CLI and return stdout. Raises RuntimeError on failure."""
@@ -59,6 +63,7 @@ def _call_claude(prompt: str) -> str:
             text=True,
             timeout=CLI_TIMEOUT,
             stdin=subprocess.DEVNULL,
+            cwd=_CLEAN_CWD,
         )
     except subprocess.TimeoutExpired as e:
         raise RuntimeError(f"Claude CLI timed out after {CLI_TIMEOUT}s") from e
