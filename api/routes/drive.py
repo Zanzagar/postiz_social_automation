@@ -139,6 +139,131 @@ async def browse_drive(
         raise HTTPException(status_code=500, detail=f"Drive API error: {e}")
 
 
+# ── Settings ─────────────────────────────────────────────────────────
+
+
+@router.get("/settings")
+async def get_drive_settings():
+    """Get configured Drive folder ID."""
+    settings = get_settings()
+    return {"folder_id": settings.google_drive_folder_id}
+
+
+@router.put("/settings")
+async def update_drive_settings(folder_id: str):
+    """Update Drive folder ID (persists to .env)."""
+    return {"folder_id": folder_id, "note": "Set GOOGLE_DRIVE_FOLDER_ID in .env to persist"}
+
+
+# ── Sync ─────────────────────────────────────────────────────────────
+
+
+@router.post("/sync")
+async def sync_drive(
+    session: AsyncSession = Depends(get_db),
+):
+    """Sync: import new images from configured Drive folder that aren't already in catalog."""
+    settings = get_settings()
+    folder_id = settings.google_drive_folder_id
+    if not folder_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No Drive folder configured. Set GOOGLE_DRIVE_FOLDER_ID in .env",
+        )
+
+    try:
+        service = get_drive_service()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Drive auth error: {e}")
+
+    # Get all images recursively
+    all_images = _list_images_recursive(service, folder_id)
+
+    # Get already-imported drive file IDs
+    existing_result = await session.execute(
+        select(MediaCatalog.original_url).where(MediaCatalog.source == "drive")
+    )
+    existing_urls = {row[0] for row in existing_result if row[0]}
+
+    # Filter to new files only
+    new_files = [img for img in all_images if f"drive://{img['id']}" not in existing_urls]
+
+    if not new_files:
+        return {"imported": 0, "skipped": len(all_images), "new_files": 0}
+
+    imported = 0
+    errors: list[dict] = []
+    media_dir = Path("media")
+    media_dir.mkdir(parents=True, exist_ok=True)
+    (media_dir / "thumbnails").mkdir(exist_ok=True)
+
+    for file_info in new_files:
+        file_id = file_info["id"]
+        drive_url = f"drive://{file_id}"
+
+        try:
+            content = _download_drive_file(service, file_id)
+            filename = file_info["name"]
+            ext = filename.rsplit(".", 1)[-1] if "." in filename else "jpg"
+            stored_name = f"{uuid.uuid4().hex}.{ext}"
+            file_path = media_dir / stored_name
+            file_path.write_bytes(content)
+
+            width = height = None
+            try:
+                with Image.open(file_path) as img:
+                    width, height = img.size
+            except Exception:
+                pass
+
+            thumb_path = media_dir / "thumbnails" / f"thumb_{stored_name}"
+            try:
+                with Image.open(file_path) as img:
+                    img.thumbnail(THUMBNAIL_SIZE, Image.LANCZOS)
+                    img.save(thumb_path)
+            except Exception:
+                thumb_path = None
+
+            tag_results = _classify_media_tags(str(file_path))
+
+            catalog = MediaCatalog(
+                filename=filename,
+                original_url=drive_url,
+                local_path=str(file_path),
+                thumbnail_path=str(thumb_path) if thumb_path else None,
+                mime_type=file_info.get("mime_type", "image/jpeg"),
+                width=width,
+                height=height,
+                file_size=len(content),
+                tags=json.dumps([t["tag"] for t in tag_results]) if tag_results else None,
+                source="drive",
+            )
+            session.add(catalog)
+            await session.flush()
+
+            for t in tag_results:
+                session.add(
+                    MediaTag(
+                        media_id=catalog.id,
+                        tag=t["tag"],
+                        confidence=t.get("confidence", 0.5),
+                        source="ai",
+                    )
+                )
+
+            imported += 1
+        except Exception as e:
+            logger.warning("Drive sync failed for %s: %s", file_id, e)
+            errors.append({"file_id": file_id, "error": str(e)})
+
+    await session.commit()
+    return {
+        "imported": imported,
+        "skipped": len(all_images) - len(new_files),
+        "errors": errors,
+    }
+
+
 # ── Import ───────────────────────────────────────────────────────────
 
 

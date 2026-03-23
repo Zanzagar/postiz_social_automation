@@ -30,6 +30,8 @@ import {
   FileImage,
   Trash2,
   HardDrive,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 
 function formatBytes(bytes: number | null): string {
@@ -360,6 +362,7 @@ function MediaDetailDialog({
 // --- Main Page ---
 
 export function MediaPage() {
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [source, setSource] = useState("all");
   const [pillar, setPillar] = useState("all");
@@ -367,6 +370,17 @@ export function MediaPage() {
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [driveDialogOpen, setDriveDialogOpen] = useState(false);
+
+  const syncMutation = useMutation({
+    mutationFn: () => api.syncDrive(),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["media"] });
+      alert(`Synced: ${data.imported} new, ${data.skipped} already imported`);
+    },
+    onError: (err) => {
+      alert(`Sync failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+    },
+  });
 
   const pillars = useQuery({
     queryKey: ["pillars"],
@@ -403,15 +417,31 @@ export function MediaPage() {
             Browse and manage your media catalog
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => setDriveDialogOpen(true)}
-        >
-          <HardDrive className="h-4 w-4" />
-          Import from Drive
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending}
+          >
+            {syncMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            Sync Drive
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setDriveDialogOpen(true)}
+          >
+            <HardDrive className="h-4 w-4" />
+            Browse Drive
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}

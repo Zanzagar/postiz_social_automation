@@ -727,6 +727,17 @@ export const api = {
     }>(`/api/media/drive/browse?${params}`);
   },
 
+  getDriveSettings() {
+    return request<{ folder_id: string }>("/api/media/drive/settings");
+  },
+
+  syncDrive() {
+    return request<{ imported: number; skipped: number; errors: Array<{ file_id: string; error: string }> }>(
+      "/api/media/drive/sync",
+      { method: "POST" },
+    );
+  },
+
   importFromDrive(fileIds: string[]) {
     return request<{ imported: number; errors: Array<{ file_id: string; error: string }>; skipped: string[] }>(
       "/api/media/import-drive",
