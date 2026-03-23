@@ -92,6 +92,7 @@ class CaptionGenerator:
         self.data_dir = data_dir
         self.db_path = db_path or str(data_dir / "gvsa.db")
         self.learning_context = self._load_learning_context()
+        self.voice_profile = self._load_voice_profile()
 
     def generate_captions(
         self, row: ContentRow, feedback: str | None = None
@@ -188,16 +189,13 @@ class CaptionGenerator:
         # Include knowledge context so iterations are as informed as generation
         knowledge_ctx = self._get_knowledge_context(pillar)
 
-        parts = [
-            BRAND_RULES,
-            "",
-        ]
+        parts = [BRAND_RULES, ""]
+
+        voice = self._format_voice_profile()
+        if voice:
+            parts.append(voice)
         if knowledge_ctx:
             parts.append(knowledge_ctx)
-        if self.learning_context:
-            parts.append("PERFORMANCE CONTEXT:")
-            parts.append(json.dumps(self.learning_context, indent=2))
-            parts.append("")
 
         parts.extend(
             [
@@ -222,11 +220,10 @@ class CaptionGenerator:
         """Build the full caption generation prompt."""
         parts = [BRAND_RULES, ""]
 
-        # Learning context
-        if self.learning_context:
-            parts.append("PERFORMANCE CONTEXT (use to improve captions):")
-            parts.append(json.dumps(self.learning_context, indent=2))
-            parts.append("")
+        # Voice profile
+        voice = self._format_voice_profile()
+        if voice:
+            parts.append(voice)
 
         # Knowledge base context
         knowledge_ctx = self._get_knowledge_context(row.content_pillar)
@@ -265,14 +262,13 @@ class CaptionGenerator:
         """Build prompt for content suggestion generation."""
         parts = [BRAND_RULES, ""]
 
+        voice = self._format_voice_profile()
+        if voice:
+            parts.append(voice)
+
         knowledge_ctx = self._get_knowledge_context()
         if knowledge_ctx:
             parts.append(knowledge_ctx)
-
-        if self.learning_context:
-            parts.append("PERFORMANCE CONTEXT:")
-            parts.append(json.dumps(self.learning_context, indent=2))
-            parts.append("")
 
         parts.append(f"CALENDAR GAPS (dates with no content planned): {', '.join(calendar_gaps)}")
         parts.append(f"CURRENT PILLAR BALANCE: {json.dumps(pillar_balance)}")
@@ -312,6 +308,41 @@ class CaptionGenerator:
         if path.exists():
             return json.loads(path.read_text())
         return {}
+
+    def _load_voice_profile(self) -> dict:
+        """Load extracted voice profile from data/voice-profile.json."""
+        path = self.data_dir / "voice-profile.json"
+        if path.exists():
+            return json.loads(path.read_text())
+        return {}
+
+    def _format_voice_profile(self) -> str:
+        """Format voice profile as a prompt section."""
+        vp = self.voice_profile
+        if not vp:
+            return ""
+
+        parts = ["VOICE PROFILE (extracted from our real posts — match this voice):"]
+        if vp.get("sentence_style"):
+            parts.append(f"Sentence style: {vp['sentence_style']}")
+        if vp.get("emotional_register"):
+            parts.append(f"Emotional register: {vp['emotional_register']}")
+        if vp.get("length_range"):
+            parts.append(f"Length: {vp['length_range']}")
+        if vp.get("what_works"):
+            parts.append("What works:")
+            for item in vp["what_works"]:
+                parts.append(f"  - {item}")
+        if vp.get("what_to_avoid"):
+            parts.append("What to avoid:")
+            for item in vp["what_to_avoid"]:
+                parts.append(f"  - {item}")
+        if vp.get("sample_hooks"):
+            parts.append("Sample openings from our best posts:")
+            for hook in vp["sample_hooks"]:
+                parts.append(f'  - "{hook}"')
+        parts.append("")
+        return "\n".join(parts)
 
     def _get_knowledge_context(self, pillar: str | None = None) -> str:
         """Query knowledge base for relevant facts and examples."""

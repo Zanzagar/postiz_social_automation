@@ -80,9 +80,10 @@ class TestGetKnowledgeContext:
         result = get_knowledge_context(str(context_db), pillar="Cow Life")
         assert "85 cows" in result
 
-    def test_includes_social_examples(self, context_db):
+    def test_no_social_examples_in_knowledge_context(self, context_db):
+        """Social history voice examples moved to voice-profile.json."""
         result = get_knowledge_context(str(context_db), pillar="Cow Life")
-        assert "morning sun" in result
+        assert "VOICE REFERENCE" not in result
 
     def test_filters_by_pillar(self, context_db):
         result = get_knowledge_context(str(context_db), pillar="Cow Life")

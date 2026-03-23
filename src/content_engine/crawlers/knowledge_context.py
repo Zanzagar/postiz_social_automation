@@ -1,7 +1,9 @@
 """Knowledge context builder for caption generation prompts.
 
-Queries the knowledge base and social history to build context strings
-that get injected into Claude prompts during caption generation.
+Queries the knowledge base to build context strings that get injected
+into Claude prompts during caption generation. Voice matching is now
+handled by data/voice-profile.json (loaded by generator.py), so this
+module focuses on factual background context only.
 """
 
 import logging
@@ -14,8 +16,7 @@ def get_knowledge_context(
     db_path: str,
     pillar: str | None = None,
     max_facts: int = 5,
-    max_examples: int = 5,
-    max_chars: int = 3000,
+    max_chars: int = 2000,
 ) -> str:
     """Build a knowledge context string for prompt injection.
 
@@ -23,7 +24,6 @@ def get_knowledge_context(
         db_path: Path to the SQLite database.
         pillar: Optional pillar to filter by (falls back to unfiltered).
         max_facts: Maximum number of knowledge facts to include.
-        max_examples: Maximum number of social post examples to include.
         max_chars: Approximate character budget for the context.
 
     Returns:
@@ -38,39 +38,6 @@ def get_knowledge_context(
 
     parts: list[str] = []
     char_count = 0
-
-    # --- Social history examples FIRST (most important for voice matching) ---
-    try:
-        examples = []
-        if pillar:
-            examples = conn.execute(
-                """SELECT post_text, platform, likes + comments + shares as engagement
-                   FROM social_history
-                   WHERE pillar = ? AND post_text IS NOT NULL AND post_text != ''
-                   ORDER BY engagement DESC LIMIT ?""",
-                (pillar, max_examples),
-            ).fetchall()
-        if not examples:
-            examples = conn.execute(
-                """SELECT post_text, platform, likes + comments + shares as engagement
-                   FROM social_history
-                   WHERE post_text IS NOT NULL AND post_text != ''
-                   ORDER BY engagement DESC LIMIT ?""",
-                (max_examples,),
-            ).fetchall()
-
-        if examples:
-            parts.append("VOICE REFERENCE — Match the tone and length of these real posts:")
-            for ex in examples:
-                text = ex["post_text"][:300]
-                line = f'- [{ex["platform"]}, {ex["engagement"]} engagements] "{text}"'
-                if char_count + len(line) > max_chars:
-                    break
-                parts.append(line)
-                char_count += len(line)
-            parts.append("")
-    except sqlite3.OperationalError:
-        pass
 
     # --- Knowledge facts (skip generic/empty ones) ---
     try:
