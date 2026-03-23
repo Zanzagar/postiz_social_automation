@@ -33,8 +33,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["media"], dependencies=[Depends(get_current_user)])
 
-ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+ALLOWED_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "video/mp4",
+    "video/quicktime",
+    "video/webm",
+}
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB (videos need more)
 THUMBNAIL_SIZE = (200, 200)
 
 
@@ -49,8 +57,10 @@ def _get_media_dir() -> Path:
 def _generate_thumbnail(src_path: Path, thumb_path: Path) -> None:
     """Generate a 200x200 thumbnail maintaining aspect ratio."""
     with Image.open(src_path) as img:
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
         img.thumbnail(THUMBNAIL_SIZE, Image.LANCZOS)
-        img.save(thumb_path)
+        img.save(thumb_path, format="JPEG")
 
 
 def _upload_to_postiz(file_path: Path) -> str | None:

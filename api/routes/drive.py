@@ -73,7 +73,7 @@ def _list_images_recursive(service, folder_id: str, max_depth: int = 3) -> list[
                 if f["mimeType"] == "application/vnd.google-apps.folder":
                     subfolder_path = f"{parent_path}{f['name']}/"
                     _scan(f["id"], depth + 1, subfolder_path)
-                elif f["mimeType"].startswith("image/"):
+                elif f["mimeType"].startswith(("image/", "video/")):
                     images.append(
                         {
                             "id": f["id"],
