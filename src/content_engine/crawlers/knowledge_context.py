@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 def get_knowledge_context(
     db_path: str,
     pillar: str | None = None,
-    max_facts: int = 10,
+    max_facts: int = 5,
     max_examples: int = 5,
     max_chars: int = 3000,
 ) -> str:
@@ -96,7 +96,7 @@ def get_knowledge_context(
             ).fetchall()
 
         if facts:
-            parts.append("KNOWLEDGE BASE FACTS:")
+            parts.append("BACKGROUND (use only if naturally relevant — don't force facts in):")
             for fact in facts:
                 line = f"- [{fact['fact_type']}] {fact['content']}"
                 if char_count + len(line) > max_chars:
