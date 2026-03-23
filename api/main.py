@@ -20,6 +20,7 @@ from api.routes.health import router as health_router
 from api.routes.iterate import router as iterate_router
 from api.routes.knowledge import router as knowledge_router
 from api.routes.media import router as media_router
+from api.routes.media_health import router as media_health_router
 from api.routes.pillars import router as pillars_router
 from api.routes.postiz import router as postiz_router
 from api.routes.settings import router as settings_router
@@ -75,6 +76,7 @@ app.include_router(media_router)
 app.include_router(calendar_plan_router)
 app.include_router(drive_router)
 app.include_router(drive_import_router)
+app.include_router(media_health_router)
 
 
 # Serve media files (thumbnails, adapted images)
