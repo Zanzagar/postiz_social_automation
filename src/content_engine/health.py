@@ -40,10 +40,12 @@ def check_oauth_health() -> tuple[bool, str]:
     """Check if Claude OAuth token is valid by running a simple prompt.
 
     Returns (ok, message) tuple. On failure, message includes re-auth hint.
+    Claude CLI hooks/plugins can keep the process alive after responding,
+    so we treat a timeout as success if stdout already contains "OK".
     """
     try:
         result = subprocess.run(
-            ["claude", "-p", "Say OK", "--bare", "--output-format", "text"],
+            ["claude", "-p", "Say OK", "--output-format", "text"],
             capture_output=True,
             text=True,
             timeout=30,
@@ -57,7 +59,12 @@ def check_oauth_health() -> tuple[bool, str]:
             return False, "OAuth token expired — run 'claude /login' to re-authenticate"
 
         return False, f"Claude CLI error: {(result.stderr or result.stdout).strip()}"
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
+        # CLI may respond with "OK" but hang during hook/plugin cleanup.
+        # Check captured output before declaring failure.
+        stdout = (e.stdout or b"").decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
+        if "OK" in stdout:
+            return True, "OAuth token valid"
         return False, "Claude CLI timeout — token check took too long"
     except FileNotFoundError:
         return False, "Claude CLI not installed (expected in Docker)"

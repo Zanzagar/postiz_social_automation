@@ -54,13 +54,17 @@ def _call_claude(prompt: str) -> str:
     """Call Claude Code CLI and return stdout. Raises RuntimeError on failure."""
     try:
         result = subprocess.run(
-            ["claude", "-p", prompt, "--bare"],
+            ["claude", "-p", prompt, "--output-format", "text"],
             capture_output=True,
             text=True,
             timeout=CLI_TIMEOUT,
             stdin=subprocess.DEVNULL,
         )
     except subprocess.TimeoutExpired as e:
+        # CLI hooks can keep process alive after response — use output if available.
+        stdout = (e.stdout or b"").decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
+        if stdout.strip():
+            return stdout.strip()
         raise RuntimeError(f"Claude CLI timed out after {CLI_TIMEOUT}s") from e
 
     if result.returncode != 0:
