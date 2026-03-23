@@ -26,8 +26,16 @@ BRANDING RULES:
 - Website: gitavalley.org
 - Tagline: "Cultivating Soil and Soul"
 - Key claim: "Only USDA Certified Slaughter-Free Dairy Farm in North America"
+- Products: Ahimsa (cruelty-free) dairy — paneer, cheddar, mozzarella
 
-VOICE: Warm, welcoming, grounded. Lead with cows and farm, not religion. Never preachy.\
+VOICE & TONE:
+- Warm, welcoming, grounded. Write like a real farmer, not a marketing agency.
+- Lead with cows and farm life, not religion. Never preachy or sermonic.
+- Use specific, concrete details — cow names, weather, what happened today.
+- Avoid generic inspirational language ("every life is a blessing", "hearts overflowing").
+- No AI-sounding filler: cut "we believe", "there's something deeply", "it's more than".
+- Short sentences. Let the content breathe. Don't over-explain.
+- Devotion shows through action (caring for cows), not flowery words about devotion.\
 """
 
 PLATFORM_INSTRUCTIONS: dict[Platform, str] = {
@@ -58,7 +66,7 @@ def _call_claude(prompt: str) -> str:
     """Call Claude Code CLI and return stdout. Raises RuntimeError on failure."""
     try:
         result = subprocess.run(
-            ["claude", "-p", prompt],
+            ["claude", "-p", prompt, "--model", "opus", "--effort", "max"],
             capture_output=True,
             text=True,
             timeout=CLI_TIMEOUT,

@@ -41,12 +41,14 @@ def get_knowledge_context(
 
     # --- Knowledge facts ---
     try:
+        facts = []
         if pillar:
             facts = conn.execute(
                 "SELECT fact_type, content FROM web_knowledge WHERE pillar = ? LIMIT ?",
                 (pillar, max_facts),
             ).fetchall()
-        else:
+        # Fall back to unfiltered if pillar match is empty (most entries have NULL pillar)
+        if not facts:
             facts = conn.execute(
                 "SELECT fact_type, content FROM web_knowledge LIMIT ?",
                 (max_facts,),

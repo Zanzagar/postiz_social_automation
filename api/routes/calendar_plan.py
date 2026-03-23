@@ -28,7 +28,7 @@ router = APIRouter(
 def _run_claude(prompt: str) -> str:
     """Run Claude CLI with a prompt and return the response text."""
     result = subprocess.run(
-        ["claude", "-p", prompt],
+        ["claude", "-p", prompt, "--model", "opus", "--effort", "max"],
         capture_output=True,
         text=True,
         timeout=120,
