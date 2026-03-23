@@ -727,6 +727,24 @@ export const api = {
     }>(`/api/media/drive/browse?${params}`);
   },
 
+  getMediaHealth() {
+    return request<{
+      total: number;
+      healthy: number;
+      drive_refs: number;
+      missing_file: Array<{ id: number; filename: string }>;
+      missing_thumb: Array<{ id: number; filename: string }>;
+      orphan_files: number;
+    }>("/api/media-health");
+  },
+
+  mediaCleanup(removeMissing: boolean, removeOrphans: boolean) {
+    return request<{ removed_entries: number; removed_orphans: number }>(
+      `/api/media-cleanup?remove_missing=${removeMissing}&remove_orphans=${removeOrphans}`,
+      { method: "POST" },
+    );
+  },
+
   getDriveSettings() {
     return request<{ folder_id: string }>("/api/media/drive/settings");
   },
