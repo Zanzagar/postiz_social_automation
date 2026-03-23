@@ -147,46 +147,93 @@ async def _process_and_catalog(
     original_url: str | None,
     session: AsyncSession,
 ) -> MediaUploadResponse:
-    """Shared logic: save file, thumbnail, Postiz upload, AI tag, DB insert."""
-    media_dir = _get_media_dir()
-    ext = filename.rsplit(".", 1)[-1] if "." in filename else "jpg"
-    stored_name = f"{uuid.uuid4().hex}.{ext}"
-    file_path = media_dir / stored_name
-    file_path.write_bytes(content)
+    """Upload to Drive, cache thumbnail locally, catalog in DB."""
+    # Upload to Google Drive
+    drive_file_id = None
+    subfolder_map = {
+        "upload": "Uploads",
+        "import_url": "Imports",
+        "social_import": "Social Import",
+    }
+    try:
+        from api.routes.drive import upload_to_drive
 
-    # Image dimensions
+        result = upload_to_drive(content, filename, mime_type, subfolder_map.get(source, "Uploads"))
+        drive_file_id = result["id"]
+    except Exception:
+        logger.warning(
+            "Drive upload failed for %s, storing locally as fallback",
+            filename,
+            exc_info=True,
+        )
+
+    # If Drive upload succeeded, use drive:// reference; else local fallback
+    if drive_file_id:
+        local_path = f"drive://{drive_file_id}"
+        drive_url = f"drive://{drive_file_id}"
+    else:
+        media_dir = _get_media_dir()
+        ext = filename.rsplit(".", 1)[-1] if "." in filename else "jpg"
+        stored_name = f"{uuid.uuid4().hex}.{ext}"
+        file_path = media_dir / stored_name
+        file_path.write_bytes(content)
+        local_path = str(file_path)
+        drive_url = original_url
+
+    # Image dimensions (from content bytes)
     width = height = None
-    try:
-        with Image.open(file_path) as img:
-            width, height = img.size
-    except Exception:
-        pass
+    if mime_type.startswith("image/"):
+        try:
+            import io
 
-    # Thumbnail
-    thumb_path = media_dir / "thumbnails" / f"thumb_{stored_name}"
-    try:
-        _generate_thumbnail(file_path, thumb_path)
-    except Exception:
-        logger.warning("Thumbnail generation failed for %s", stored_name, exc_info=True)
-        thumb_path = None
+            with Image.open(io.BytesIO(content)) as img:
+                width, height = img.size
+        except Exception:
+            pass
 
-    # Postiz upload (non-blocking, optional)
-    postiz_id = None
-    try:
-        postiz_id = _upload_to_postiz(file_path)
-    except Exception:
-        logger.warning("Postiz upload failed for %s", stored_name, exc_info=True)
+    # Thumbnail: fetch from Drive if uploaded, else generate locally
+    thumb_path = None
+    if drive_file_id:
+        try:
+            from api.routes.drive import _fetch_drive_thumbnail, get_drive_service
 
-    # AI tagging
-    tag_results = _classify_media_tags(str(file_path))
+            service = get_drive_service()
+            thumb_path = _fetch_drive_thumbnail(service, drive_file_id)
+        except Exception:
+            pass
+    if not thumb_path and mime_type.startswith("image/"):
+        try:
+            media_dir = _get_media_dir()
+            stored_name = f"{uuid.uuid4().hex}.jpg"
+            tmp_thumb = media_dir / "thumbnails" / f"thumb_{stored_name}"
+            import io
+
+            with Image.open(io.BytesIO(content)) as img:
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                img.thumbnail(THUMBNAIL_SIZE, Image.LANCZOS)
+                img.save(tmp_thumb, format="JPEG")
+            thumb_path = str(tmp_thumb)
+        except Exception:
+            pass
+
+    # AI tagging (only for images, needs temp file)
+    tag_results = []
+    if mime_type.startswith("image/"):
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        tag_results = _classify_media_tags(tmp_path)
+        Path(tmp_path).unlink(missing_ok=True)
 
     # DB insert
     catalog = MediaCatalog(
         filename=filename,
-        original_url=original_url,
-        local_path=str(file_path),
-        postiz_media_id=postiz_id,
-        thumbnail_path=str(thumb_path) if thumb_path else None,
+        original_url=drive_url,
+        local_path=local_path,
+        thumbnail_path=thumb_path,
         mime_type=mime_type,
         width=width,
         height=height,
@@ -197,7 +244,6 @@ async def _process_and_catalog(
     session.add(catalog)
     await session.flush()
 
-    # Insert tags
     for t in tag_results:
         session.add(
             MediaTag(

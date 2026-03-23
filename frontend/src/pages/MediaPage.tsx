@@ -185,9 +185,13 @@ function MediaDetailDialog({
             <div className="space-y-6">
               {/* Image preview */}
               <div className="aspect-video w-full overflow-hidden rounded-lg border border-border bg-muted">
-                {media.thumbnail_path ? (
+                {media.local_path ? (
                   <img
-                    src={`/media/${media.local_path.split("/").pop()}`}
+                    src={
+                      media.local_path.startsWith("drive://")
+                        ? `/api/media/drive/file/${media.local_path.replace("drive://", "")}`
+                        : `/media/${media.local_path.split("/").pop()}`
+                    }
                     alt={media.filename}
                     className="h-full w-full object-contain"
                   />

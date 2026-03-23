@@ -1,29 +1,34 @@
-"""Google Drive media import endpoints."""
+"""Google Drive as central media repository.
 
-import json
+All media (uploads, imports, social scrapes) are stored in Google Drive.
+The local DB holds metadata, tags, and engagement data only.
+Thumbnails are cached locally for fast grid display.
+"""
+
+import io
 import logging
 import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from PIL import Image
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import get_current_user
 from api.dependencies import get_db, get_settings
-from api.models import MediaCatalog, MediaTag
-from api.routes.media import (
-    THUMBNAIL_SIZE,
-    _classify_media_tags,
-    _generate_thumbnail,
-    _upload_to_postiz,
-)
+from api.models import MediaCatalog
 
 logger = logging.getLogger(__name__)
 
-DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+# drive.file: can create/manage files the SA created; can read shared files
+DRIVE_SCOPES = [
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive.readonly",
+]
+
+THUMB_DIR = Path("media/thumbnails")
 
 router = APIRouter(
     prefix="/api/media/drive",
@@ -44,11 +49,109 @@ def get_drive_service():
     return build("drive", "v3", credentials=creds)
 
 
+def _get_or_create_subfolder(service, parent_id: str, name: str) -> str:
+    """Get or create a named subfolder under parent_id. Returns folder ID."""
+    result = (
+        service.files()
+        .list(
+            q=f"'{parent_id}' in parents and name='{name}' "
+            "and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            fields="files(id)",
+        )
+        .execute()
+    )
+    files = result.get("files", [])
+    if files:
+        return files[0]["id"]
+
+    # Create
+    meta = {
+        "name": name,
+        "mimeType": "application/vnd.google-apps.folder",
+        "parents": [parent_id],
+    }
+    folder = service.files().create(body=meta, fields="id").execute()
+    return folder["id"]
+
+
+def upload_to_drive(
+    content: bytes,
+    filename: str,
+    mime_type: str,
+    subfolder: str = "Uploads",
+) -> dict:
+    """Upload a file to Drive under the configured root folder.
+
+    Returns {"id": file_id, "name": filename, "webViewLink": url}.
+    """
+    from googleapiclient.http import MediaInMemoryUpload
+
+    settings = get_settings()
+    if not settings.google_drive_folder_id:
+        raise RuntimeError("GOOGLE_DRIVE_FOLDER_ID not configured")
+
+    service = get_drive_service()
+    folder_id = _get_or_create_subfolder(service, settings.google_drive_folder_id, subfolder)
+
+    file_meta = {"name": filename, "parents": [folder_id]}
+    media = MediaInMemoryUpload(content, mimetype=mime_type, resumable=False)
+    result = (
+        service.files()
+        .create(body=file_meta, media_body=media, fields="id,name,webViewLink")
+        .execute()
+    )
+    return result
+
+
+def _fetch_drive_thumbnail(service, file_id: str) -> str | None:
+    """Fetch thumbnail from Drive API and cache locally. Returns local path or None."""
+    THUMB_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        meta = service.files().get(fileId=file_id, fields="thumbnailLink").execute()
+        thumb_url = meta.get("thumbnailLink")
+        if not thumb_url:
+            return None
+
+        import google.auth.transport.requests
+
+        thumb_url = thumb_url.replace("=s220", "=s400")
+        creds = service._http.credentials
+        auth_session = google.auth.transport.requests.AuthorizedSession(creds)
+        resp = auth_session.get(thumb_url)
+        if resp.status_code == 200 and len(resp.content) > 100:
+            thumb_name = f"thumb_{uuid.uuid4().hex}.jpg"
+            thumb_path = THUMB_DIR / thumb_name
+            thumb_path.write_bytes(resp.content)
+            return str(thumb_path)
+    except Exception:
+        logger.warning("Failed to fetch Drive thumbnail for %s", file_id, exc_info=True)
+    return None
+
+
 def _download_drive_file(service, file_id: str) -> bytes:
     """Download file content from Google Drive."""
     request = service.files().get_media(fileId=file_id)
     content = request.execute()
     return content
+
+
+# ── Proxy (serve Drive files through backend) ───────────────────────
+
+
+@router.get("/file/{file_id}")
+async def proxy_drive_file(file_id: str):
+    """Proxy a Drive file through the backend for authenticated access."""
+    try:
+        service = get_drive_service()
+        meta = service.files().get(fileId=file_id, fields="mimeType,name").execute()
+        content = _download_drive_file(service, file_id)
+        return StreamingResponse(
+            io.BytesIO(content),
+            media_type=meta.get("mimeType", "application/octet-stream"),
+            headers={"Content-Disposition": f'inline; filename="{meta.get("name", "file")}"'},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Drive file not found: {e}")
 
 
 # ── Browse ───────────────────────────────────────────────────────────
@@ -167,7 +270,7 @@ async def update_drive_settings(folder_id: str):
 async def sync_drive(
     session: AsyncSession = Depends(get_db),
 ):
-    """Sync: import new images from configured Drive folder that aren't already in catalog."""
+    """Sync: catalog new files from configured Drive folder (metadata + thumbnail only)."""
     settings = get_settings()
     folder_id = settings.google_drive_folder_id
     if not folder_id:
@@ -181,123 +284,35 @@ async def sync_drive(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Drive auth error: {e}")
 
-    # Get all images recursively
-    all_images = _list_images_recursive(service, folder_id)
+    all_files = _list_images_recursive(service, folder_id)
 
-    # Get already-imported drive file IDs
     existing_result = await session.execute(
         select(MediaCatalog.original_url).where(MediaCatalog.source == "drive")
     )
     existing_urls = {row[0] for row in existing_result if row[0]}
 
-    # Filter to new files only
-    new_files = [img for img in all_images if f"drive://{img['id']}" not in existing_urls]
-
+    new_files = [f for f in all_files if f"drive://{f['id']}" not in existing_urls]
     if not new_files:
-        return {"imported": 0, "skipped": len(all_images), "new_files": 0}
+        return {"imported": 0, "skipped": len(all_files), "errors": []}
 
     imported = 0
     errors: list[dict] = []
-    media_dir = Path("media")
-    media_dir.mkdir(parents=True, exist_ok=True)
-    (media_dir / "thumbnails").mkdir(exist_ok=True)
 
     for file_info in new_files:
         file_id = file_info["id"]
-        drive_url = f"drive://{file_id}"
-        filename = file_info["name"]
-        mime = file_info.get("mime_type", "")
-        is_video = mime.startswith("video/")
-
         try:
-            if is_video:
-                # Videos: catalog metadata only, don't download full file
-                # Fetch thumbnail via authenticated Drive API
-                thumb_path_str = None
-                try:
-                    thumb_resp = (
-                        service.files().get(fileId=file_id, fields="thumbnailLink").execute()
-                    )
-                    thumb_url = thumb_resp.get("thumbnailLink")
-                    if thumb_url:
-                        import google.auth.transport.requests
-
-                        thumb_url = thumb_url.replace("=s220", "=s400")
-                        creds = service._http.credentials
-                        auth_session = google.auth.transport.requests.AuthorizedSession(creds)
-                        resp = auth_session.get(thumb_url)
-                        if resp.status_code == 200 and len(resp.content) > 100:
-                            thumb_name = f"thumb_{uuid.uuid4().hex}.jpg"
-                            thumb_path = media_dir / "thumbnails" / thumb_name
-                            thumb_path.write_bytes(resp.content)
-                            thumb_path_str = str(thumb_path)
-                except Exception:
-                    logger.warning(
-                        "Failed to fetch Drive thumbnail for %s",
-                        filename,
-                        exc_info=True,
-                    )
-
-                catalog = MediaCatalog(
-                    filename=filename,
-                    original_url=drive_url,
-                    local_path=drive_url,  # No local file — reference only
-                    thumbnail_path=thumb_path_str,
-                    mime_type=mime,
-                    file_size=file_info.get("size", 0),
-                    source="drive",
-                )
-                session.add(catalog)
-                imported += 1
-            else:
-                # Images: download, thumbnail, AI tag
-                content = _download_drive_file(service, file_id)
-                ext = filename.rsplit(".", 1)[-1] if "." in filename else "jpg"
-                stored_name = f"{uuid.uuid4().hex}.{ext}"
-                file_path = media_dir / stored_name
-                file_path.write_bytes(content)
-
-                width = height = None
-                try:
-                    with Image.open(file_path) as img:
-                        width, height = img.size
-                except Exception:
-                    pass
-
-                thumb_path = media_dir / "thumbnails" / f"thumb_{stored_name}"
-                try:
-                    _generate_thumbnail(file_path, thumb_path)
-                except Exception:
-                    thumb_path = None
-
-                tag_results = _classify_media_tags(str(file_path))
-
-                catalog = MediaCatalog(
-                    filename=filename,
-                    original_url=drive_url,
-                    local_path=str(file_path),
-                    thumbnail_path=str(thumb_path) if thumb_path else None,
-                    mime_type=mime or "image/jpeg",
-                    width=width,
-                    height=height,
-                    file_size=len(content),
-                    tags=json.dumps([t["tag"] for t in tag_results]) if tag_results else None,
-                    source="drive",
-                )
-                session.add(catalog)
-                await session.flush()
-
-                for t in tag_results:
-                    session.add(
-                        MediaTag(
-                            media_id=catalog.id,
-                            tag=t["tag"],
-                            confidence=t.get("confidence", 0.5),
-                            source="ai",
-                        )
-                    )
-
-                imported += 1
+            thumb_path = _fetch_drive_thumbnail(service, file_id)
+            catalog = MediaCatalog(
+                filename=file_info["name"],
+                original_url=f"drive://{file_id}",
+                local_path=f"drive://{file_id}",
+                thumbnail_path=thumb_path,
+                mime_type=file_info.get("mime_type", ""),
+                file_size=file_info.get("size", 0),
+                source="drive",
+            )
+            session.add(catalog)
+            imported += 1
         except Exception as e:
             logger.warning("Drive sync failed for %s: %s", file_id, e)
             errors.append({"file_id": file_id, "error": str(e)})
@@ -305,12 +320,12 @@ async def sync_drive(
     await session.commit()
     return {
         "imported": imported,
-        "skipped": len(all_images) - len(new_files),
+        "skipped": len(all_files) - len(new_files),
         "errors": errors,
     }
 
 
-# ── Import ───────────────────────────────────────────────────────────
+# ── Import (selective from browse) ──────────────────────────────────
 
 
 class DriveImportRequest(BaseModel):
@@ -329,11 +344,10 @@ async def import_from_drive(
     req: DriveImportRequest,
     session: AsyncSession = Depends(get_db),
 ):
-    """Import files from Google Drive into the media catalog."""
+    """Catalog selected Drive files (metadata + thumbnail only)."""
     if not req.file_ids:
         return {"imported": 0, "errors": [], "skipped": []}
 
-    # Check already-imported files
     existing_result = await session.execute(
         select(MediaCatalog.original_url).where(MediaCatalog.source == "drive")
     )
@@ -347,91 +361,30 @@ async def import_from_drive(
     imported = 0
     errors: list[dict] = []
     skipped: list[str] = []
-    media_dir = Path("media")
-    media_dir.mkdir(parents=True, exist_ok=True)
-    (media_dir / "thumbnails").mkdir(exist_ok=True)
 
     for file_id in req.file_ids:
         drive_url = f"drive://{file_id}"
-
-        # Skip already imported
         if drive_url in existing_urls:
             skipped.append(file_id)
             continue
 
         try:
-            # Get file metadata
             meta = service.files().get(fileId=file_id, fields="id,name,mimeType,size").execute()
-            filename = meta.get("name", f"{file_id}.jpg")
-            mime_type = meta.get("mimeType", "image/jpeg")
+            thumb_path = _fetch_drive_thumbnail(service, file_id)
 
-            # Download
-            content = _download_drive_file(service, file_id)
-
-            # Save locally
-            ext = filename.rsplit(".", 1)[-1] if "." in filename else "jpg"
-            stored_name = f"{uuid.uuid4().hex}.{ext}"
-            file_path = media_dir / stored_name
-            file_path.write_bytes(content)
-
-            # Dimensions
-            width = height = None
-            try:
-                with Image.open(file_path) as img:
-                    width, height = img.size
-            except Exception:
-                pass
-
-            # Thumbnail
-            thumb_path = media_dir / "thumbnails" / f"thumb_{stored_name}"
-            try:
-                with Image.open(file_path) as img:
-                    img.thumbnail(THUMBNAIL_SIZE, Image.LANCZOS)
-                    img.save(thumb_path)
-            except Exception:
-                thumb_path = None
-
-            # Postiz upload
-            postiz_id = None
-            try:
-                postiz_id = _upload_to_postiz(file_path)
-            except Exception:
-                pass
-
-            # AI tagging
-            tag_results = _classify_media_tags(str(file_path))
-
-            # DB insert
             catalog = MediaCatalog(
-                filename=filename,
+                filename=meta.get("name", f"{file_id}"),
                 original_url=drive_url,
-                local_path=str(file_path),
-                postiz_media_id=postiz_id,
-                thumbnail_path=str(thumb_path) if thumb_path else None,
-                mime_type=mime_type,
-                width=width,
-                height=height,
-                file_size=len(content),
-                tags=json.dumps([t["tag"] for t in tag_results]) if tag_results else None,
+                local_path=drive_url,
+                thumbnail_path=thumb_path,
+                mime_type=meta.get("mimeType", ""),
+                file_size=int(meta.get("size", 0)),
                 source="drive",
             )
             session.add(catalog)
-            await session.flush()
-
-            for t in tag_results:
-                session.add(
-                    MediaTag(
-                        media_id=catalog.id,
-                        tag=t["tag"],
-                        confidence=t.get("confidence", 0.5),
-                        source="ai",
-                    )
-                )
-
             imported += 1
-
         except Exception as e:
-            logger.warning("Drive import failed for %s: %s", file_id, e, exc_info=True)
+            logger.warning("Drive import failed for %s: %s", file_id, e)
             errors.append({"file_id": file_id, "error": str(e)})
 
     await session.commit()
