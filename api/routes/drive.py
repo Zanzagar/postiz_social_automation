@@ -49,12 +49,55 @@ def _download_drive_file(service, file_id: str) -> bytes:
 # ── Browse ───────────────────────────────────────────────────────────
 
 
+def _list_images_recursive(service, folder_id: str, max_depth: int = 3) -> list[dict]:
+    """Recursively list image files in a Drive folder and subfolders."""
+    images: list[dict] = []
+
+    def _scan(fid: str, depth: int, parent_path: str) -> None:
+        if depth > max_depth:
+            return
+        # Get all files and folders in this folder
+        page_token = None
+        while True:
+            result = (
+                service.files()
+                .list(
+                    q=f"'{fid}' in parents and trashed = false",
+                    fields="files(id,name,mimeType,size,thumbnailLink),nextPageToken",
+                    pageSize=100,
+                    pageToken=page_token,
+                )
+                .execute()
+            )
+            for f in result.get("files", []):
+                if f["mimeType"] == "application/vnd.google-apps.folder":
+                    subfolder_path = f"{parent_path}{f['name']}/"
+                    _scan(f["id"], depth + 1, subfolder_path)
+                elif f["mimeType"].startswith("image/"):
+                    images.append(
+                        {
+                            "id": f["id"],
+                            "name": f["name"],
+                            "mime_type": f.get("mimeType", ""),
+                            "size": int(f.get("size", 0)),
+                            "thumbnail_link": f.get("thumbnailLink"),
+                            "folder": parent_path.rstrip("/") or "/",
+                        }
+                    )
+            page_token = result.get("nextPageToken")
+            if not page_token:
+                break
+
+    _scan(folder_id, 0, "")
+    return images
+
+
 @router.get("/browse")
 async def browse_drive(
     folder_id: str = Query(...),
-    page_token: str | None = None,
+    recursive: bool = Query(True),
 ):
-    """List image files in a Google Drive folder."""
+    """List image files in a Google Drive folder (recursive by default)."""
     try:
         service = get_drive_service()
     except Exception as e:
@@ -62,18 +105,20 @@ async def browse_drive(
         raise HTTPException(status_code=500, detail=f"Drive auth error: {e}")
 
     try:
-        query = f"'{folder_id}' in parents and mimeType contains 'image/' and trashed = false"
+        if recursive:
+            files = _list_images_recursive(service, folder_id)
+            return {"files": files, "next_page_token": None}
+
+        # Non-recursive: single folder, paginated
         result = (
             service.files()
             .list(
-                q=query,
+                q=f"'{folder_id}' in parents and mimeType contains 'image/' and trashed = false",
                 fields="files(id,name,mimeType,size,thumbnailLink),nextPageToken",
                 pageSize=20,
-                pageToken=page_token,
             )
             .execute()
         )
-
         files = [
             {
                 "id": f["id"],
@@ -81,10 +126,10 @@ async def browse_drive(
                 "mime_type": f.get("mimeType", ""),
                 "size": int(f.get("size", 0)),
                 "thumbnail_link": f.get("thumbnailLink"),
+                "folder": "/",
             }
             for f in result.get("files", [])
         ]
-
         return {
             "files": files,
             "next_page_token": result.get("nextPageToken"),

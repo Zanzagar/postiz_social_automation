@@ -44,15 +44,15 @@ class AnalyticsEngine:
         conn = self._connect()
         rows = conn.execute("""
             SELECT
-                cr.content_pillar as pillar,
+                cr.pillar as pillar,
                 COUNT(*) as post_count,
                 SUM(ac.likes + ac.comments + ac.shares) as total_engagement,
                 AVG(ac.likes + ac.comments + ac.shares) as avg_engagement,
                 SUM(ac.reach) as total_reach
             FROM analytics_cache ac
             JOIN content_rows cr ON ac.content_row_id = cr.id
-            WHERE cr.content_pillar IS NOT NULL
-            GROUP BY cr.content_pillar
+            WHERE cr.pillar IS NOT NULL
+            GROUP BY cr.pillar
             ORDER BY total_engagement DESC
         """).fetchall()
         conn.close()
@@ -75,7 +75,7 @@ class AnalyticsEngine:
             """
             SELECT
                 cr.id,
-                cr.content_pillar as pillar,
+                cr.pillar as pillar,
                 cr.raw_text,
                 cr.date,
                 ac.platform,
