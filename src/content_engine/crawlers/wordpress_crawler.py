@@ -21,10 +21,11 @@ VALID_FACT_TYPES = {"program", "event", "quote", "link", "description"}
 def _call_claude(prompt: str) -> str:
     """Call Claude CLI and return the raw text response."""
     result = subprocess.run(
-        ["claude", "-p", prompt],
+        ["claude", "-p", prompt, "--bare"],
         capture_output=True,
         text=True,
         timeout=300,
+        stdin=subprocess.DEVNULL,
     )
     return result.stdout.strip()
 

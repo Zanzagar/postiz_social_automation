@@ -54,10 +54,11 @@ def _call_claude(prompt: str) -> str:
     """Call Claude Code CLI and return stdout. Raises RuntimeError on failure."""
     try:
         result = subprocess.run(
-            ["claude", "-p", prompt],
+            ["claude", "-p", prompt, "--bare"],
             capture_output=True,
             text=True,
             timeout=CLI_TIMEOUT,
+            stdin=subprocess.DEVNULL,
         )
     except subprocess.TimeoutExpired as e:
         raise RuntimeError(f"Claude CLI timed out after {CLI_TIMEOUT}s") from e

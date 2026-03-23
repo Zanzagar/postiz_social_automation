@@ -94,10 +94,11 @@ def _classify_media_tags(image_path: str) -> list[dict]:
     )
     try:
         result = subprocess.run(
-            ["claude", "-p", prompt, "--image", image_path],
+            ["claude", "-p", prompt, "--bare", "--image", image_path],
             capture_output=True,
             text=True,
             timeout=120,
+            stdin=subprocess.DEVNULL,
         )
         if result.returncode == 0:
             # Strip markdown fences if present

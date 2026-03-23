@@ -43,19 +43,20 @@ def check_oauth_health() -> tuple[bool, str]:
     """
     try:
         result = subprocess.run(
-            ["claude", "-p", "Say OK"],
+            ["claude", "-p", "Say OK", "--bare", "--output-format", "text"],
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=30,
+            stdin=subprocess.DEVNULL,
         )
         if result.returncode == 0 and "OK" in result.stdout:
             return True, "OAuth token valid"
 
-        stderr = result.stderr.lower()
-        if "not authenticated" in stderr or "login" in stderr:
-            return False, "OAuth token expired — run 'claude login' to re-authenticate"
+        output = (result.stderr + result.stdout).lower()
+        if "not logged in" in output or "login" in output or "not authenticated" in output:
+            return False, "OAuth token expired — run 'claude /login' to re-authenticate"
 
-        return False, f"Claude CLI error: {result.stderr.strip()}"
+        return False, f"Claude CLI error: {(result.stderr or result.stdout).strip()}"
     except subprocess.TimeoutExpired:
         return False, "Claude CLI timeout — token check took too long"
     except FileNotFoundError:
