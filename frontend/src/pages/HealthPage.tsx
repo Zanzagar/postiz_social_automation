@@ -25,7 +25,8 @@ export function HealthPage() {
   const { data: health, isLoading: healthLoading } = useQuery({
     queryKey: ["health"],
     queryFn: () => api.getHealth(),
-    refetchInterval: 30_000,
+    refetchInterval: 120_000,
+    staleTime: 60_000,
   });
 
   const { data: integrations, isLoading: intLoading } = useQuery({

@@ -46,7 +46,7 @@ def check_oauth_health() -> tuple[bool, str]:
             ["claude", "-p", "Say OK"],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=60,
         )
         if result.returncode == 0 and "OK" in result.stdout:
             return True, "OAuth token valid"
