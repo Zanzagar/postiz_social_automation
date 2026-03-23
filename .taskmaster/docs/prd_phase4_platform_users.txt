@@ -6,8 +6,18 @@ Add lightweight multi-user support with audit trails, audience segmentation for 
 ## Background
 Phases 1-3 established SQLite content management, AI iteration, templates, auto-publish, web intelligence, analytics, media catalog, and calendar planning. The system currently uses a single shared password with no user identity. Content is generated with a universal voice — no audience targeting. Postiz admin requires opening a separate tab.
 
+**Phase 3 architecture changes (must account for):**
+- **Google Drive is the central media repository.** All media (uploads, imports, social scrapes) are stored in Drive. Local DB holds metadata + thumbnail cache only. No local file storage for media.
+- **Media upload pushes TO Drive** (Uploads subfolder), falls back to local if Drive unavailable.
+- **Drive proxy endpoint** (`GET /api/media/drive/file/{id}`) serves full-res files and streams video with range requests. This endpoint is unauthenticated (file IDs are unguessable).
+- **Media health system** (`GET /api/media-health`, `POST /api/media-cleanup`) keeps DB and filesystem in sync.
+- **Video support** was added beyond original PRD scope — videos cataloged as metadata-only with Drive thumbnails.
+- **Thumbnail size** is 400x400 (not 200x200 as originally planned).
+
 ## Prerequisites
 - Phase 1-3 complete: SQLite database with all Phase 1-3 tables, ContentEditor, analytics, media catalog
+- Google Drive configured as media repository (GOOGLE_DRIVE_FOLDER_ID in .env)
+- Google service account with drive.file + drive.readonly scopes
 - Postiz API access configured
 - Postiz MCP server available at sethpc.xyz/mcp (for feature 3)
 
@@ -54,7 +64,8 @@ Different messaging for different audience segments, integrated into AI generati
 - ContentEditor and Create page: audience segment dropdown
 - When generating/iterating captions: if segment is set, inject segment's tone_instructions, vocabulary, and avoid_terms into Claude prompt alongside brand rules and platform instructions
 - If no segment set: default behavior based on platform's natural audience (e.g., LinkedIn → general public tone)
-- Calendar AI planning (Phase 3): consider audience mix balance when suggesting content ("this week is heavy on devotee content, suggest a general public post")
+- Calendar AI planning (Phase 3): consider audience mix balance when suggesting content ("this week is heavy on devotee content, suggest a general public post"). **NOTE:** Calendar planning endpoint is `POST /api/calendar/plan` in `api/routes/calendar_plan.py` — the prompt builder (`_build_prompt`) is where segment context should be injected.
+- **NOTE:** Media suggestions (`GET /api/media/suggest`) could also consider segment — e.g., devotee segment favors deity images, general public favors farm/nature images. Scoring in `api/routes/media.py:suggest_media()`.
 - NOTE: Pillar references in audience segmentation should use the dynamic `pillars` table (Phase 1), not hardcoded names
 - Settings page: manage audience segments (create, edit, delete)
 
@@ -73,8 +84,10 @@ Add optional MCP path for Claude CLI conversational scheduling.
 ### 5. Embedded Postiz Admin — Connected Accounts
 Show Postiz-connected social accounts in our dashboard.
 
+**NOTE:** `GET /api/integrations` already exists from Phase 1 (api/routes/postiz.py). The Health page already shows integrations. This feature enhances the display.
+
 **Requirements:**
-- `GET /api/postiz/integrations` endpoint: proxy to Postiz `GET /integrations`, return list of connected accounts with id, name, platform, picture, profile URL
+- Enhance existing `GET /api/integrations` or create `GET /api/postiz/integrations`: proxy to Postiz `GET /integrations`, return list of connected accounts with id, name, platform, picture, profile URL
 - Dashboard page or section: "Connected Accounts" showing each platform with icon, name, status (connected/disconnected)
 - Refresh button to re-fetch from Postiz
 
