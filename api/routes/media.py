@@ -94,32 +94,19 @@ def _classify_media_tags(image_path: str) -> list[dict]:
     )
     try:
         result = subprocess.run(
-            ["claude", "-p", prompt, "--output-format", "text", "--image", image_path],
+            ["claude", "-p", prompt, "--image", image_path],
             capture_output=True,
             text=True,
             timeout=120,
             stdin=subprocess.DEVNULL,
         )
-        output = result.stdout.strip()
-        if (
-            not output
-            and isinstance(result, subprocess.CompletedProcess)
-            and result.returncode != 0
-        ):
-            raise RuntimeError(result.stderr[:200])
-        # Strip markdown fences if present
-        if output.startswith("```"):
-            output = output.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-        return json.loads(output)
-    except subprocess.TimeoutExpired as e:
-        stdout = (e.stdout or b"").decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
-        if stdout.strip():
-            output = stdout.strip()
+        if result.returncode == 0:
+            # Strip markdown fences if present
+            output = result.stdout.strip()
             if output.startswith("```"):
                 output = output.split("\n", 1)[1].rsplit("```", 1)[0].strip()
             return json.loads(output)
-        logger.warning("AI tagging timed out for %s", image_path)
-    except (json.JSONDecodeError, Exception):
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception):
         logger.warning("AI tagging failed for %s", image_path, exc_info=True)
     return []
 

@@ -27,19 +27,13 @@ router = APIRouter(
 
 def _run_claude(prompt: str) -> str:
     """Run Claude CLI with a prompt and return the response text."""
-    try:
-        result = subprocess.run(
-            ["claude", "-p", prompt, "--output-format", "text"],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            stdin=subprocess.DEVNULL,
-        )
-    except subprocess.TimeoutExpired as e:
-        stdout = (e.stdout or b"").decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
-        if stdout.strip():
-            return stdout.strip()
-        raise RuntimeError("Claude CLI timed out after 120s") from e
+    result = subprocess.run(
+        ["claude", "-p", prompt],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        stdin=subprocess.DEVNULL,
+    )
     if result.returncode != 0:
         raise RuntimeError(f"Claude CLI failed: {result.stderr[:200]}")
     return result.stdout.strip()
