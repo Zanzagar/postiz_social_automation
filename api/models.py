@@ -227,6 +227,21 @@ class BrandSettings(Base):
     )
 
 
+class FewShotExample(Base):
+    __tablename__ = "few_shot_examples"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    platform: Mapped[str] = mapped_column(String(50), nullable=False)
+    pillar: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    caption: Mapped[str] = mapped_column(Text, nullable=False)
+    engagement_score: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.0)
+    is_active: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=True)
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, default=lambda: datetime.now(UTC)
+    )
+
+
 # --- Phase 3: Media & Planning ---
 
 

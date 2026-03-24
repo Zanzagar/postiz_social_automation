@@ -160,3 +160,85 @@ async def delete_voice_rule(index: int):
         data["rules"] = rules
         _RULES_PATH.write_text(json.dumps(data, indent=2))
     return {"ok": True, "count": len(rules)}
+
+
+# --- Few-Shot Examples ---
+
+
+class FewShotCreate(BaseModel):
+    platform: str
+    pillar: str | None = None
+    raw_text: str | None = None
+    caption: str
+    engagement_score: float = 0.0
+
+
+@router.get("/few-shot")
+async def list_few_shot_examples(session=Depends(get_db)):
+    """List all active few-shot examples."""
+    try:
+        result = await session.execute(
+            text(
+                "SELECT id, platform, pillar, raw_text, caption, "
+                "engagement_score FROM few_shot_examples "
+                "WHERE is_active = 1 ORDER BY engagement_score DESC"
+            )
+        )
+        rows = result.fetchall()
+    except Exception:
+        return []
+    return [
+        {
+            "id": r[0],
+            "platform": r[1],
+            "pillar": r[2],
+            "raw_text": r[3],
+            "caption": r[4],
+            "engagement_score": r[5],
+        }
+        for r in rows
+    ]
+
+
+@router.post("/few-shot")
+async def create_few_shot_example(req: FewShotCreate, session=Depends(get_db)):
+    """Add a new few-shot example."""
+    await session.execute(
+        text(
+            "INSERT INTO few_shot_examples "
+            "(platform, pillar, raw_text, caption, engagement_score, "
+            "is_active) "
+            "VALUES (:platform, :pillar, :raw_text, :caption, :score, 1)"
+        ),
+        {
+            "platform": req.platform,
+            "pillar": req.pillar,
+            "raw_text": req.raw_text,
+            "caption": req.caption,
+            "score": req.engagement_score,
+        },
+    )
+    await session.commit()
+
+    # Return the created row
+    result = await session.execute(text("SELECT last_insert_rowid()"))
+    row_id = result.scalar()
+    return {
+        "id": row_id,
+        "platform": req.platform,
+        "pillar": req.pillar,
+        "raw_text": req.raw_text,
+        "caption": req.caption,
+        "engagement_score": req.engagement_score,
+    }
+
+
+@router.delete("/few-shot/{example_id}")
+async def delete_few_shot_example(example_id: int, session=Depends(get_db)):
+    """Soft-delete a few-shot example."""
+    await session.execute(
+        text("UPDATE few_shot_examples SET is_active = 0 WHERE id = :id"),
+        {"id": example_id},
+    )
+    await session.commit()
+    return {"ok": True}
