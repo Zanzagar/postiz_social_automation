@@ -30,6 +30,7 @@ import {
   PenLine,
   Copy,
   Save,
+  Undo2,
 } from "lucide-react";
 import { SuggestedMediaPanel } from "@/components/content/SuggestedMediaPanel";
 
@@ -187,6 +188,23 @@ export function ContentEditor({
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Iteration failed");
+    } finally {
+      setIsIterating(false);
+    }
+  }
+
+  async function handleRevert() {
+    if (!contentRow || !activeTab) return;
+    setIsIterating(true);
+    setError("");
+    try {
+      const result = await api.revertCaption(contentRow.row_number, activeTab);
+      setCaptions((prev) => ({ ...prev, [activeTab]: result.caption }));
+      queryClient.invalidateQueries({
+        queryKey: ["iterations", contentRow.row_number],
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Revert failed");
     } finally {
       setIsIterating(false);
     }
@@ -659,6 +677,16 @@ export function ContentEditor({
                   ) : (
                     <RotateCcw className="h-4 w-4" />
                   )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRevert}
+                  disabled={isIterating}
+                  aria-label="Revert to original"
+                  title="Revert to original"
+                >
+                  <Undo2 className="h-4 w-4" />
                 </Button>
               </div>
             </TabsContent>

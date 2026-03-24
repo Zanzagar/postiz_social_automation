@@ -543,6 +543,19 @@ export const api = {
     return request<IterationRecord[]>(`/api/iterations/${contentId}`);
   },
 
+  revertCaption(contentRowId: number, platform: string, iterationId?: number) {
+    const params = new URLSearchParams({
+      content_row_id: String(contentRowId),
+      platform,
+    });
+    if (iterationId !== undefined) {
+      params.set("iteration_id", String(iterationId));
+    }
+    return request<IterateResponse>(`/api/iterate/revert?${params}`, {
+      method: "POST",
+    });
+  },
+
   // Templates
   getTemplates() {
     return request<Template[]>("/api/templates");
