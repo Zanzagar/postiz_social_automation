@@ -17,7 +17,6 @@ from pathlib import Path
 from content_engine.models import ContentRow, Platform, Suggestion
 from content_engine.rate_limiter import rate_limit_sync
 from content_engine.slop_detector import SlopDetector
-from content_engine.two_stage_generator import TwoStageGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +125,7 @@ class CaptionGenerator:
         self.learned_rules = self._load_learned_rules()
         self.slop_detector = SlopDetector()
         self.last_slop_result = None
-        # Lazy import to avoid circular dependency (two_stage_generator imports _call_claude)
+        # Lazy import to avoid circular dependency
         from content_engine.two_stage_generator import TwoStageGenerator
 
         self.two_stage = TwoStageGenerator(data_dir=data_dir)
