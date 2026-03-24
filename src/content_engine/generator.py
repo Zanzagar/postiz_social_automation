@@ -93,6 +93,7 @@ class CaptionGenerator:
         self.db_path = db_path or str(data_dir / "gvsa.db")
         self.learning_context = self._load_learning_context()
         self.voice_profile = self._load_voice_profile()
+        self.learned_rules = self._load_learned_rules()
 
     def generate_captions(
         self, row: ContentRow, feedback: str | None = None
@@ -194,6 +195,9 @@ class CaptionGenerator:
         voice = self._format_voice_profile()
         if voice:
             parts.append(voice)
+        rules = self._format_learned_rules()
+        if rules:
+            parts.append(rules)
         if knowledge_ctx:
             parts.append(knowledge_ctx)
 
@@ -224,6 +228,9 @@ class CaptionGenerator:
         voice = self._format_voice_profile()
         if voice:
             parts.append(voice)
+        rules = self._format_learned_rules()
+        if rules:
+            parts.append(rules)
 
         # Knowledge base context
         knowledge_ctx = self._get_knowledge_context(row.content_pillar)
@@ -265,6 +272,9 @@ class CaptionGenerator:
         voice = self._format_voice_profile()
         if voice:
             parts.append(voice)
+        rules = self._format_learned_rules()
+        if rules:
+            parts.append(rules)
 
         knowledge_ctx = self._get_knowledge_context()
         if knowledge_ctx:
@@ -315,6 +325,24 @@ class CaptionGenerator:
         if path.exists():
             return json.loads(path.read_text())
         return {}
+
+    def _load_learned_rules(self) -> list[str]:
+        """Load learned editing rules from data/learned-rules.json."""
+        path = self.data_dir / "learned-rules.json"
+        if path.exists():
+            data = json.loads(path.read_text())
+            return data.get("rules", [])
+        return []
+
+    def _format_learned_rules(self) -> str:
+        """Format learned rules as a prompt section."""
+        if not self.learned_rules:
+            return ""
+        parts = ["LEARNED PREFERENCES (from past editing sessions — follow these):"]
+        for rule in self.learned_rules:
+            parts.append(f"- {rule}")
+        parts.append("")
+        return "\n".join(parts)
 
     def _format_voice_profile(self) -> str:
         """Format voice profile as a prompt section."""
