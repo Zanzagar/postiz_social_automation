@@ -40,18 +40,18 @@ VOICE & TONE:
 
 PLATFORM_INSTRUCTIONS: dict[Platform, str] = {
     Platform.INSTAGRAM: (
-        "Visual focus, 5-10 hashtags, emoji-rich, 150-200 words, CTA in last line"
+        "Visual focus, 3-5 hashtags, 1-2 emojis max, 30-80 words. Short caption, not an essay."
     ),
     Platform.FACEBOOK: (
-        "Storytelling, 200-300 words, question to spark comments, link to gitavalley.org"
+        "30-80 words. Question at the end to spark comments. Link to gitavalley.org. "
+        "Do NOT write more than 100 words — our best posts are under 60."
     ),
     Platform.TIKTOK: (
-        "Short hook (first 3 words grab attention), trending language, "
-        "2-3 hashtags, under 100 words"
+        "Short hook (first 3 words grab attention), trending language, 2-3 hashtags, under 50 words"
     ),
-    Platform.THREADS: "Conversational, no hashtags, 1-2 sentences, thought-provoking",
+    Platform.THREADS: "Conversational, no hashtags, 1-2 sentences max",
     Platform.LINKEDIN: (
-        "Professional, impact-focused, university partnership angles, 100-150 words"
+        "Professional, impact-focused, university partnership angles, 60-100 words"
     ),
 }
 
@@ -66,7 +66,7 @@ def _call_claude(prompt: str) -> str:
     """Call Claude Code CLI and return stdout. Raises RuntimeError on failure."""
     try:
         result = subprocess.run(
-            ["claude", "-p", prompt, "--model", "opus", "--effort", "max"],
+            ["claude", "-p", prompt, "--model", "sonnet"],
             capture_output=True,
             text=True,
             timeout=CLI_TIMEOUT,
