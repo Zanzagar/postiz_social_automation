@@ -1,8 +1,10 @@
-"""Auto-publish configuration endpoints."""
+"""Settings endpoints: auto-publish config, voice rules."""
 
 import json
+from pathlib import Path
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
 from api.auth import get_current_user
 from api.dependencies import get_content_repo
@@ -12,6 +14,8 @@ from api.schemas import (
     PublishConfigResponse,
     UpdatePublishConfigRequest,
 )
+
+_RULES_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "learned-rules.json"
 
 router = APIRouter(
     prefix="/api/settings", tags=["settings"], dependencies=[Depends(get_current_user)]
@@ -59,3 +63,57 @@ async def update_publish_config(
 
     configs = await repo.get_publish_configs()
     return PublishConfigResponse(platforms=[_config_to_response(c) for c in configs])
+
+
+# --- Voice Rules ---
+
+
+class VoiceRulesResponse(BaseModel):
+    rules: list[str]
+    summary: str
+
+
+class VoiceRulesUpdate(BaseModel):
+    rules: list[str]
+
+
+def _load_rules() -> dict:
+    if _RULES_PATH.exists():
+        return json.loads(_RULES_PATH.read_text())
+    return {"rules": [], "summary": ""}
+
+
+@router.get("/voice-rules", response_model=VoiceRulesResponse)
+async def get_voice_rules():
+    """Return current voice rules."""
+    data = _load_rules()
+    return VoiceRulesResponse(rules=data.get("rules", []), summary=data.get("summary", ""))
+
+
+@router.put("/voice-rules", response_model=VoiceRulesResponse)
+async def update_voice_rules(req: VoiceRulesUpdate):
+    """Replace all voice rules."""
+    data = {"rules": req.rules, "summary": "User-defined rules"}
+    _RULES_PATH.write_text(json.dumps(data, indent=2))
+    return VoiceRulesResponse(**data)
+
+
+@router.post("/voice-rules")
+async def add_voice_rule(rule: str):
+    """Add a single voice rule."""
+    data = _load_rules()
+    data["rules"].append(rule)
+    _RULES_PATH.write_text(json.dumps(data, indent=2))
+    return {"ok": True, "count": len(data["rules"])}
+
+
+@router.delete("/voice-rules/{index}")
+async def delete_voice_rule(index: int):
+    """Delete a voice rule by index."""
+    data = _load_rules()
+    rules = data.get("rules", [])
+    if 0 <= index < len(rules):
+        rules.pop(index)
+        data["rules"] = rules
+        _RULES_PATH.write_text(json.dumps(data, indent=2))
+    return {"ok": True, "count": len(rules)}

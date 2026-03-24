@@ -99,6 +99,17 @@ class ContentRepository:
         )
         return list(result.scalars().all())
 
+    async def delete_iteration(self, iteration_id: int) -> bool:
+        result = await self.session.execute(
+            select(ContentIteration).where(ContentIteration.id == iteration_id)
+        )
+        iteration = result.scalar_one_or_none()
+        if not iteration:
+            return False
+        await self.session.delete(iteration)
+        await self.session.commit()
+        return True
+
     # --- Template ---
 
     async def create_template(self, data: dict) -> Template:

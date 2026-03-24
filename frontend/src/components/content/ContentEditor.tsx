@@ -30,7 +30,10 @@ import {
   PenLine,
   Copy,
   Save,
+  Undo2,
+  Trash2,
 } from "lucide-react";
+import { SuggestedMediaPanel } from "@/components/content/SuggestedMediaPanel";
 
 // --- Platform config ---
 
@@ -101,6 +104,7 @@ export function ContentEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [expandedIter, setExpandedIter] = useState<Set<number>>(new Set());
+  const [attachedMediaIds, setAttachedMediaIds] = useState<number[]>([]);
   const prevRowIdRef = useRef<number | null>(null);
 
   // Repurpose state
@@ -185,6 +189,23 @@ export function ContentEditor({
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Iteration failed");
+    } finally {
+      setIsIterating(false);
+    }
+  }
+
+  async function handleRevert() {
+    if (!contentRow || !activeTab) return;
+    setIsIterating(true);
+    setError("");
+    try {
+      const result = await api.revertCaption(contentRow.row_number, activeTab);
+      setCaptions((prev) => ({ ...prev, [activeTab]: result.caption }));
+      queryClient.invalidateQueries({
+        queryKey: ["iterations", contentRow.row_number],
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Revert failed");
     } finally {
       setIsIterating(false);
     }
@@ -658,6 +679,16 @@ export function ContentEditor({
                     <RotateCcw className="h-4 w-4" />
                   )}
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRevert}
+                  disabled={isIterating}
+                  aria-label="Revert to original"
+                  title="Revert to original"
+                >
+                  <Undo2 className="h-4 w-4" />
+                </Button>
               </div>
             </TabsContent>
           ))}
@@ -728,7 +759,25 @@ export function ContentEditor({
                         <div className="rounded-md bg-muted/30 px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
                           {iter.new_caption}
                         </div>
-                        <div className="mt-2 flex justify-end">
+                        <div className="mt-2 flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-destructive hover:text-destructive"
+                            onClick={async () => {
+                              try {
+                                await api.deleteIteration(iter.id);
+                                queryClient.invalidateQueries({
+                                  queryKey: ["iterations", contentRow?.row_number],
+                                });
+                              } catch {
+                                setError("Failed to delete iteration");
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" />
+                            Delete
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
@@ -748,6 +797,15 @@ export function ContentEditor({
               })}
             </div>
           </div>
+        )}
+
+        {/* Suggested Media Panel */}
+        {contentRow && mode !== "create" && (
+          <SuggestedMediaPanel
+            contentRowId={contentRow.row_number}
+            attachedMediaIds={attachedMediaIds}
+            onAttachChange={setAttachedMediaIds}
+          />
         )}
 
         {/* Footer actions */}

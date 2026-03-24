@@ -343,6 +343,107 @@ export interface GraphData {
   links: Array<{ source: string; target: string }>;
 }
 
+// --- Media Types ---
+
+export interface MediaItem {
+  id: number;
+  filename: string;
+  local_path: string;
+  thumbnail_path: string | null;
+  mime_type: string;
+  width: number | null;
+  height: number | null;
+  file_size: number | null;
+  pillar: string | null;
+  source: string;
+  usage_count: number;
+  avg_engagement: number;
+  created_at: string;
+}
+
+export interface MediaBrowseResponse {
+  items: MediaItem[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export interface MediaTag {
+  id: number;
+  tag: string;
+  confidence: number;
+  source: string;
+}
+
+export interface MediaUsage {
+  content_row_id: number;
+  date: string | null;
+  status: string;
+  pillar: string | null;
+}
+
+export interface MediaPerformance {
+  id: number;
+  platform: string;
+  engagement_score: number;
+  content_row_id: number | null;
+  fetched_at: string;
+}
+
+export interface MediaDetailResponse {
+  media: MediaItem;
+  tags: MediaTag[];
+  usage: MediaUsage[];
+  performance: MediaPerformance[];
+}
+
+export interface MediaBrowseParams {
+  tag?: string;
+  pillar?: string;
+  source?: string;
+  sort?: string;
+  page?: number;
+  per_page?: number;
+}
+
+export interface CalendarPlanSlot {
+  date: string;
+  time: string | null;
+  pillar: string | null;
+  topic: string | null;
+  content_idea: string;
+  recommended_media_id: number | null;
+  target_platforms: string[];
+}
+
+export interface CalendarPlanResponse {
+  id: number;
+  date_range_start: string;
+  date_range_end: string;
+  platforms: string[];
+  slots: CalendarPlanSlot[];
+  status: string;
+  created_at: string;
+}
+
+export interface Festival {
+  name: string;
+  date: string;
+  significance: string;
+  suggested_content_angles: string[];
+  topic: string;
+  content_pillar: string;
+}
+
+export interface MediaSuggestion {
+  media_id: number;
+  thumbnail_path: string | null;
+  filename: string;
+  relevance_score: number;
+  match_reasons: string[];
+}
+
 // --- API Functions ---
 
 export const api = {
@@ -442,6 +543,25 @@ export const api = {
     return request<IterationRecord[]>(`/api/iterations/${contentId}`);
   },
 
+  revertCaption(contentRowId: number, platform: string, iterationId?: number) {
+    const params = new URLSearchParams({
+      content_row_id: String(contentRowId),
+      platform,
+    });
+    if (iterationId !== undefined) {
+      params.set("iteration_id", String(iterationId));
+    }
+    return request<IterateResponse>(`/api/iterate/revert?${params}`, {
+      method: "POST",
+    });
+  },
+
+  deleteIteration(iterationId: number) {
+    return request<{ ok: boolean }>(`/api/iterations/${iterationId}`, {
+      method: "DELETE",
+    });
+  },
+
   // Templates
   getTemplates() {
     return request<Template[]>("/api/templates");
@@ -529,6 +649,17 @@ export const api = {
     });
   },
 
+  getVoiceRules() {
+    return request<{ rules: string[]; summary: string }>("/api/settings/voice-rules");
+  },
+
+  updateVoiceRules(rules: string[]) {
+    return request<{ rules: string[]; summary: string }>("/api/settings/voice-rules", {
+      method: "PUT",
+      body: JSON.stringify({ rules }),
+    });
+  },
+
   // Analytics
   getAnalyticsOverview() {
     return request<AnalyticsOverview>("/api/analytics/overview");
@@ -584,6 +715,140 @@ export const api = {
     if (pillar) params.set("pillar", pillar);
     return request<{ results: Array<{ id: number; fact_type: string; content: string; pillar: string; page_title: string; page_url: string; site: string }>; count: number }>(
       `/api/knowledge/search?${params}`,
+    );
+  },
+
+  // Media
+  getMedia(params: MediaBrowseParams = {}) {
+    const searchParams = new URLSearchParams();
+    if (params.tag) searchParams.set("tag", params.tag);
+    if (params.pillar) searchParams.set("pillar", params.pillar);
+    if (params.source) searchParams.set("source", params.source);
+    if (params.sort) searchParams.set("sort", params.sort);
+    if (params.page) searchParams.set("page", String(params.page));
+    if (params.per_page) searchParams.set("per_page", String(params.per_page));
+    return request<MediaBrowseResponse>(`/api/media?${searchParams}`);
+  },
+
+  getMediaDetail(id: number) {
+    return request<MediaDetailResponse>(`/api/media/${id}`);
+  },
+
+  updateMediaTags(id: number, add: string[], remove: string[]) {
+    return request<{ tags: MediaTag[] }>(`/api/media/${id}/tags`, {
+      method: "PUT",
+      body: JSON.stringify({ add, remove }),
+    });
+  },
+
+  deleteMedia(id: number) {
+    return request<{ deleted: boolean; id: number }>(`/api/media/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  // Drive
+  browseDrive(folderId: string, pageToken?: string) {
+    const params = new URLSearchParams({ folder_id: folderId });
+    if (pageToken) params.set("page_token", pageToken);
+    return request<{
+      files: Array<{ id: string; name: string; mime_type: string; size: number; thumbnail_link: string | null }>;
+      next_page_token: string | null;
+    }>(`/api/media/drive/browse?${params}`);
+  },
+
+  getMediaHealth() {
+    return request<{
+      total: number;
+      healthy: number;
+      drive_refs: number;
+      missing_file: Array<{ id: number; filename: string }>;
+      missing_thumb: Array<{ id: number; filename: string }>;
+      orphan_files: number;
+    }>("/api/media-health");
+  },
+
+  mediaCleanup(removeMissing: boolean, removeOrphans: boolean) {
+    return request<{ removed_entries: number; removed_orphans: number }>(
+      `/api/media-cleanup?remove_missing=${removeMissing}&remove_orphans=${removeOrphans}`,
+      { method: "POST" },
+    );
+  },
+
+  getDriveSettings() {
+    return request<{ folder_id: string }>("/api/media/drive/settings");
+  },
+
+  syncDrive() {
+    return request<{ imported: number; skipped: number; errors: Array<{ file_id: string; error: string }> }>(
+      "/api/media/drive/sync",
+      { method: "POST" },
+    );
+  },
+
+  importFromDrive(fileIds: string[]) {
+    return request<{ imported: number; errors: Array<{ file_id: string; error: string }>; skipped: string[] }>(
+      "/api/media/import-drive",
+      { method: "POST", body: JSON.stringify({ file_ids: fileIds }) },
+    );
+  },
+
+  // Calendar Plans
+  createCalendarPlan(data: {
+    date_range_start: string;
+    date_range_end: string;
+    platforms: string[];
+    constraints?: string;
+  }) {
+    return request<CalendarPlanResponse>("/api/calendar/plan", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  getCalendarPlan(id: number) {
+    return request<CalendarPlanResponse>(`/api/calendar/plan/${id}`);
+  },
+
+  getCalendarPlans(status?: string) {
+    const params = status ? `?status=${status}` : "";
+    return request<{ plans: CalendarPlanResponse[] }>(`/api/calendar/plans${params}`);
+  },
+
+  approveCalendarPlan(id: number, slotIndices?: number[]) {
+    return request<{ created_count: number; content_row_ids: number[] }>(
+      `/api/calendar/plan/${id}/approve`,
+      {
+        method: "POST",
+        body: JSON.stringify({ slot_indices: slotIndices ?? null }),
+      },
+    );
+  },
+
+  getFestivals(from?: string, to?: string) {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    return request<Festival[]>(`/api/festivals?${params}`);
+  },
+
+  suggestMedia(contentRowId: number) {
+    return request<{ suggestions: MediaSuggestion[] }>(
+      `/api/media/suggest?content_row_id=${contentRowId}`,
+    );
+  },
+
+  attachMedia(contentRowId: number, mediaId: number) {
+    return request<{ media_catalog_ids: number[] }>(
+      `/api/content/${contentRowId}/attach-media?media_id=${mediaId}`,
+      { method: "PUT" },
+    );
+  },
+
+  detachMedia(contentRowId: number, mediaId: number) {
+    return request<{ media_catalog_ids: number[] }>(
+      `/api/content/${contentRowId}/detach-media?media_id=${mediaId}`,
+      { method: "PUT" },
     );
   },
 };

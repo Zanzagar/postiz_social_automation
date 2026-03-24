@@ -1,4 +1,4 @@
-"""Tests for SQLAlchemy database models (Phase 1 — Task #1)."""
+"""Tests for SQLAlchemy database models (Phase 1 — Task #1, Phase 3 — Task #1)."""
 
 import json
 from datetime import UTC, datetime
@@ -7,7 +7,19 @@ import pytest
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import Session
 
-from api.models import Base, ContentIteration, ContentRow, PublishConfig, Template, User
+from api.models import (
+    Base,
+    CalendarPlan,
+    ContentIteration,
+    ContentRow,
+    MediaAdapted,
+    MediaCatalog,
+    MediaPerformance,
+    MediaTag,
+    PublishConfig,
+    Template,
+    User,
+)
 
 
 @pytest.fixture
@@ -44,6 +56,12 @@ class TestTableCreation:
             "social_history",
             "analytics_cache",
             "hashtag_performance",
+            # Phase 3
+            "media_catalog",
+            "media_tags",
+            "media_performance",
+            "media_adapted",
+            "calendar_plans",
         }
         assert expected == tables
 
@@ -299,3 +317,236 @@ class TestPublishConfigModel:
 
         assert config.enabled is False
         assert config.delay_hours == 2
+
+
+# --- Phase 3: Media & Planning ---
+
+
+class TestMediaCatalogModel:
+    def test_create_media(self, session):
+        media = MediaCatalog(
+            filename="cow-pasture.jpg",
+            local_path="media/cow-pasture.jpg",
+            mime_type="image/jpeg",
+            width=1920,
+            height=1080,
+            file_size=245000,
+            tags=json.dumps(["cows", "farm", "outdoor"]),
+            topic="Cow Protection",
+            pillar="farm_community",
+            source="upload",
+        )
+        session.add(media)
+        session.commit()
+
+        assert media.id is not None
+        assert media.filename == "cow-pasture.jpg"
+        assert media.usage_count == 0
+        assert media.avg_engagement == 0.0
+        assert media.created_at is not None
+
+    def test_media_columns(self, engine):
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("media_catalog")}
+        expected = {
+            "id",
+            "filename",
+            "original_url",
+            "local_path",
+            "postiz_media_id",
+            "thumbnail_path",
+            "mime_type",
+            "width",
+            "height",
+            "file_size",
+            "tags",
+            "topic",
+            "pillar",
+            "source",
+            "usage_count",
+            "avg_engagement",
+            "created_by",
+            "created_at",
+        }
+        assert expected == columns
+
+    def test_media_defaults(self, session):
+        media = MediaCatalog(
+            filename="test.png",
+            local_path="media/test.png",
+            mime_type="image/png",
+            source="upload",
+        )
+        session.add(media)
+        session.commit()
+
+        assert media.usage_count == 0
+        assert media.avg_engagement == 0.0
+        assert media.width is None
+        assert media.height is None
+
+
+class TestMediaTagModel:
+    def test_create_tag(self, session):
+        media = MediaCatalog(
+            filename="test.jpg",
+            local_path="media/test.jpg",
+            mime_type="image/jpeg",
+            source="upload",
+        )
+        session.add(media)
+        session.commit()
+
+        tag = MediaTag(
+            media_id=media.id,
+            tag="cows",
+            confidence=0.95,
+            source="ai",
+        )
+        session.add(tag)
+        session.commit()
+
+        assert tag.id is not None
+        assert tag.media_id == media.id
+        assert tag.confidence == 0.95
+
+    def test_tag_unique_constraint(self, session):
+        media = MediaCatalog(
+            filename="test.jpg",
+            local_path="media/test.jpg",
+            mime_type="image/jpeg",
+            source="upload",
+        )
+        session.add(media)
+        session.commit()
+
+        session.add(MediaTag(media_id=media.id, tag="cows", confidence=0.9, source="ai"))
+        session.commit()
+        session.add(MediaTag(media_id=media.id, tag="cows", confidence=0.8, source="manual"))
+        with pytest.raises(Exception):
+            session.commit()
+
+    def test_tag_columns(self, engine):
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("media_tags")}
+        assert columns == {"id", "media_id", "tag", "confidence", "source"}
+
+
+class TestMediaPerformanceModel:
+    def test_create_performance(self, session):
+        media = MediaCatalog(
+            filename="test.jpg",
+            local_path="media/test.jpg",
+            mime_type="image/jpeg",
+            source="upload",
+        )
+        row = ContentRow(raw_text="Post about cows", status="published")
+        session.add_all([media, row])
+        session.commit()
+
+        perf = MediaPerformance(
+            media_id=media.id,
+            content_row_id=row.id,
+            platform="instagram",
+            engagement_score=4.5,
+        )
+        session.add(perf)
+        session.commit()
+
+        assert perf.id is not None
+        assert perf.engagement_score == 4.5
+        assert perf.fetched_at is not None
+
+    def test_performance_columns(self, engine):
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("media_performance")}
+        assert columns == {
+            "id",
+            "media_id",
+            "content_row_id",
+            "platform",
+            "engagement_score",
+            "fetched_at",
+        }
+
+
+class TestMediaAdaptedModel:
+    def test_create_adapted(self, session):
+        media = MediaCatalog(
+            filename="test.jpg",
+            local_path="media/test.jpg",
+            mime_type="image/jpeg",
+            source="upload",
+        )
+        session.add(media)
+        session.commit()
+
+        adapted = MediaAdapted(
+            media_id=media.id,
+            platform="instagram",
+            format="post",
+            adapted_path="media/adapted/test_ig_post.jpg",
+            width=1080,
+            height=1080,
+            has_text_overlay=False,
+        )
+        session.add(adapted)
+        session.commit()
+
+        assert adapted.id is not None
+        assert adapted.width == 1080
+        assert adapted.has_text_overlay is False
+
+    def test_adapted_columns(self, engine):
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("media_adapted")}
+        assert columns == {
+            "id",
+            "media_id",
+            "platform",
+            "format",
+            "adapted_path",
+            "width",
+            "height",
+            "has_text_overlay",
+            "created_at",
+        }
+
+
+class TestCalendarPlanModel:
+    def test_create_plan(self, session):
+        plan = CalendarPlan(
+            date_range_start=datetime(2026, 4, 1, tzinfo=UTC),
+            date_range_end=datetime(2026, 4, 7, tzinfo=UTC),
+            platforms=json.dumps(["instagram", "facebook"]),
+            plan_data=json.dumps(
+                [
+                    {
+                        "date": "2026-04-01",
+                        "pillar": "spiritual_education",
+                        "content_idea": "Morning verse",
+                    },
+                ]
+            ),
+            status="draft",
+        )
+        session.add(plan)
+        session.commit()
+
+        assert plan.id is not None
+        assert plan.status == "draft"
+        assert plan.created_at is not None
+
+    def test_plan_columns(self, engine):
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("calendar_plans")}
+        assert columns == {
+            "id",
+            "date_range_start",
+            "date_range_end",
+            "platforms",
+            "plan_data",
+            "status",
+            "created_by",
+            "created_at",
+        }

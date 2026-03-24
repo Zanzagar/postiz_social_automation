@@ -26,38 +26,52 @@ BRANDING RULES:
 - Website: gitavalley.org
 - Tagline: "Cultivating Soil and Soul"
 - Key claim: "Only USDA Certified Slaughter-Free Dairy Farm in North America"
+- Products: Ahimsa (cruelty-free) dairy — paneer, cheddar, mozzarella
 
-VOICE: Warm, welcoming, grounded. Lead with cows and farm, not religion. Never preachy.\
+VOICE & TONE:
+- Warm, welcoming, grounded. Write like a real farmer, not a marketing agency.
+- Lead with cows and farm life, not religion. Never preachy or sermonic.
+- Use specific, concrete details — cow names, weather, what happened today.
+- Avoid generic inspirational language ("every life is a blessing", "hearts overflowing").
+- No AI-sounding filler: cut "we believe", "there's something deeply", "it's more than".
+- Short sentences. Let the content breathe. Don't over-explain.
+- Devotion shows through action (caring for cows), not flowery words about devotion.\
 """
 
 PLATFORM_INSTRUCTIONS: dict[Platform, str] = {
     Platform.INSTAGRAM: (
-        "Visual focus, 5-10 hashtags, emoji-rich, 150-200 words, CTA in last line"
+        "Visual focus, 3-5 hashtags, 1-2 emojis max, 30-80 words. Short caption, not an essay."
     ),
     Platform.FACEBOOK: (
-        "Storytelling, 200-300 words, question to spark comments, link to gitavalley.org"
+        "30-80 words. Question at the end to spark comments. Link to gitavalley.org. "
+        "Do NOT write more than 100 words — our best posts are under 60."
     ),
     Platform.TIKTOK: (
-        "Short hook (first 3 words grab attention), trending language, "
-        "2-3 hashtags, under 100 words"
+        "Short hook (first 3 words grab attention), trending language, 2-3 hashtags, under 50 words"
     ),
-    Platform.THREADS: "Conversational, no hashtags, 1-2 sentences, thought-provoking",
+    Platform.THREADS: "Conversational, no hashtags, 1-2 sentences max",
     Platform.LINKEDIN: (
-        "Professional, impact-focused, university partnership angles, 100-150 words"
+        "Professional, impact-focused, university partnership angles, 60-100 words"
     ),
 }
 
 CLI_TIMEOUT = 120  # seconds
+
+# Run claude -p from /tmp so it doesn't load the project's .claude/ directory
+# (rules, hooks, plugins, 1000+ session files) which adds 40s+ of startup.
+_CLEAN_CWD = "/tmp"
 
 
 def _call_claude(prompt: str) -> str:
     """Call Claude Code CLI and return stdout. Raises RuntimeError on failure."""
     try:
         result = subprocess.run(
-            ["claude", "-p", prompt],
+            ["claude", "-p", prompt, "--model", "sonnet"],
             capture_output=True,
             text=True,
             timeout=CLI_TIMEOUT,
+            stdin=subprocess.DEVNULL,
+            cwd=_CLEAN_CWD,
         )
     except subprocess.TimeoutExpired as e:
         raise RuntimeError(f"Claude CLI timed out after {CLI_TIMEOUT}s") from e
@@ -78,6 +92,8 @@ class CaptionGenerator:
         self.data_dir = data_dir
         self.db_path = db_path or str(data_dir / "gvsa.db")
         self.learning_context = self._load_learning_context()
+        self.voice_profile = self._load_voice_profile()
+        self.learned_rules = self._load_learned_rules()
 
     def generate_captions(
         self, row: ContentRow, feedback: str | None = None
@@ -170,28 +186,49 @@ class CaptionGenerator:
     ) -> str:
         """Regenerate a single platform caption based on user instruction."""
         platform_rules = PLATFORM_INSTRUCTIONS.get(Platform(platform), "")
-        prompt = (
-            f"{BRAND_RULES}\n\n"
-            f"ORIGINAL CAPTION ({platform}):\n"
-            f"{original_caption or '(none)'}\n\n"
-            f"ORIGINAL POST IDEA:\n{raw_text}\n\n"
-            f"{'CONTENT PILLAR: ' + pillar if pillar else ''}\n\n"
-            f"USER INSTRUCTION:\n{instruction}\n\n"
-            f"PLATFORM RULES FOR {platform.upper()}:\n{platform_rules}\n\n"
-            f"Generate an improved caption for {platform} based on the user instruction.\n"
-            f"Respond with ONLY the caption text, no explanations."
+
+        # No knowledge facts for iterations — they cause the model to shoehorn
+        # unrelated facts into the caption. Voice profile + learned rules are
+        # enough context for refining an existing caption.
+        parts = [BRAND_RULES, ""]
+
+        voice = self._format_voice_profile()
+        if voice:
+            parts.append(voice)
+        rules = self._format_learned_rules()
+        if rules:
+            parts.append(rules)
+
+        parts.extend(
+            [
+                f"ORIGINAL CAPTION ({platform}):",
+                original_caption or "(none)",
+                "",
+                f"ORIGINAL POST IDEA:\n{raw_text}",
+                "",
+                f"CONTENT PILLAR: {pillar}" if pillar else "",
+                "",
+                f"USER INSTRUCTION:\n{instruction}",
+                "",
+                f"PLATFORM RULES FOR {platform.upper()}:\n{platform_rules}",
+                "",
+                f"Generate an improved caption for {platform} based on the user instruction.",
+                "Respond with ONLY the caption text, no explanations.",
+            ]
         )
-        return _call_claude(prompt)
+        return _call_claude("\n".join(parts))
 
     def _build_prompt(self, row: ContentRow, platforms: list[Platform]) -> str:
         """Build the full caption generation prompt."""
         parts = [BRAND_RULES, ""]
 
-        # Learning context
-        if self.learning_context:
-            parts.append("PERFORMANCE CONTEXT (use to improve captions):")
-            parts.append(json.dumps(self.learning_context, indent=2))
-            parts.append("")
+        # Voice profile
+        voice = self._format_voice_profile()
+        if voice:
+            parts.append(voice)
+        rules = self._format_learned_rules()
+        if rules:
+            parts.append(rules)
 
         # Knowledge base context
         knowledge_ctx = self._get_knowledge_context(row.content_pillar)
@@ -230,10 +267,16 @@ class CaptionGenerator:
         """Build prompt for content suggestion generation."""
         parts = [BRAND_RULES, ""]
 
-        if self.learning_context:
-            parts.append("PERFORMANCE CONTEXT:")
-            parts.append(json.dumps(self.learning_context, indent=2))
-            parts.append("")
+        voice = self._format_voice_profile()
+        if voice:
+            parts.append(voice)
+        rules = self._format_learned_rules()
+        if rules:
+            parts.append(rules)
+
+        knowledge_ctx = self._get_knowledge_context()
+        if knowledge_ctx:
+            parts.append(knowledge_ctx)
 
         parts.append(f"CALENDAR GAPS (dates with no content planned): {', '.join(calendar_gaps)}")
         parts.append(f"CURRENT PILLAR BALANCE: {json.dumps(pillar_balance)}")
@@ -273,6 +316,59 @@ class CaptionGenerator:
         if path.exists():
             return json.loads(path.read_text())
         return {}
+
+    def _load_voice_profile(self) -> dict:
+        """Load extracted voice profile from data/voice-profile.json."""
+        path = self.data_dir / "voice-profile.json"
+        if path.exists():
+            return json.loads(path.read_text())
+        return {}
+
+    def _load_learned_rules(self) -> list[str]:
+        """Load learned editing rules from data/learned-rules.json."""
+        path = self.data_dir / "learned-rules.json"
+        if path.exists():
+            data = json.loads(path.read_text())
+            return data.get("rules", [])
+        return []
+
+    def _format_learned_rules(self) -> str:
+        """Format learned rules as a prompt section."""
+        if not self.learned_rules:
+            return ""
+        parts = ["LEARNED PREFERENCES (from past editing sessions — follow these):"]
+        for rule in self.learned_rules:
+            parts.append(f"- {rule}")
+        parts.append("")
+        return "\n".join(parts)
+
+    def _format_voice_profile(self) -> str:
+        """Format voice profile as a prompt section."""
+        vp = self.voice_profile
+        if not vp:
+            return ""
+
+        parts = ["VOICE PROFILE (extracted from our real posts — match this voice):"]
+        if vp.get("sentence_style"):
+            parts.append(f"Sentence style: {vp['sentence_style']}")
+        if vp.get("emotional_register"):
+            parts.append(f"Emotional register: {vp['emotional_register']}")
+        if vp.get("length_range"):
+            parts.append(f"Length: {vp['length_range']}")
+        if vp.get("what_works"):
+            parts.append("What works:")
+            for item in vp["what_works"]:
+                parts.append(f"  - {item}")
+        if vp.get("what_to_avoid"):
+            parts.append("What to avoid:")
+            for item in vp["what_to_avoid"]:
+                parts.append(f"  - {item}")
+        if vp.get("sample_hooks"):
+            parts.append("Sample openings from our best posts:")
+            for hook in vp["sample_hooks"]:
+                parts.append(f'  - "{hook}"')
+        parts.append("")
+        return "\n".join(parts)
 
     def _get_knowledge_context(self, pillar: str | None = None) -> str:
         """Query knowledge base for relevant facts and examples."""

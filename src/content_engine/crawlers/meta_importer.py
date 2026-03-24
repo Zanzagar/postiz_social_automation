@@ -223,6 +223,50 @@ class MetaGraphImporter:
         finally:
             conn.close()
 
+    @staticmethod
+    def classify_posts_sync(db_path: str, batch_size: int = 50) -> int:
+        """Classify unclassified social_history posts by pillar in batch.
+
+        Uses the CaptionGenerator.infer_pillar for consistency. Returns
+        the number of posts classified.
+        """
+        conn = sqlite3.connect(db_path)
+        rows = conn.execute(
+            """SELECT id, post_text FROM social_history
+               WHERE pillar IS NULL AND post_text IS NOT NULL AND post_text != ''"""
+        ).fetchall()
+
+        if not rows:
+            conn.close()
+            return 0
+
+        from content_engine.generator import CaptionGenerator
+
+        gen = CaptionGenerator()
+        pillars = [
+            "Spiritual Education",
+            "Farm & Community",
+            "Events",
+            "Behind the Scenes",
+            "Seasonal",
+            "Collaborative",
+        ]
+        classified = 0
+        for row_id, text in rows:
+            try:
+                pillar = gen.infer_pillar(text, known_pillars=pillars)
+                conn.execute(
+                    "UPDATE social_history SET pillar = ? WHERE id = ?",
+                    (pillar, row_id),
+                )
+                classified += 1
+            except Exception:
+                logger.warning("Failed to classify post %d", row_id, exc_info=True)
+
+        conn.commit()
+        conn.close()
+        return classified
+
     async def close(self):
         """Close the underlying HTTP client."""
         await self._client.aclose()
