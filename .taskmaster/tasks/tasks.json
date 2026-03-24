@@ -5680,25 +5680,29 @@
   "content-intelligence-v2": {
     "tasks": [
       {
-        "id": 1,
+        "id": "1",
         "title": "Create XML prompt builder module",
         "description": "Create a new module `src/content_engine/prompt_builder.py` that generates XML-structured prompts with tagged sections (<system_role>, <brand_voice>, <learned_preferences>, <knowledge_context>, <examples>, <content>, <platform_rules>, <output_format>) instead of flat newline-joined strings.",
         "details": "1. Create `src/content_engine/prompt_builder.py` with a `PromptBuilder` class\n2. Define XML helper methods:\n   - `_wrap_xml(tag: str, content: str) -> str` - wraps content in XML tags\n   - `_wrap_xml_with_attr(tag: str, attrs: dict, content: str) -> str` - for tags like `<examples platform=\"instagram\">`\n3. Implement `build_generation_prompt()` that assembles:\n   ```xml\n   <system_role>Social media manager for Gita Valley</system_role>\n   <brand_voice>{from voice-profile.json}</brand_voice>\n   <learned_preferences>{from settings voice-rules}</learned_preferences>\n   <knowledge_context>{from hybrid search}</knowledge_context>\n   <examples platform=\"{platform}\">{few-shot examples}</examples>\n   <content>{raw_text, pillar, media}</content>\n   <platform_rules>{platform-specific constraints}</platform_rules>\n   <output_format>{expected response format}</output_format>\n   ```\n4. Implement `build_iteration_prompt()` for single-caption refinement\n5. Implement `build_suggestion_prompt()` for calendar suggestions\n6. Implement `build_calendar_prompt()` for calendar planning\n7. Each method should accept a `context: dict` parameter with all relevant data\n8. Return type: `str` (the complete XML-structured prompt)",
         "testStrategy": "Unit tests in `tests/test_prompt_builder.py`:\n- Test XML tag generation and escaping\n- Test each prompt type contains expected XML sections\n- Test voice profile injection\n- Test learned rules injection\n- Test prompt size stays within reasonable bounds (~2000-4000 tokens)\n- Test proper escaping of user content to prevent XML injection",
         "priority": "high",
         "dependencies": [],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Create PromptBuilder class with XML helper methods (_wrap_xml, _wrap_xml_with_attr), 2) Implement build_generation_prompt() with all XML sections, 3) Implement build_iteration_prompt(), build_suggestion_prompt(), and build_calendar_prompt(), 4) Add XML escaping and unit tests. Current generator.py uses flat newline-joined strings in _build_prompt() (lines 221-260) - the new module will replace this pattern.",
+        "updatedAt": "2026-03-24T21:11:23.156Z"
       },
       {
-        "id": 2,
+        "id": "2",
         "title": "Create configurable brand settings table and API",
         "description": "Move hardcoded BRAND_RULES from generator.py to a database table and settings API, allowing runtime configuration of brand name, tagline, website, products, and key claims from the Settings page.",
         "details": "1. Add SQLAlchemy model in `api/models.py`:\n   ```python\n   class BrandSettings(Base):\n       __tablename__ = 'brand_settings'\n       id: Mapped[int] = mapped_column(Integer, primary_key=True)\n       key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)\n       value: Mapped[str] = mapped_column(Text, nullable=False)\n       updated_at: Mapped[datetime] = mapped_column(DateTime, ...)\n   ```\n2. Create Alembic migration for the new table\n3. Seed default values matching current BRAND_RULES:\n   - `brand_name`: 'Gita Valley'\n   - `tagline`: 'Cultivating Soil and Soul'\n   - `website`: 'gitavalley.org'\n   - `key_claim`: 'Only USDA Certified Slaughter-Free Dairy Farm in North America'\n   - `products`: 'Ahimsa (cruelty-free) dairy — paneer, cheddar, mozzarella'\n   - `voice_description`: (the VOICE & TONE section)\n4. Add Pydantic schemas in `api/schemas.py`:\n   - `BrandSettingsResponse`\n   - `BrandSettingsUpdate`\n5. Add endpoints in `api/routes/settings.py`:\n   - `GET /api/settings/brand` - return all brand settings\n   - `PUT /api/settings/brand` - update brand settings\n6. Create helper function `get_brand_context(db_path: str) -> str` to format settings for prompt injection",
         "testStrategy": "1. Test migration creates table with correct schema\n2. Test CRUD operations on brand settings\n3. Test API endpoints return/update settings correctly\n4. Test `get_brand_context()` formats settings properly\n5. Test default seed values match current BRAND_RULES",
         "priority": "high",
         "dependencies": [],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -5707,7 +5711,8 @@
             "dependencies": [],
             "details": "Add BrandSettings class to api/models.py after the Phase 3 models section. Use key-value pattern with fields: id (Integer, primary_key), key (String(100), unique, nullable=False), value (Text, nullable=False), updated_at (DateTime, default/onupdate UTC now). Include __tablename__ = 'brand_settings'. Follow the existing model patterns in the file (e.g., PublishConfig for DateTime handling). Keys will be: brand_name, tagline, website, key_claim, products, voice_description.",
             "status": "pending",
-            "testStrategy": "Test model can be instantiated with required fields. Test unique constraint on key column. Test updated_at auto-populates on create and updates on modify."
+            "testStrategy": "Test model can be instantiated with required fields. Test unique constraint on key column. Test updated_at auto-populates on create and updates on modify.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -5718,7 +5723,8 @@
             ],
             "details": "Generate new migration using 'alembic revision --autogenerate -m \"add_brand_settings_table\"'. In upgrade(): create table with columns matching model. Add seed data INSERT statements for 6 keys: brand_name='Gita Valley', tagline='Cultivating Soil and Soul', website='gitavalley.org', key_claim='Only USDA Certified Slaughter-Free Dairy Farm in North America', products='Ahimsa (cruelty-free) dairy — paneer, cheddar, mozzarella', voice_description=(full VOICE & TONE section from generator.py lines 31-38). In downgrade(): DROP TABLE brand_settings. Run 'alembic upgrade head' to verify migration applies cleanly.",
             "status": "pending",
-            "testStrategy": "Test migration creates table with correct schema (alembic upgrade/downgrade cycle). Test seed data is inserted with expected values. Test downgrade drops table cleanly."
+            "testStrategy": "Test migration creates table with correct schema (alembic upgrade/downgrade cycle). Test seed data is inserted with expected values. Test downgrade drops table cleanly.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -5727,7 +5733,8 @@
             "dependencies": [],
             "details": "Add to api/schemas.py after the existing publish config schemas: 1) BrandSettingsItem(BaseModel) with fields key: str, value: str, updated_at: datetime | None. 2) BrandSettingsResponse(BaseModel) with field settings: list[BrandSettingsItem]. 3) BrandSettingsUpdate(BaseModel) with field settings: dict[str, str] for bulk update (key->value mapping). Follow existing patterns like PlatformPublishConfig and PublishConfigResponse.",
             "status": "pending",
-            "testStrategy": "Test schemas can be instantiated with valid data. Test serialization/deserialization roundtrip. Test validation rejects invalid field types."
+            "testStrategy": "Test schemas can be instantiated with valid data. Test serialization/deserialization roundtrip. Test validation rejects invalid field types.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -5740,7 +5747,8 @@
             ],
             "details": "Add to api/routes/settings.py: 1) Add repository method get_brand_settings() that returns all BrandSettings rows. 2) Add repository method upsert_brand_setting(key, value) for atomic upsert. 3) GET /api/settings/brand endpoint that calls repo, returns BrandSettingsResponse. 4) PUT /api/settings/brand endpoint accepting BrandSettingsUpdate, iterates settings dict, calls upsert for each, returns updated BrandSettingsResponse. Import BrandSettings from api.models and new schemas from api.schemas. Add repository methods to api/repositories/content.py following existing patterns (get_publish_configs, upsert_publish_config).",
             "status": "pending",
-            "testStrategy": "Test GET returns all seeded brand settings. Test PUT updates existing settings. Test PUT handles partial updates (only some keys). Test response format matches BrandSettingsResponse schema."
+            "testStrategy": "Test GET returns all seeded brand settings. Test PUT updates existing settings. Test PUT handles partial updates (only some keys). Test response format matches BrandSettingsResponse schema.",
+            "parentId": "undefined"
           },
           {
             "id": 5,
@@ -5752,19 +5760,24 @@
             ],
             "details": "1) In src/content_engine/generator.py, add get_brand_context(db_path: str) -> str function that: opens SQLite connection to db_path, queries brand_settings table, formats into prompt string matching current BRAND_RULES structure. 2) Replace hardcoded BRAND_RULES constant (lines 20-39) with call to get_brand_context(). 3) Update generate_captions() and other functions that use BRAND_RULES to call get_brand_context() with db_path. 4) Add fallback: if database query fails or table doesn't exist, return the original hardcoded values for backward compatibility. 5) Ensure the formatted output maintains the same structure: brand intro paragraph, BRANDING RULES section, VOICE & TONE section.",
             "status": "pending",
-            "testStrategy": "Test get_brand_context() returns properly formatted string with all settings. Test fallback returns hardcoded defaults when database unavailable. Test generated captions still work after migration. Test updating a brand setting via API changes subsequent caption generation."
+            "testStrategy": "Test get_brand_context() returns properly formatted string with all settings. Test fallback returns hardcoded defaults when database unavailable. Test generated captions still work after migration. Test updating a brand setting via API changes subsequent caption generation.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 5,
+        "expansionPrompt": "Break down into: 1) Add BrandSettings SQLAlchemy model to api/models.py, 2) Create Alembic migration with seed data, 3) Add Pydantic schemas to api/schemas.py, 4) Add GET/PUT endpoints to api/routes/settings.py, 5) Create get_brand_context() helper and update generator.py to use it. Current BRAND_RULES in generator.py (lines 20-39) will be replaced. Settings routes already exist with VoiceRules pattern to follow.",
+        "updatedAt": "2026-03-24T21:16:48.692Z"
       },
       {
-        "id": 3,
+        "id": "3",
         "title": "Implement FTS5 full-text search for knowledge base",
         "description": "Create FTS5 virtual table on web_knowledge.content for BM25 keyword matching, replacing the simple LIMIT query in knowledge_context.py.",
         "details": "1. Create Alembic migration that:\n   - Creates FTS5 virtual table: `CREATE VIRTUAL TABLE web_knowledge_fts USING fts5(content, topic, keywords, content='web_knowledge', content_rowid='id')`\n   - Creates triggers to keep FTS in sync with web_knowledge table\n   - Populates FTS from existing web_knowledge rows\n2. Update `src/content_engine/crawlers/knowledge_context.py`:\n   - Add `_fts_search(query: str, pillar: str | None, limit: int) -> list[dict]` function\n   - Use `web_knowledge_fts MATCH ?` with BM25 ranking\n   - Apply pillar filter on joined results\n   - Return dicts with `id`, `fact_type`, `content`, `pillar`, `score`\n3. Modify `get_knowledge_context()` to:\n   - Extract keywords from raw_text (simple word tokenization, remove stopwords)\n   - Call `_fts_search()` with extracted keywords\n   - Format results with relevance indicator\n4. Handle edge case: if FTS table doesn't exist, fall back to current LIMIT query",
         "testStrategy": "1. Test FTS table creation via migration\n2. Test FTS search returns relevant results for known keywords\n3. Test BM25 ranking orders by relevance\n4. Test pillar filtering works correctly\n5. Test fallback behavior when FTS table missing\n6. Test trigger keeps FTS in sync after INSERT/UPDATE/DELETE on web_knowledge",
         "priority": "high",
         "dependencies": [],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -5773,7 +5786,8 @@
             "dependencies": [],
             "details": "Create alembic/versions/xxx_add_fts5_search_to_web_knowledge.py with:\n1. FTS5 virtual table: `CREATE VIRTUAL TABLE web_knowledge_fts USING fts5(content, topic, keywords, content='web_knowledge', content_rowid='id')`\n2. Three triggers: web_knowledge_ai (after insert), web_knowledge_ad (after delete), web_knowledge_au (after update) that call INSERT/DELETE on web_knowledge_fts\n3. Initial population: `INSERT INTO web_knowledge_fts(rowid, content, topic, keywords) SELECT id, content, topic, keywords FROM web_knowledge`\n4. Downgrade drops triggers first, then the FTS table\n5. Use op.execute() with raw SQL since Alembic doesn't support FTS5 directly",
             "status": "pending",
-            "testStrategy": "Test migration up/down works: 1) Verify web_knowledge_fts table exists after upgrade, 2) Verify FTS table is populated from existing rows, 3) Test trigger fires on INSERT/UPDATE/DELETE to web_knowledge, 4) Verify downgrade removes FTS table and triggers cleanly"
+            "testStrategy": "Test migration up/down works: 1) Verify web_knowledge_fts table exists after upgrade, 2) Verify FTS table is populated from existing rows, 3) Test trigger fires on INSERT/UPDATE/DELETE to web_knowledge, 4) Verify downgrade removes FTS table and triggers cleanly",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -5784,7 +5798,8 @@
             ],
             "details": "Add to src/content_engine/crawlers/knowledge_context.py:\n1. `_fts_search(conn: sqlite3.Connection, query: str, pillar: str | None, limit: int) -> list[dict]`\n2. Use FTS5 MATCH query: `SELECT wk.id, wk.fact_type, wk.content, wk.pillar, bm25(web_knowledge_fts) as score FROM web_knowledge_fts fts JOIN web_knowledge wk ON fts.rowid = wk.id WHERE web_knowledge_fts MATCH ? ORDER BY score LIMIT ?`\n3. Apply pillar filter via WHERE clause if provided: `AND wk.pillar = ?`\n4. Convert FTS query string to proper format (space-separated words become OR query)\n5. Return list of dicts with keys: id, fact_type, content, pillar, score\n6. Handle empty query gracefully (return empty list)",
             "status": "pending",
-            "testStrategy": "Test BM25 search: 1) Query 'cows' returns cow-related facts first, 2) Query 'feast' returns event facts, 3) Pillar filter restricts results correctly, 4) BM25 scores are negative (FTS5 convention) with most relevant first, 5) Empty query returns empty list, 6) Non-matching query returns empty list"
+            "testStrategy": "Test BM25 search: 1) Query 'cows' returns cow-related facts first, 2) Query 'feast' returns event facts, 3) Pillar filter restricts results correctly, 4) BM25 scores are negative (FTS5 convention) with most relevant first, 5) Empty query returns empty list, 6) Non-matching query returns empty list",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -5793,7 +5808,8 @@
             "dependencies": [],
             "details": "Add to src/content_engine/crawlers/knowledge_context.py:\n1. Define STOPWORDS set: common English words ('the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'of', 'in', 'to', 'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under', 'again', 'further', 'then', 'once', 'and', 'but', 'or', 'nor', 'so', 'yet', 'both', 'either', 'neither', 'not', 'only', 'own', 'same', 'than', 'too', 'very', 'just', 'about', 'this', 'that', 'these', 'those', 'it', 'its')\n2. `_extract_keywords(text: str, max_keywords: int = 10) -> list[str]`\n3. Lowercase, remove punctuation, split on whitespace\n4. Filter stopwords, filter words < 3 chars\n5. Return up to max_keywords unique words\n6. Handle empty/None input gracefully",
             "status": "pending",
-            "testStrategy": "Test extraction: 1) 'The cow is beautiful' -> ['cow', 'beautiful'], 2) 'Sunday Feast at 4pm' -> ['sunday', 'feast'], 3) Empty string returns empty list, 4) Punctuation is stripped, 5) Duplicates are removed, 6) max_keywords limit is respected"
+            "testStrategy": "Test extraction: 1) 'The cow is beautiful' -> ['cow', 'beautiful'], 2) 'Sunday Feast at 4pm' -> ['sunday', 'feast'], 3) Empty string returns empty list, 4) Punctuation is stripped, 5) Duplicates are removed, 6) max_keywords limit is respected",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -5806,7 +5822,8 @@
             ],
             "details": "Modify get_knowledge_context() in knowledge_context.py:\n1. Add optional parameter: `raw_text: str | None = None`\n2. If raw_text provided, extract keywords using _extract_keywords()\n3. Build FTS query string from keywords (space-separated for OR matching)\n4. Call _fts_search() with query, pillar, max_facts\n5. Format FTS results with relevance indicator: '- [{fact_type}] {content} (relevance: {abs(score):.2f})'\n6. Fallback to current LIMIT behavior if: no raw_text provided, keywords empty, or FTS search returns no results\n7. Keep existing hashtag_performance query unchanged\n8. Update docstring to document new raw_text parameter",
             "status": "pending",
-            "testStrategy": "Test integration: 1) raw_text='cow protection' returns cow-related facts ranked by relevance, 2) No raw_text falls back to LIMIT query, 3) Empty keywords after extraction falls back to LIMIT, 4) FTS no results falls back to LIMIT, 5) Pillar filtering still works with FTS, 6) Relevance scores appear in output, 7) Hashtag suggestions still included"
+            "testStrategy": "Test integration: 1) raw_text='cow protection' returns cow-related facts ranked by relevance, 2) No raw_text falls back to LIMIT query, 3) Empty keywords after extraction falls back to LIMIT, 4) FTS no results falls back to LIMIT, 5) Pillar filtering still works with FTS, 6) Relevance scores appear in output, 7) Hashtag suggestions still included",
+            "parentId": "undefined"
           },
           {
             "id": 5,
@@ -5820,21 +5837,26 @@
             ],
             "details": "1. Add _fts_table_exists(conn) helper that checks sqlite_master for web_knowledge_fts\n2. Update _fts_search() to return empty list if FTS table missing (triggers LIMIT fallback)\n3. Add logging when falling back: logger.debug('FTS table not found, using LIMIT fallback')\n4. Create tests/test_fts_search.py with comprehensive tests:\n   - Test FTS table creation via migration\n   - Test FTS search returns BM25-ranked results\n   - Test pillar filtering works with FTS\n   - Test keyword extraction edge cases\n   - Test fallback when FTS table missing (use db without migration)\n   - Test trigger sync: INSERT row, verify FTS updated\n   - Test trigger sync: UPDATE row, verify FTS updated\n   - Test trigger sync: DELETE row, verify FTS updated\n5. Update existing test_knowledge_context.py tests to work with both FTS and non-FTS databases",
             "status": "pending",
-            "testStrategy": "Full test coverage: 1) Mock database without FTS table to test fallback path, 2) Integration test with full migration to test FTS path, 3) Parametrized tests for keyword extraction edge cases, 4) Test BM25 ranking order is correct (more relevant first), 5) Test trigger sync keeps FTS in sync after CRUD operations, 6) Test no regression in existing knowledge context tests"
+            "testStrategy": "Full test coverage: 1) Mock database without FTS table to test fallback path, 2) Integration test with full migration to test FTS path, 3) Parametrized tests for keyword extraction edge cases, 4) Test BM25 ranking order is correct (more relevant first), 5) Test trigger sync keeps FTS in sync after CRUD operations, 6) Test no regression in existing knowledge context tests",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 7,
+        "recommendedSubtasks": 5,
+        "expansionPrompt": "Break down into: 1) Create Alembic migration for FTS5 virtual table and triggers, 2) Implement _fts_search() function in knowledge_context.py with BM25 ranking, 3) Implement keyword extraction from raw_text, 4) Modify get_knowledge_context() to use FTS search, 5) Add fallback for missing FTS table and comprehensive tests. Current knowledge_context.py (lines 46-63) uses simple LIMIT queries.",
+        "updatedAt": "2026-03-24T21:20:13.695Z"
       },
       {
-        "id": 4,
+        "id": "4",
         "title": "Implement sqlite-vec embedding search with fallback",
         "description": "Add sqlite-vec extension support for semantic search on knowledge base with 384-dim embeddings (all-MiniLM-L6-v2), with graceful fallback to FTS5-only when sqlite-vec is unavailable.",
         "details": "1. Add optional dependency to pyproject.toml: `sqlite-vec>=0.1.0` (in extras)\n2. Create `src/content_engine/embeddings.py`:\n   - `_load_model() -> SentenceTransformer` - lazy-load all-MiniLM-L6-v2\n   - `generate_embedding(text: str) -> list[float]` - returns 384-dim vector\n   - `EMBEDDING_DIM = 384`\n3. Create migration that (if sqlite-vec available):\n   - Creates: `CREATE VIRTUAL TABLE web_knowledge_vec USING vec0(embedding float[384])`\n   - Adds `embedding_id` column to web_knowledge linking to vec table\n4. Create CLI script `src/content_engine/scripts/generate_embeddings.py`:\n   - Iterates all web_knowledge rows\n   - Generates embeddings for content field\n   - Inserts into web_knowledge_vec\n   - Updates web_knowledge.embedding_id\n   - Shows progress bar, handles interruption gracefully\n5. Update knowledge_context.py:\n   - Add `_vec_search(query_embedding: list[float], limit: int) -> list[dict]`\n   - Check if sqlite-vec available at runtime\n   - If unavailable, log warning and skip vector search\n6. Add flag `SQLITE_VEC_ENABLED` env var to force-disable if needed",
         "testStrategy": "1. Test embedding generation produces correct dimensions\n2. Test vec table creation when sqlite-vec available\n3. Test graceful fallback when sqlite-vec unavailable\n4. Test vector search returns semantically similar results\n5. Test embedding script handles interruption\n6. Test env var disables vec search",
         "priority": "medium",
         "dependencies": [
-          3
+          "3"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -5843,7 +5865,8 @@
             "dependencies": [],
             "details": "Add a new optional dependency group 'embeddings' in pyproject.toml containing: sqlite-vec>=0.1.0 (the SQLite extension for vector similarity search), sentence-transformers>=2.2.0 (for all-MiniLM-L6-v2 model). Place these alongside the existing 'dev' group. Update the dev group to include 'embeddings' as a dependency so tests can run with embeddings support. The sentence-transformers package pulls in torch (~2GB), so keeping it optional is important for lightweight installs.",
             "status": "pending",
-            "testStrategy": "Verify pyproject.toml parses correctly with `pip install -e .[embeddings]` and that sentence-transformers and sqlite-vec are importable after installation."
+            "testStrategy": "Verify pyproject.toml parses correctly with `pip install -e .[embeddings]` and that sentence-transformers and sqlite-vec are importable after installation.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -5854,7 +5877,8 @@
             ],
             "details": "Create embeddings.py with: EMBEDDING_DIM = 384 constant, _model: SentenceTransformer | None module-level cache initialized to None, _load_model() function that lazy-loads all-MiniLM-L6-v2 on first call and caches it, generate_embedding(text: str) -> list[float] that calls _load_model() and encodes text to 384-dim vector. Include is_available() function that returns True only if sentence-transformers is installed (use try/except ImportError). Handle empty/None text gracefully by returning zero vector. Add type hints and docstrings matching project style.",
             "status": "pending",
-            "testStrategy": "Test that generate_embedding returns list of exactly 384 floats, test lazy loading only occurs once (mock model), test is_available returns False when sentence-transformers not installed, test empty string handling."
+            "testStrategy": "Test that generate_embedding returns list of exactly 384 floats, test lazy loading only occurs once (mock model), test is_available returns False when sentence-transformers not installed, test empty string handling.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -5865,7 +5889,8 @@
             ],
             "details": "Create new Alembic migration following existing patterns (see e5272a1ce885 for reference). In upgrade(): first try to load sqlite-vec extension using op.execute(\"SELECT load_extension('vec0')\") wrapped in try/except. If successful: CREATE VIRTUAL TABLE web_knowledge_vec USING vec0(embedding float[384]), ADD COLUMN embedding_id INTEGER to web_knowledge with FK to web_knowledge_vec rowid. If extension fails to load, log warning and skip table creation. In downgrade(): conditionally drop if table exists. Use op.get_bind().execute() for runtime checks.",
             "status": "pending",
-            "testStrategy": "Test migration runs without error when sqlite-vec unavailable (graceful skip), test migration creates vec0 table when available (mock extension loading), test downgrade handles both cases."
+            "testStrategy": "Test migration runs without error when sqlite-vec unavailable (graceful skip), test migration creates vec0 table when available (mock extension loading), test downgrade handles both cases.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -5877,7 +5902,8 @@
             ],
             "details": "Create src/content_engine/scripts/generate_embeddings.py following classify_knowledge.py patterns. Use argparse for --dry-run and --batch-size flags. Register SIGINT handler that sets shutdown flag and commits current progress. Main loop: SELECT id, content FROM web_knowledge WHERE embedding_id IS NULL, batch process with configurable size (default 100), call generate_embedding() for each, INSERT INTO web_knowledge_vec (rowid, embedding) using sqlite-vec's vec_f32() function, UPDATE web_knowledge SET embedding_id = rowid. Use tqdm for progress bar showing percentage complete. Log batch progress and handle interruption gracefully by committing partial work.",
             "status": "pending",
-            "testStrategy": "Test script processes entries and updates embedding_id, test --dry-run doesn't modify database, test SIGINT handling commits partial progress, test progress bar displays correctly, test skip-if-embedding-exists logic."
+            "testStrategy": "Test script processes entries and updates embedding_id, test --dry-run doesn't modify database, test SIGINT handling commits partial progress, test progress bar displays correctly, test skip-if-embedding-exists logic.",
+            "parentId": "undefined"
           },
           {
             "id": 5,
@@ -5889,7 +5915,8 @@
             ],
             "details": "Update knowledge_context.py to add: _is_vec_available(conn: sqlite3.Connection) -> bool that tries SELECT vec_version() and returns True/False, _vec_search(conn, query_embedding: list[float], pillar: str | None, limit: int) -> list[dict] that executes SELECT w.* FROM web_knowledge w JOIN web_knowledge_vec v ON w.embedding_id = v.rowid WHERE ... ORDER BY vec_distance_cosine(v.embedding, vec_f32(?)) LIMIT ?. Add optional query parameter to get_knowledge_context() that triggers vec search when provided and vec is available. Log warning once per connection if vec unavailable. Return empty list if unavailable rather than raising.",
             "status": "pending",
-            "testStrategy": "Test _vec_search returns results when vec available (mock), test graceful fallback when vec unavailable, test pillar filtering works with vec search, test warning logged only once, test empty query handling."
+            "testStrategy": "Test _vec_search returns results when vec available (mock), test graceful fallback when vec unavailable, test pillar filtering works with vec search, test warning logged only once, test empty query handling.",
+            "parentId": "undefined"
           },
           {
             "id": 6,
@@ -5903,82 +5930,107 @@
             ],
             "details": "Update knowledge_context.py: check os.environ.get('SQLITE_VEC_ENABLED', '1') != '0' before attempting vec search. Create tests/test_embeddings.py with: test embedding dimension is exactly 384, test lazy loading (model loaded once), test is_available detection. Create tests/test_vec_search.py with: test _vec_search returns semantically similar results, test fallback to FTS when vec unavailable, test SQLITE_VEC_ENABLED=0 disables vec, test generate_embeddings script (mock subprocess/model). Use pytest fixtures to mock sentence-transformers and sqlite-vec availability. Test edge cases: empty content, very long content, Unicode text.",
             "status": "pending",
-            "testStrategy": "Run full test suite with pytest, verify all tests pass with mocked dependencies, test both vec-available and vec-unavailable code paths, verify env var override works correctly."
+            "testStrategy": "Run full test suite with pytest, verify all tests pass with mocked dependencies, test both vec-available and vec-unavailable code paths, verify env var override works correctly.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 8,
+        "recommendedSubtasks": 6,
+        "expansionPrompt": "Break down into: 1) Add sqlite-vec as optional dependency in pyproject.toml, 2) Create embeddings.py with SentenceTransformer lazy loading, 3) Create migration for vec0 table (conditional on sqlite-vec availability), 4) Create generate_embeddings.py CLI script with progress bar, 5) Add _vec_search() to knowledge_context.py with runtime availability check, 6) Add SQLITE_VEC_ENABLED env var and comprehensive tests. No existing embedding/vector code in codebase.",
+        "updatedAt": "2026-03-24T22:24:36.807Z"
       },
       {
-        "id": 5,
+        "id": "5",
         "title": "Implement Reciprocal Rank Fusion for hybrid search",
         "description": "Combine FTS5 keyword search and sqlite-vec semantic search using Reciprocal Rank Fusion (RRF) to produce a single relevance-ranked result set for knowledge retrieval.",
         "details": "1. Create `src/content_engine/hybrid_search.py`:\n   - `reciprocal_rank_fusion(rankings: list[list[tuple[int, float]]], k: int = 60) -> list[tuple[int, float]]`\n     - Implements RRF: score(d) = Σ 1/(k + rank(d)) for each ranking list\n   - `hybrid_search(db_path: str, query: str, pillar: str | None, limit: int = 5) -> list[dict]`\n     - Calls FTS5 search, gets top 20 results with ranks\n     - If sqlite-vec enabled, calls vec search, gets top 20 results\n     - Applies RRF to merge rankings\n     - Applies pillar boost: multiply score by 1.5 if pillar matches\n     - Returns top `limit` results sorted by final score\n2. Add entity extraction for special cases:\n   - If raw_text contains a cow name (from predefined list or NER), boost facts mentioning that cow\n   - Simple regex match for capitalized names followed by 'cow' or in context\n3. Update `get_knowledge_context()` to use `hybrid_search()` instead of direct queries\n4. Return results formatted with relevance indicators",
         "testStrategy": "1. Test RRF formula produces correct merged ranking\n2. Test hybrid search combines FTS and vec results\n3. Test pillar boost increases relevant content scores\n4. Test entity extraction for cow names\n5. Test graceful degradation to FTS-only when vec unavailable\n6. Test limit parameter works correctly",
         "priority": "high",
         "dependencies": [
-          3,
-          4
+          "3",
+          "4"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 6,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Create hybrid_search.py with RRF algorithm implementation, 2) Implement hybrid_search() combining FTS and vec results, 3) Add pillar boost and entity extraction for cow names, 4) Update get_knowledge_context() to use hybrid_search() and add tests. Depends on tasks 3 and 4 being complete.",
+        "updatedAt": "2026-03-24T22:26:05.124Z"
       },
       {
-        "id": 6,
+        "id": "6",
         "title": "Create slop detection module with AI cliche patterns",
         "description": "Build a regex-based slop detection system using ~200 known AI cliche patterns from EQ-Bench and custom Gita Valley anti-patterns to catch obvious AI-generated content before human review.",
         "details": "1. Create `src/content_engine/slop_detector.py`:\n2. Create `data/slop_patterns.json` with categorized patterns:\n   ```json\n   {\n     \"ai_cliches\": [\n       \"Every life.*blessing\", \"hearts overflowing\", \"there's something deeply\",\n       \"it's more than just\", \"we believe\", \"in today's world\", \"let's dive in\",\n       \"without further ado\", \"buckle up\", \"game-changer\", \"nestled in\",\n       \"tapestry of\", \"symphony of\", \"dance of\", \"embrace the\", \"journey of\"\n     ],\n     \"gita_valley_antipatterns\": [\n       \"slaughter-free sanctuary\", \"conscious consumption\", \"mindful eating\",\n       \"divine blessings\", \"sacred bovine\", \"spiritual awakening\", \"transcendent\"\n     ],\n     \"filler_phrases\": [\n       \"it goes without saying\", \"needless to say\", \"at the end of the day\",\n       \"moving forward\", \"going forward\", \"as we all know\"\n     ]\n   }\n   ```\n3. Implement `SlопDetector` class:\n   - `__init__()` - compile regex patterns, load from JSON\n   - `detect(text: str) -> SlоpResult` - returns dataclass with:\n     - `score: float` (0.0-1.0, higher = more slop)\n     - `matches: list[str]` (matched patterns)\n     - `suggestions: list[str]` (rewrites if available)\n   - `THRESHOLD = 0.3` - configurable threshold\n4. Scoring algorithm:\n   - Each match adds weight based on category (ai_cliches: 0.15, antipatterns: 0.2, filler: 0.1)\n   - Cap at 1.0\n5. Make patterns configurable via Settings API (future task)",
         "testStrategy": "1. Test pattern loading from JSON\n2. Test each category of patterns detects correctly\n3. Test scoring algorithm produces expected values\n4. Test threshold comparison\n5. Test case-insensitive matching\n6. Test no false positives on known good Gita Valley posts\n7. Test detection of EQ-Bench slop words",
         "priority": "high",
         "dependencies": [],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down into: 1) Create slop_patterns.json with ~200 categorized regex patterns from EQ-Bench and Gita Valley anti-patterns, 2) Implement SlopDetector class with pattern compilation and scoring algorithm, 3) Add comprehensive tests including false-positive checks against known good posts. voice-profile.json 'what_to_avoid' already lists some anti-patterns.",
+        "updatedAt": "2026-03-24T21:23:04.703Z"
       },
       {
-        "id": 7,
+        "id": "7",
         "title": "Implement slop gate with auto-regeneration",
         "description": "Integrate slop detection into the generation pipeline with automatic regeneration (max 1 retry) when slop score exceeds threshold, returning the best version with a warning flag if still too generic.",
         "details": "1. Update `src/content_engine/generator.py`:\n   - Import `SlоpDetector` from slop_detector module\n   - Add instance as `self.slop_detector = SlоpDetector()`\n2. Create helper method `_check_and_regenerate_if_sloppy()`:\n   ```python\n   def _check_and_regenerate(self, captions: dict, row: ContentRow, platforms: list) -> tuple[dict, bool]:\n       all_text = ' '.join(captions.values())\n       result = self.slop_detector.detect(all_text)\n       if result.score <= SlоpDetector.THRESHOLD:\n           return captions, False  # No slop detected\n       \n       # Build feedback prompt\n       feedback = f\"Previous attempt was too generic. Detected: {', '.join(result.matches[:3])}. Be specific and concrete.\"\n       # Regenerate with feedback\n       new_captions = self._generate_with_feedback(row, platforms, feedback)\n       new_result = self.slop_detector.detect(' '.join(new_captions.values()))\n       \n       # Return better version\n       if new_result.score < result.score:\n           return new_captions, new_result.score > SlоpDetector.THRESHOLD\n       return captions, True  # Original was better, but still warn\n   ```\n3. Modify `generate_captions()` to call `_check_and_regenerate()`\n4. Add `slop_warning: bool` to generation response\n5. Update API response schema to include `slop_warning` field\n6. Log slop scores for monitoring",
         "testStrategy": "1. Test slop gate triggers regeneration above threshold\n2. Test max 1 retry limit\n3. Test better version is selected\n4. Test warning flag is set when still sloppy after retry\n5. Test no regeneration when under threshold\n6. Test logging of slop scores",
         "priority": "high",
         "dependencies": [
-          6
+          "6"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 5,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down into: 1) Integrate SlopDetector into CaptionGenerator (add instance, import), 2) Implement _check_and_regenerate() with feedback prompt and retry logic, 3) Add slop_warning to response schema and logging. generator.py already has feedback support (lines 111-119) and _call_claude() to reuse.",
+        "updatedAt": "2026-03-24T21:36:53.298Z"
       },
       {
-        "id": 8,
+        "id": "8",
         "title": "Create few-shot examples storage and retrieval",
         "description": "Store 3-5 exemplar posts per platform in the database and implement retrieval by engagement score and pillar match for injection into generation prompts.",
         "details": "1. Add SQLAlchemy model in `api/models.py`:\n   ```python\n   class FewShotExample(Base):\n       __tablename__ = 'few_shot_examples'\n       id: Mapped[int] = mapped_column(Integer, primary_key=True)\n       platform: Mapped[str] = mapped_column(String(50), nullable=False)\n       pillar: Mapped[str | None] = mapped_column(String(50), nullable=True)\n       caption: Mapped[str] = mapped_column(Text, nullable=False)\n       engagement_score: Mapped[float] = mapped_column(Float, default=0.0)\n       raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)\n       is_active: Mapped[bool] = mapped_column(Boolean, default=True)\n       created_at: Mapped[datetime] = mapped_column(DateTime, ...)\n   ```\n2. Create migration for the table\n3. Seed with examples from `voice-profile.json` sample_hooks and highest-engagement social_history posts\n4. Create `get_few_shot_examples(db_path: str, platform: str, pillar: str | None, limit: int = 3) -> list[dict]`:\n   - Query by platform, optionally filter by pillar\n   - Order by engagement_score DESC\n   - Return caption, raw_text pairs\n5. Add API endpoints in `api/routes/settings.py`:\n   - `GET /api/settings/few-shot` - list all examples\n   - `POST /api/settings/few-shot` - add example\n   - `DELETE /api/settings/few-shot/{id}` - remove example\n6. Format examples in XML for prompt injection:\n   ```xml\n   <examples platform=\"instagram\">\n   <example>\n   <input>Baby calf born this morning</input>\n   <output>Meet our newest resident! This little one joined our herd this morning. #farmlife</output>\n   </example>\n   </examples>\n   ```",
         "testStrategy": "1. Test table creation and seeding\n2. Test retrieval by platform and pillar\n3. Test engagement score ordering\n4. Test API CRUD operations\n5. Test XML formatting for prompt injection\n6. Test limit parameter",
         "priority": "high",
         "dependencies": [],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Add FewShotExample SQLAlchemy model to api/models.py, 2) Create Alembic migration with seeding from voice-profile.json sample_hooks, 3) Implement get_few_shot_examples() retrieval function, 4) Add API endpoints to settings.py and XML formatting for prompt injection. voice-profile.json already has sample_hooks (lines 110-116).",
+        "updatedAt": "2026-03-24T21:31:28.912Z"
       },
       {
-        "id": 9,
+        "id": "9",
         "title": "Implement preference pairs from edit history",
         "description": "Extract (rejected, chosen) pairs from content_iterations table and inject 2-3 recent examples into prompts to demonstrate what rewrites were preferred over AI output.",
         "details": "1. Create `src/content_engine/preference_pairs.py`:\n   - `get_preference_pairs(db_path: str, platform: str | None, limit: int = 3) -> list[dict]`\n   - Query content_iterations where mode = 'refine' and old_caption != new_caption\n   - Order by created_at DESC\n   - Return list of dicts: `{rejected, chosen, lesson}`\n   - Lesson is auto-generated from instruction or left blank\n2. Implement lesson extraction:\n   - If refinement_instruction contains clear guidance, extract it\n   - Simple heuristics: 'shorter', 'more specific', 'remove X' → lesson\n   - Otherwise: 'Staff preferred this version'\n3. Format for prompt injection:\n   ```xml\n   <preference_examples>\n   <pair>\n   <rejected>Every life that enters this world is a blessing...</rejected>\n   <chosen>Two calves born this week. Both healthy. Both staying.</chosen>\n   <lesson>Understated, factual openings over flowery declarations</lesson>\n   </pair>\n   </preference_examples>\n   ```\n4. Integrate into PromptBuilder.build_generation_prompt()\n5. Skip if no preference pairs exist",
         "testStrategy": "1. Test extraction of preference pairs from iterations\n2. Test lesson generation from instructions\n3. Test filtering by platform\n4. Test ordering by recency\n5. Test XML formatting\n6. Test graceful handling when no pairs exist",
         "priority": "medium",
         "dependencies": [],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 5,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down into: 1) Create preference_pairs.py with get_preference_pairs() querying content_iterations table, 2) Implement lesson extraction heuristics from refinement_instruction, 3) Add XML formatting and integrate into PromptBuilder. content_iterations table exists (api/models.py lines 55-68) with mode, old_caption, new_caption, refinement_instruction fields.",
+        "updatedAt": "2026-03-24T22:44:43.584Z"
       },
       {
-        "id": 10,
+        "id": "10",
         "title": "Implement two-stage generation pipeline (Stage 1)",
         "description": "Create Stage 1 of the two-stage generation pipeline: generate a core narrative from raw_text + knowledge using Sonnet, returning core_message, key_details, emotional_hook, and CTA.",
         "details": "1. Create `src/content_engine/two_stage_generator.py`:\n2. Define `CoreNarrative` dataclass:\n   ```python\n   @dataclass\n   class CoreNarrative:\n       core_message: str  # The main point (1 sentence)\n       key_details: list[str]  # Specific facts to include\n       emotional_hook: str  # The feeling to evoke\n       cta: str  # Call to action\n   ```\n3. Implement `generate_core_narrative(raw_text, pillar, knowledge_context, voice_profile) -> CoreNarrative`:\n   - Build XML prompt using PromptBuilder\n   - Call Claude Sonnet with JSON output format\n   - Parse response into CoreNarrative\n   - Include few-shot examples of good core narratives\n4. Prompt structure:\n   ```xml\n   <system_role>Extract the core narrative...</system_role>\n   <content>{raw_text}</content>\n   <knowledge_context>{relevant facts}</knowledge_context>\n   <voice_profile>{brand voice}</voice_profile>\n   <output_format>\n   Return JSON: {\"core_message\": \"...\", \"key_details\": [...], \"emotional_hook\": \"...\", \"cta\": \"...\"}\n   </output_format>\n   ```\n5. Add error handling for JSON parsing failures\n6. Add retry logic with simpler prompt on parse failure",
         "testStrategy": "1. Test core narrative generation returns all fields\n2. Test JSON parsing of Claude response\n3. Test retry on parse failure\n4. Test knowledge context integration\n5. Mock Claude CLI for unit tests",
         "priority": "high",
         "dependencies": [
-          1,
-          5
+          "1",
+          "5"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -5987,7 +6039,8 @@
             "dependencies": [],
             "details": "Create `src/content_engine/two_stage_generator.py` with the CoreNarrative dataclass containing: core_message (str - main point in 1 sentence), key_details (list[str] - specific facts to include), emotional_hook (str - feeling to evoke), and cta (str - call to action). Include proper docstrings and type hints. Add necessary imports for dataclasses and typing modules.",
             "status": "pending",
-            "testStrategy": "Verify dataclass instantiation works correctly with all fields, test field types are enforced, test string representation is readable."
+            "testStrategy": "Verify dataclass instantiation works correctly with all fields, test field types are enforced, test string representation is readable.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -5998,7 +6051,8 @@
             ],
             "details": "Implement `generate_core_narrative(raw_text, pillar, knowledge_context, voice_profile) -> CoreNarrative` that: 1) Uses PromptBuilder (from task 1) to construct XML prompt with system_role, content, knowledge_context, voice_profile, and output_format sections, 2) Integrates with hybrid_search (from task 5) to retrieve relevant knowledge facts, 3) Calls Claude Sonnet via subprocess with JSON output format flag, 4) Include 2-3 few-shot examples of good core narratives in the prompt to guide output quality.",
             "status": "pending",
-            "testStrategy": "Test prompt construction includes all required XML sections, test Claude CLI is called with correct model flag, test few-shot examples are included in prompt."
+            "testStrategy": "Test prompt construction includes all required XML sections, test Claude CLI is called with correct model flag, test few-shot examples are included in prompt.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -6009,7 +6063,8 @@
             ],
             "details": "Add JSON response parsing that: 1) Parses Claude's JSON response into CoreNarrative fields, 2) Validates all required fields are present and non-empty, 3) On JSONDecodeError or validation failure, retry once with a simplified prompt that emphasizes JSON format requirements, 4) Use structured error handling to capture parse failures with original response for debugging, 5) Add logging for both successful parses and retry attempts.",
             "status": "pending",
-            "testStrategy": "Test valid JSON parses correctly, test malformed JSON triggers retry, test retry with simpler prompt succeeds, test max retry limit is respected, test validation catches missing fields."
+            "testStrategy": "Test valid JSON parses correctly, test malformed JSON triggers retry, test retry with simpler prompt succeeds, test max retry limit is respected, test validation catches missing fields.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -6022,21 +6077,26 @@
             ],
             "details": "Create `tests/test_two_stage_generator.py` with tests for: 1) CoreNarrative dataclass instantiation and field access, 2) generate_core_narrative returns all fields correctly with mocked successful Claude response, 3) JSON parsing handles valid responses, 4) Retry logic triggers on parse failure (mock first call to return invalid JSON, second to return valid), 5) Knowledge context integration passes correct data to prompt, 6) Use unittest.mock.patch to mock subprocess.run for Claude CLI calls, returning predetermined JSON responses.",
             "status": "pending",
-            "testStrategy": "Run pytest with coverage to ensure >80% coverage of two_stage_generator.py, verify all error paths are tested, verify mocks properly isolate from Claude API."
+            "testStrategy": "Run pytest with coverage to ensure >80% coverage of two_stage_generator.py, verify all error paths are tested, verify mocks properly isolate from Claude API.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 7,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Create two_stage_generator.py with CoreNarrative dataclass, 2) Implement generate_core_narrative() using PromptBuilder (from task 1) and hybrid_search (from task 5), 3) Add JSON parsing with validation and retry on parse failure, 4) Add unit tests with mocked Claude CLI. Depends on tasks 1 and 5 being complete.",
+        "updatedAt": "2026-03-24T22:28:36.185Z"
       },
       {
-        "id": 11,
+        "id": "11",
         "title": "Implement two-stage generation pipeline (Stage 2)",
         "description": "Create Stage 2 of the two-stage generation pipeline: parallel platform adaptation using Haiku model, taking the core narrative and producing platform-specific captions with correct length/format/hashtags.",
         "details": "1. Update `src/content_engine/two_stage_generator.py`:\n2. Implement `adapt_to_platform(core: CoreNarrative, platform: str, few_shots: list) -> str`:\n   - Build platform-specific prompt with XML structure\n   - Call Claude Haiku (--model haiku)\n   - Return platform-adapted caption\n3. Implement `adapt_to_all_platforms(core: CoreNarrative, platforms: list[str]) -> dict[str, str]`:\n   - Use concurrent.futures.ThreadPoolExecutor\n   - Call adapt_to_platform for each platform in parallel\n   - Collect results, handle individual failures\n4. Platform-specific prompt includes:\n   ```xml\n   <core_narrative>\n   <core_message>{core.core_message}</core_message>\n   <key_details>{core.key_details}</key_details>\n   <emotional_hook>{core.emotional_hook}</emotional_hook>\n   <cta>{core.cta}</cta>\n   </core_narrative>\n   <platform_rules>{PLATFORM_INSTRUCTIONS[platform]}</platform_rules>\n   <examples>{few_shot examples for this platform}</examples>\n   <output_format>Return ONLY the caption text, no JSON.</output_format>\n   ```\n5. Update `_call_claude()` to accept model parameter\n6. Add timeout handling per-platform\n7. Log timing for each platform adaptation",
         "testStrategy": "1. Test platform adaptation produces correct format\n2. Test parallel execution completes all platforms\n3. Test individual platform failure doesn't break others\n4. Test Haiku model is used (mock subprocess)\n5. Test platform-specific rules are applied\n6. Test hashtag requirements per platform",
         "priority": "high",
         "dependencies": [
-          10
+          "10"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -6045,7 +6105,8 @@
             "dependencies": [],
             "details": "1. Add adapt_to_platform() method to TwoStageGenerator class in src/content_engine/two_stage_generator.py\n2. Build XML prompt structure with <core_narrative>, <platform_rules>, <examples>, and <output_format> sections\n3. Use existing PLATFORM_INSTRUCTIONS from generator.py (lines 41-56) for platform rules\n4. Call _call_claude() with model='haiku' parameter\n5. Parse and return the plain text caption (no JSON parsing needed)\n6. Handle empty few_shots list gracefully",
             "status": "pending",
-            "testStrategy": "Test that adapt_to_platform() builds correct XML prompt structure, verifies Haiku model is specified in the call, returns plain text caption, and handles each supported platform correctly."
+            "testStrategy": "Test that adapt_to_platform() builds correct XML prompt structure, verifies Haiku model is specified in the call, returns plain text caption, and handles each supported platform correctly.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -6056,7 +6117,8 @@
             ],
             "details": "1. Add model: str = 'sonnet' parameter to _call_claude() method signature\n2. Update the subprocess command construction to use --model {model} instead of hardcoded 'sonnet' (currently line 69)\n3. Ensure backward compatibility - existing Stage 1 calls should continue to use Sonnet by default\n4. Validate model parameter is one of ['sonnet', 'haiku', 'opus']\n5. Update any existing _call_claude() invocations if needed",
             "status": "pending",
-            "testStrategy": "Mock subprocess.run to verify the --model flag is correctly set to 'haiku' for Stage 2 calls and 'sonnet' for Stage 1 calls. Test invalid model values raise appropriate errors."
+            "testStrategy": "Mock subprocess.run to verify the --model flag is correctly set to 'haiku' for Stage 2 calls and 'sonnet' for Stage 1 calls. Test invalid model values raise appropriate errors.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -6068,7 +6130,8 @@
             ],
             "details": "1. Add adapt_to_all_platforms() method to TwoStageGenerator class\n2. Use concurrent.futures.ThreadPoolExecutor with max_workers=len(platforms) or reasonable cap (e.g., 5)\n3. Submit adapt_to_platform() for each platform via executor.submit()\n4. Collect results using as_completed() or result() with timeout\n5. Handle individual platform failures gracefully - store error message instead of caption\n6. Return dict mapping platform names to captions (or error strings)\n7. Ensure partial success - one platform failure shouldn't fail all others",
             "status": "pending",
-            "testStrategy": "Test parallel execution completes all platforms, test that individual platform failures are isolated and don't break others, verify results dict contains all requested platforms, test with varying platform counts."
+            "testStrategy": "Test parallel execution completes all platforms, test that individual platform failures are isolated and don't break others, verify results dict contains all requested platforms, test with varying platform counts.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -6081,23 +6144,28 @@
             ],
             "details": "1. Add PLATFORM_TIMEOUT constant (e.g., 30 seconds per platform)\n2. Use future.result(timeout=PLATFORM_TIMEOUT) in adapt_to_all_platforms()\n3. Catch TimeoutError and handle gracefully with error message in results\n4. Add timing instrumentation around each adapt_to_platform() call\n5. Log per-platform timing: 'Platform {platform} adaptation completed in {elapsed:.2f}s'\n6. Log total parallel adaptation time\n7. Log any timeout or error events with platform context\n8. Consider using Python's time.perf_counter() for accurate timing",
             "status": "pending",
-            "testStrategy": "Test timeout triggers after configured duration, verify timeout is logged appropriately, test timing logs are emitted for successful adaptations, verify slow platforms don't block fast ones in parallel execution."
+            "testStrategy": "Test timeout triggers after configured duration, verify timeout is logged appropriately, test timing logs are emitted for successful adaptations, verify slow platforms don't block fast ones in parallel execution.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Add adapt_to_platform() using Haiku model with platform-specific prompts, 2) Implement adapt_to_all_platforms() with ThreadPoolExecutor for parallel execution, 3) Update _call_claude() to accept model parameter, 4) Add timeout handling and per-platform logging. PLATFORM_INSTRUCTIONS already exist (generator.py lines 41-56).",
+        "updatedAt": "2026-03-24T22:31:35.503Z"
       },
       {
-        "id": 12,
+        "id": "12",
         "title": "Integrate two-stage pipeline into generator.py",
         "description": "Replace the single-call generation in CaptionGenerator.generate_captions() with the two-stage pipeline (Stage 1 → Stage 2), maintaining backward compatibility with existing API.",
         "details": "1. Update `src/content_engine/generator.py`:\n2. Import TwoStageGenerator from two_stage_generator\n3. Add `self.two_stage = TwoStageGenerator(...)` in __init__\n4. Modify `generate_captions()` to:\n   ```python\n   def generate_captions(self, row, feedback=None) -> dict:\n       # Stage 1: Generate core narrative (Sonnet)\n       knowledge = self._get_knowledge_context(row.content_pillar)\n       core = self.two_stage.generate_core_narrative(\n           raw_text=row.raw_text,\n           pillar=row.content_pillar,\n           knowledge_context=knowledge,\n           voice_profile=self.voice_profile,\n           feedback=feedback\n       )\n       \n       # Stage 2: Adapt to platforms (Haiku, parallel)\n       platforms = [p.value for p, enabled in row.platforms.items() if enabled]\n       captions = self.two_stage.adapt_to_all_platforms(core, platforms)\n       \n       # Slop gate\n       captions, has_warning = self._check_and_regenerate(captions, row, platforms)\n       \n       return captions\n   ```\n5. Add `generation_metadata` to track:\n   - Stage 1 model, latency\n   - Stage 2 model, latency per platform\n   - Total latency\n6. Ensure existing tests still pass with mocked subprocess",
         "testStrategy": "1. Test end-to-end generation produces captions for all platforms\n2. Test backward compatibility with existing API\n3. Test generation metadata is captured\n4. Test total latency is reasonable (<60s)\n5. Test feedback parameter works with two-stage\n6. Integration test with mocked Claude CLI",
         "priority": "high",
         "dependencies": [
-          10,
-          11,
-          7
+          "10",
+          "11",
+          "7"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -6106,7 +6174,8 @@
             "dependencies": [],
             "details": "1. Add import at top: `from content_engine.two_stage_generator import TwoStageGenerator`\n2. In __init__ (after line 96), instantiate: `self.two_stage = TwoStageGenerator(voice_profile=self.voice_profile, learned_rules=self.learned_rules, db_path=self.db_path)`\n3. TwoStageGenerator should accept these params to build prompts with voice/rules context\n4. Keep existing _load_* methods unchanged — they already load voice_profile and learned_rules",
             "status": "pending",
-            "testStrategy": "Unit test that CaptionGenerator.__init__ creates a two_stage attribute of type TwoStageGenerator with correct params passed"
+            "testStrategy": "Unit test that CaptionGenerator.__init__ creates a two_stage attribute of type TwoStageGenerator with correct params passed",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -6117,7 +6186,8 @@
             ],
             "details": "1. In generate_captions(), first get knowledge context: `knowledge = self._get_knowledge_context(row.content_pillar)`\n2. Call Stage 1: `core = self.two_stage.generate_core_narrative(raw_text=row.raw_text, pillar=row.content_pillar, knowledge_context=knowledge, voice_profile=self.voice_profile, feedback=feedback)`\n3. Get platform list: `platforms = [p.value for p, enabled in row.platforms.items() if enabled]`\n4. Call Stage 2: `captions = self.two_stage.adapt_to_all_platforms(core, platforms)`\n5. Convert string keys back to Platform enum for return type compatibility\n6. Remove the old _build_prompt call and _call_claude call",
             "status": "pending",
-            "testStrategy": "Test generate_captions() calls two_stage.generate_core_narrative then adapt_to_all_platforms with correct params, returns dict[Platform, str]"
+            "testStrategy": "Test generate_captions() calls two_stage.generate_core_narrative then adapt_to_all_platforms with correct params, returns dict[Platform, str]",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -6128,7 +6198,8 @@
             ],
             "details": "1. Import SlоpDetector: `from content_engine.slop_detector import SlоpDetector`\n2. Add in __init__: `self.slop_detector = SlоpDetector()`\n3. Create helper `_check_and_regenerate(self, captions: dict, row: ContentRow, platforms: list) -> tuple[dict, bool]`\n4. After Stage 2 captions, call: `captions, has_warning = self._check_and_regenerate(captions, row, platforms)`\n5. If slop detected (score > threshold), regenerate Stage 2 with slop feedback, pick better version\n6. Return captions with warning flag in metadata if still sloppy after retry",
             "status": "pending",
-            "testStrategy": "Test slop gate triggers regeneration when score > threshold, test max 1 retry, test warning flag set when still sloppy after retry"
+            "testStrategy": "Test slop gate triggers regeneration when score > threshold, test max 1 retry, test warning flag set when still sloppy after retry",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -6140,21 +6211,26 @@
             ],
             "details": "1. Create `GenerationMetadata` dataclass or dict with: stage1_model, stage1_latency_ms, stage2_model, stage2_latency_per_platform, total_latency_ms, slop_warning (bool)\n2. Wrap Stage 1 call with timing: `start = time.time()`, capture latency\n3. Wrap Stage 2 calls with per-platform timing (TwoStageGenerator should return this)\n4. Store metadata as instance attribute or include in return (consider adding metadata param or attribute)\n5. Return type must stay dict[Platform, str] — metadata is supplementary\n6. Verify existing tests pass by mocking subprocess calls in both stages",
             "status": "pending",
-            "testStrategy": "Test metadata contains all fields, test total_latency is sum of stages, test backward compatibility with existing callers that expect dict[Platform, str]"
+            "testStrategy": "Test metadata contains all fields, test total_latency is sum of stages, test backward compatibility with existing callers that expect dict[Platform, str]",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Import and instantiate TwoStageGenerator in CaptionGenerator.__init__, 2) Modify generate_captions() to call Stage 1 then Stage 2, 3) Integrate slop gate (task 7) into the pipeline, 4) Add generation_metadata tracking and ensure backward compatibility. Current generate_captions() is lines 98-122.",
+        "updatedAt": "2026-03-24T22:49:06.500Z"
       },
       {
-        "id": 13,
+        "id": "13",
         "title": "Implement self-refine scoring loop",
         "description": "Add a post-generation Haiku scoring call that evaluates output on voice match, platform fit, specificity, and slop-free metrics (1-10 scale), triggering one refinement pass via Sonnet if score < 7.",
         "details": "1. Create `src/content_engine/self_refine.py`:\n2. Define `QualityScore` dataclass:\n   ```python\n   @dataclass\n   class QualityScore:\n       voice_match: int  # 1-10\n       platform_fit: int  # 1-10\n       specificity: int  # 1-10\n       slop_free: int  # 1-10\n       overall: float  # average\n       feedback: str  # specific improvement suggestions\n   ```\n3. Implement `score_caption(caption: str, platform: str, voice_profile: dict) -> QualityScore`:\n   - Call Claude Haiku with scoring prompt\n   - Parse JSON response\n   - Include rubric in prompt for each dimension\n4. Implement `refine_if_needed(captions: dict, core: CoreNarrative, platforms: list) -> dict`:\n   - Score each caption\n   - If any score.overall < 7, trigger refinement\n   - Refinement uses Sonnet with score feedback\n   - Return refined captions\n5. Add optional flag `SELF_REFINE_ENABLED` (default True) to disable in settings\n6. Add metrics logging for:\n   - Initial scores\n   - Post-refinement scores\n   - Refinement trigger rate",
         "testStrategy": "1. Test scoring returns all dimensions\n2. Test overall calculation\n3. Test refinement triggers below threshold\n4. Test no refinement above threshold\n5. Test env var disables self-refine\n6. Test metrics logging",
         "priority": "medium",
         "dependencies": [
-          12
+          "12"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -6163,7 +6239,8 @@
             "dependencies": [],
             "details": "Create `src/content_engine/self_refine.py` with the QualityScore dataclass using Python's @dataclass decorator. Include all six fields: voice_match, platform_fit, specificity, slop_free (all int 1-10), overall (float computed as average of the four scores), and feedback (str with specific improvement suggestions). Add docstrings explaining each dimension's scoring criteria. Import from dataclasses module and define __post_init__ to validate score ranges (1-10).",
             "status": "pending",
-            "testStrategy": "Test QualityScore instantiation with valid/invalid scores, test overall calculation is correct average of four dimensions, test feedback field stores string, test validation rejects scores outside 1-10 range."
+            "testStrategy": "Test QualityScore instantiation with valid/invalid scores, test overall calculation is correct average of four dimensions, test feedback field stores string, test validation rejects scores outside 1-10 range.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -6174,7 +6251,8 @@
             ],
             "details": "Implement `score_caption(caption: str, platform: str, voice_profile: dict) -> QualityScore` in self_refine.py. Build a detailed scoring rubric prompt with clear 1-10 scale definitions for each dimension (voice_match: matches brand voice profile; platform_fit: appropriate length/format/hashtags; specificity: concrete details vs generic; slop_free: absence of AI filler phrases). Call Claude Haiku via subprocess (--model haiku) similar to generator.py pattern. Parse JSON response with keys matching QualityScore fields. Handle JSON parse errors gracefully with fallback scores.",
             "status": "pending",
-            "testStrategy": "Test rubric prompt includes all four dimensions with clear criteria, test Haiku model is specified in subprocess call, test JSON parsing extracts all score fields, test malformed JSON returns sensible defaults, mock subprocess to verify CLI args."
+            "testStrategy": "Test rubric prompt includes all four dimensions with clear criteria, test Haiku model is specified in subprocess call, test JSON parsing extracts all score fields, test malformed JSON returns sensible defaults, mock subprocess to verify CLI args.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -6186,7 +6264,8 @@
             ],
             "details": "Implement `refine_if_needed(captions: dict, core: CoreNarrative, platforms: list) -> dict` that iterates through platform captions, calls score_caption for each, and if any overall < 7, builds a refinement prompt including the score feedback and calls Sonnet (--model sonnet) for a single refinement pass. Limit to exactly one refinement attempt per caption (no loops). Return dict mapping platform to final caption (refined or original). Include the QualityScore feedback in the refinement prompt to guide Sonnet. Log both initial and post-refinement scores.",
             "status": "pending",
-            "testStrategy": "Test refinement triggers when overall < 7, test no refinement when overall >= 7, test only one refinement pass occurs (no infinite loops), test refined caption replaces original in output dict, test Sonnet model is used for refinement, test score feedback is included in refinement prompt."
+            "testStrategy": "Test refinement triggers when overall < 7, test no refinement when overall >= 7, test only one refinement pass occurs (no infinite loops), test refined caption replaces original in output dict, test Sonnet model is used for refinement, test score feedback is included in refinement prompt.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -6199,107 +6278,140 @@
             ],
             "details": "Add `SELF_REFINE_ENABLED` environment variable check at top of refine_if_needed (os.environ.get with default 'true'). When disabled, return captions unchanged without scoring. Add structured logging using Python logger: log initial QualityScore for each platform, log whether refinement was triggered, log post-refinement scores if applicable. Track and log refinement trigger rate (count of refined / total scored). Consider adding a simple metrics dict or dataclass to aggregate stats across a batch run. Integrate with existing pipeline.py logging patterns.",
             "status": "pending",
-            "testStrategy": "Test SELF_REFINE_ENABLED=false bypasses scoring entirely, test SELF_REFINE_ENABLED=true (default) runs scoring, test initial scores are logged, test post-refinement scores are logged when triggered, test refinement trigger rate is calculated correctly."
+            "testStrategy": "Test SELF_REFINE_ENABLED=false bypasses scoring entirely, test SELF_REFINE_ENABLED=true (default) runs scoring, test initial scores are logged, test post-refinement scores are logged when triggered, test refinement trigger rate is calculated correctly.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Create self_refine.py with QualityScore dataclass, 2) Implement score_caption() calling Haiku with scoring rubric, 3) Implement refine_if_needed() with threshold logic and Sonnet refinement, 4) Add SELF_REFINE_ENABLED config and metrics logging. Depends on task 12 (pipeline integration).",
+        "updatedAt": "2026-03-24T22:50:46.769Z"
       },
       {
-        "id": 14,
+        "id": "14",
         "title": "Create model configuration per task type",
         "description": "Implement a model selection system that uses different Claude models (Opus/Sonnet/Haiku) for different task types based on the PRD specification, with configurable overrides.",
         "details": "1. Create `src/content_engine/model_config.py`:\n2. Define model mapping enum/dict:\n   ```python\n   MODEL_CONFIG = {\n       'caption_generation': 'sonnet',     # Stage 1\n       'platform_adaptation': 'haiku',     # Stage 2\n       'caption_iteration': 'sonnet',\n       'pillar_classification': 'haiku',\n       'quality_scoring': 'haiku',\n       'calendar_planning': 'opus',\n       'knowledge_extraction': 'haiku',\n   }\n   ```\n3. Implement `get_model_for_task(task: str) -> str`:\n   - Check env override: `CLAUDE_MODEL_{TASK}` (e.g., CLAUDE_MODEL_CAPTION_GENERATION)\n   - Fall back to MODEL_CONFIG default\n4. Update all Claude CLI calls to use `get_model_for_task()`:\n   - generator.py: _call_claude(prompt, task='caption_generation')\n   - calendar_plan.py: _run_claude(prompt, task='calendar_planning')\n   - etc.\n5. Modify `_call_claude()` signature to accept task parameter\n6. Add --effort flag support for Opus tasks (max effort for calendar planning)",
         "testStrategy": "1. Test default model selection for each task\n2. Test env var override works\n3. Test all tasks have defined models\n4. Test invalid task raises error\n5. Test effort flag applied for Opus",
         "priority": "medium",
         "dependencies": [],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down into: 1) Create model_config.py with MODEL_CONFIG dict and get_model_for_task(), 2) Add env var override support (CLAUDE_MODEL_*), 3) Update all _call_claude() callsites to use get_model_for_task(). Current hardcoded 'sonnet' in generator.py line 69, 'opus' in calendar_plan.py line 31.",
+        "updatedAt": "2026-03-24T22:43:14.647Z"
       },
       {
-        "id": 15,
+        "id": "15",
         "title": "Standardize context injection across all endpoints",
         "description": "Implement consistent context injection matrix ensuring each endpoint (Generate, Iterate, Reprompt, Calendar, Suggest) receives the correct combination of brand, voice, learned rules, knowledge, few-shots, and festivals.",
         "details": "1. Create context injection matrix in `src/content_engine/context_matrix.py`:\n   ```python\n   CONTEXT_MATRIX = {\n       'generate': ['brand_voice', 'learned_rules', 'knowledge', 'few_shots'],\n       'iterate': ['brand_voice', 'learned_rules', 'few_shots'],  # No knowledge\n       'reprompt': ['brand_voice', 'learned_rules', 'knowledge', 'few_shots'],\n       'calendar': ['brand_voice', 'learned_rules', 'knowledge', 'festivals'],\n       'suggest': ['brand_voice', 'learned_rules', 'knowledge', 'festivals'],\n   }\n   ```\n2. Create `build_context(endpoint: str, **kwargs) -> dict`:\n   - Returns only the context items needed for that endpoint\n   - kwargs contains all possible context (voice_profile, knowledge, etc.)\n3. Update each endpoint to use `build_context()`:\n   - generate.py: `ctx = build_context('generate', ...)`\n   - iterate.py: `ctx = build_context('iterate', ...)`\n   - etc.\n4. Update PromptBuilder to accept context dict and include only provided items\n5. Document the matrix in code comments",
         "testStrategy": "1. Test each endpoint gets correct context items\n2. Test iterate endpoint does NOT include knowledge\n3. Test calendar endpoint includes festivals\n4. Test generate endpoint includes few_shots\n5. Test missing context items handled gracefully",
         "priority": "high",
         "dependencies": [
-          1,
-          2,
-          8,
-          5
+          "1",
+          "2",
+          "8",
+          "5"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Create context_matrix.py with CONTEXT_MATRIX dict, 2) Implement build_context() that returns only needed context items, 3) Update each endpoint (generate, iterate, reprompt, calendar, suggest) to use build_context(), 4) Update PromptBuilder to handle partial context and add tests. Depends on tasks 1, 2, 5, 8.",
+        "updatedAt": "2026-03-24T22:37:41.864Z"
       },
       {
-        "id": 16,
+        "id": "16",
         "title": "Remove dead learning_context code",
         "description": "Clean up generator.py by removing the unused learning_context loading and related code that is loaded but never used in prompts.",
         "details": "1. In `src/content_engine/generator.py`:\n   - Remove `self.learning_context = self._load_learning_context()` from __init__\n   - Remove `_load_learning_context()` method entirely\n   - Remove any references to `self.learning_context` in prompts\n2. Delete `data/learning-context.json` if it exists and is unused\n3. Update tests that mock or check learning_context\n4. Verify voice_profile and learned_rules are the correct replacements\n5. Update any documentation referencing learning_context\n6. Git commit with clear message about cleanup",
         "testStrategy": "1. Test generator still works without learning_context\n2. Test voice_profile loading unchanged\n3. Test learned_rules loading unchanged\n4. Verify no references remain in codebase\n5. Run full test suite to catch regressions",
         "priority": "low",
         "dependencies": [],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 2,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "No expansion needed - straightforward cleanup. Remove _load_learning_context() method (lines 313-318), self.learning_context assignment (line 94), and any references. Verify no tests depend on learning_context. Check if data/learning-context.json exists and can be deleted.",
+        "updatedAt": "2026-03-24T22:18:03.255Z"
       },
       {
-        "id": 17,
+        "id": "17",
         "title": "Add Claude CLI rate limiting",
         "description": "Implement rate limiting for Claude CLI calls with max 3 concurrent requests using a semaphore, preventing overload during parallel generation.",
         "details": "1. Create `src/content_engine/rate_limiter.py`:\n   ```python\n   import asyncio\n   import threading\n   from contextlib import contextmanager\n   \n   _semaphore = threading.Semaphore(3)\n   _async_semaphore = asyncio.Semaphore(3)\n   \n   @contextmanager\n   def rate_limit_sync():\n       _semaphore.acquire()\n       try:\n           yield\n       finally:\n           _semaphore.release()\n   \n   async def rate_limit_async():\n       async with _async_semaphore:\n           yield\n   ```\n2. Update `_call_claude()` in generator.py:\n   ```python\n   from content_engine.rate_limiter import rate_limit_sync\n   \n   def _call_claude(prompt: str, model: str = 'sonnet') -> str:\n       with rate_limit_sync():\n           result = subprocess.run(...)\n           ...\n   ```\n3. Make max concurrent configurable via `CLAUDE_MAX_CONCURRENT` env var\n4. Add logging when waiting on rate limit\n5. Add metrics for rate limit wait time",
         "testStrategy": "1. Test concurrent calls are limited to max\n2. Test calls complete successfully with limiting\n3. Test env var changes limit\n4. Test async version works with asyncio\n5. Stress test with many parallel requests",
         "priority": "medium",
         "dependencies": [],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Break down into: 1) Create rate_limiter.py with threading.Semaphore(3) and context manager, 2) Update _call_claude() in generator.py to use rate limiter and add env var CLAUDE_MAX_CONCURRENT. Single callsite modification plus new utility module.",
+        "updatedAt": "2026-03-24T21:28:08.233Z"
       },
       {
-        "id": 18,
+        "id": "18",
         "title": "Add JSON recovery for malformed Claude responses",
         "description": "Implement robust JSON parsing with recovery strategies for partial or malformed Claude CLI responses, including markdown fence stripping and partial JSON extraction.",
         "details": "1. Create `src/content_engine/json_recovery.py`:\n2. Implement `parse_json_robust(text: str) -> dict | list | None`:\n   - Strip markdown code fences (```json ... ```)\n   - Strip leading/trailing whitespace\n   - Try direct json.loads()\n   - If fails, try to find JSON object/array boundaries\n   - Try json.loads() on extracted portion\n   - If still fails, try fixing common issues:\n     - Missing trailing quotes\n     - Truncated at known patterns\n     - Single quotes → double quotes\n   - Return None if unrecoverable\n3. Implement `extract_json_from_text(text: str) -> str | None`:\n   - Find first `{` or `[`\n   - Use bracket matching to find end\n   - Handle nested structures\n4. Update `_parse_response()` in generator.py to use `parse_json_robust()`\n5. Add logging for recovery attempts\n6. Add metrics for parse failure rate",
         "testStrategy": "1. Test parsing clean JSON\n2. Test stripping markdown fences\n3. Test extracting embedded JSON\n4. Test handling truncated responses\n5. Test single quote conversion\n6. Test returns None for unrecoverable\n7. Test with real malformed Claude responses",
         "priority": "medium",
         "dependencies": [],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 5,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down into: 1) Create json_recovery.py with markdown fence stripping and JSON boundary detection, 2) Implement progressive recovery strategies (direct parse → extract → fix common issues), 3) Update _parse_response() in generator.py to use parse_json_robust(). Current parsing at lines 292-310 already handles fence stripping.",
+        "updatedAt": "2026-03-24T22:17:47.632Z"
       },
       {
-        "id": 19,
+        "id": "19",
         "title": "Add retry logic with exponential backoff",
         "description": "Implement retry logic for Claude CLI calls with exponential backoff (1 retry on timeout or transient failures), improving reliability of generation.",
         "details": "1. Update `_call_claude()` in generator.py:\n   ```python\n   import time\n   \n   def _call_claude(prompt: str, model: str = 'sonnet', max_retries: int = 1) -> str:\n       last_error = None\n       for attempt in range(max_retries + 1):\n           try:\n               with rate_limit_sync():\n                   result = subprocess.run(...)\n                   if result.returncode == 0:\n                       return result.stdout.strip()\n                   # Check if retryable error\n                   if _is_retryable(result.stderr):\n                       raise RetryableError(result.stderr)\n                   raise RuntimeError(f'Claude CLI failed: {result.stderr}')\n           except (subprocess.TimeoutExpired, RetryableError) as e:\n               last_error = e\n               if attempt < max_retries:\n                   backoff = 2 ** attempt  # 1s, 2s, 4s...\n                   logger.warning(f'Retry {attempt + 1} after {backoff}s: {e}')\n                   time.sleep(backoff)\n               continue\n       raise RuntimeError(f'All retries failed: {last_error}')\n   ```\n2. Define retryable errors:\n   - TimeoutExpired\n   - 'rate limit' in stderr\n   - 'temporary' in stderr\n   - Exit code 502, 503, 504\n3. Make max_retries configurable\n4. Log retry attempts with backoff time",
         "testStrategy": "1. Test successful call on first attempt\n2. Test retry on timeout\n3. Test retry on retryable error\n4. Test no retry on non-retryable error\n5. Test exponential backoff timing\n6. Test max retries limit",
         "priority": "medium",
         "dependencies": [
-          17
+          "17"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Break down into: 1) Update _call_claude() with retry loop, exponential backoff (2^attempt seconds), and retryable error detection, 2) Add configurable max_retries parameter and logging. Current _call_claude() (lines 65-82) has basic error handling but no retry.",
+        "updatedAt": "2026-03-24T22:17:55.977Z"
       },
       {
-        "id": 20,
+        "id": "20",
         "title": "Update /api/reprompt to properly save iteration history",
         "description": "Fix the /api/reprompt endpoint to save iteration history for audit trail, matching the behavior of /api/iterate.",
         "details": "1. Update `api/routes/generate.py` reprompt() function:\n   - After generating new captions, check if content_row_id exists in request\n   - If it's a regeneration of existing content, save iteration for each platform:\n     ```python\n     if hasattr(req, 'content_row_id') and req.content_row_id:\n         existing_row = await repo.get_content_row(req.content_row_id)\n         if existing_row:\n             old_captions = json.loads(existing_row.captions or '{}')\n             for platform, new_caption in captions.items():\n                 old_caption = old_captions.get(str(platform))\n                 if old_caption != new_caption:\n                     await repo.add_iteration({\n                         'content_row_id': req.content_row_id,\n                         'platform': str(platform),\n                         'old_caption': old_caption,\n                         'new_caption': new_caption,\n                         'refinement_instruction': req.feedback,\n                         'mode': 'reprompt',\n                     })\n     ```\n2. Add optional `content_row_id` field to RepromptRequest schema\n3. Update API docs to explain audit trail behavior\n4. Return iteration_ids in response",
         "testStrategy": "1. Test reprompt creates iteration records\n2. Test iteration records have correct mode='reprompt'\n3. Test old_caption is captured correctly\n4. Test works without content_row_id (new content)\n5. Test iteration_ids returned in response",
         "priority": "medium",
         "dependencies": [],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "complexity": 3,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Break down into: 1) Add optional content_row_id to RepromptRequest schema, 2) Modify reprompt() in generate.py to save iterations when content_row_id provided, following iterate.py pattern (lines 49-59). iterate.py already has the iteration saving logic to copy.",
+        "updatedAt": "2026-03-24T22:49:11.690Z"
       },
       {
-        "id": 21,
+        "id": "21",
         "title": "Integration test: end-to-end generation pipeline",
         "description": "Create comprehensive integration tests for the complete two-stage generation pipeline including knowledge retrieval, slop detection, self-refine, and audit trail.",
         "details": "1. Create `tests/integration/test_generation_pipeline.py`:\n2. Test scenarios:\n   - Happy path: raw_text → core narrative → platform captions\n   - Knowledge integration: verify relevant facts included\n   - Slop detection: test with sloppy input triggers regeneration\n   - Self-refine: test low score triggers refinement\n   - Platform-specific: test each platform gets correct format\n   - Parallel adaptation: test multiple platforms complete\n   - Error handling: test graceful degradation on failures\n3. Use mocked Claude CLI responses for deterministic testing\n4. Create fixtures for:\n   - Sample voice profiles\n   - Sample knowledge base entries\n   - Sample few-shot examples\n   - Expected outputs for each scenario\n5. Test performance:\n   - Total latency under 60s (mocked)\n   - Individual stage latencies logged\n6. Test audit trail:\n   - Iterations saved for reprompt\n   - Metadata captured",
         "testStrategy": "Integration tests using pytest with mocked subprocess:\n- Test complete pipeline flow\n- Test each quality gate functions\n- Test error recovery\n- Test performance requirements\n- Use pytest fixtures for test data",
         "priority": "high",
         "dependencies": [
-          12,
-          13,
-          7
+          "12",
+          "13",
+          "7"
         ],
-        "status": "pending",
+        "status": "in-progress",
         "subtasks": [
           {
             "id": 1,
@@ -6308,7 +6420,8 @@
             "dependencies": [],
             "details": "Create `tests/integration/test_generation_pipeline.py` with pytest fixtures: 1) `phase_v2_db` fixture that creates SQLite schema matching api/models.py with seeded web_knowledge, few_shot_examples, and voice_rules tables, 2) `voice_profile_fixture` with sample voice profile JSON matching data/voice-profile.json structure, 3) `knowledge_entries_fixture` with 3-5 seeded WebKnowledge rows covering multiple pillars, 4) `few_shot_examples_fixture` with sample FewShotExample rows for instagram/facebook, 5) `mock_claude_cli` fixture using unittest.mock.patch on subprocess.run that returns controlled JSON responses based on prompt content detection. Include helper functions to detect which stage (core narrative vs platform adaptation) is being called and return appropriate mocked responses. Use existing patterns from tests/test_generator.py and tests/integration/test_phase3_workflows.py.",
             "status": "pending",
-            "testStrategy": "Verify fixtures create valid database schema matching api/models.py, verify mock_claude_cli intercepts all subprocess.run calls with claude command, verify seeded data is queryable via SQLAlchemy."
+            "testStrategy": "Verify fixtures create valid database schema matching api/models.py, verify mock_claude_cli intercepts all subprocess.run calls with claude command, verify seeded data is queryable via SQLAlchemy.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -6319,7 +6432,8 @@
             ],
             "details": "Create TestHappyPath class with tests: 1) `test_full_pipeline_generates_all_platforms` - given a content row with raw_text and multiple platforms enabled (instagram, facebook), verify pipeline produces captions for each platform, 2) `test_core_narrative_extracted_correctly` - verify Stage 1 produces CoreNarrative with core_message, key_details, emotional_hook, and cta fields, 3) `test_platform_captions_match_format_requirements` - verify instagram caption has hashtags (3-5), facebook has CTA and length (30-80 words), 4) `test_knowledge_context_integrated` - verify relevant knowledge base facts appear in generated content, 5) `test_few_shot_examples_used` - verify few-shot examples are included in prompts by checking mock call args. Mock Claude to return valid JSON for both stages. Assert on content quality markers.",
             "status": "pending",
-            "testStrategy": "Run tests with mock_claude_cli returning controlled valid responses, verify all platforms receive captions, verify prompt construction includes knowledge and few-shot sections."
+            "testStrategy": "Run tests with mock_claude_cli returning controlled valid responses, verify all platforms receive captions, verify prompt construction includes knowledge and few-shot sections.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -6330,7 +6444,8 @@
             ],
             "details": "Create TestQualityGates class with tests: 1) `test_slop_detection_triggers_regeneration` - mock Claude to return sloppy content first (containing phrases from slop patterns like 'hearts overflowing', 'there's something deeply'), verify regeneration is triggered (subprocess.run called twice), verify second attempt is returned, 2) `test_slop_max_one_retry` - verify only one retry occurs even if second attempt is still sloppy, verify warning flag is set, 3) `test_no_regeneration_when_clean` - verify clean content passes without retry, 4) `test_self_refine_triggers_below_threshold` - mock scoring call to return score < 7, verify refinement pass is triggered, verify improved version is returned, 5) `test_no_refinement_above_threshold` - mock scoring to return >= 7, verify no refinement call made, 6) `test_slop_and_self_refine_combined` - test both gates work together in correct order (slop check first, then self-refine).",
             "status": "pending",
-            "testStrategy": "Configure mock_claude_cli to return different responses based on call count, verify call sequences match expected flow, verify final output reflects quality gate decisions."
+            "testStrategy": "Configure mock_claude_cli to return different responses based on call count, verify call sequences match expected flow, verify final output reflects quality gate decisions.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -6341,7 +6456,8 @@
             ],
             "details": "Create TestErrorHandling class with tests: 1) `test_claude_cli_timeout_handled` - mock subprocess.run to raise TimeoutExpired, verify RuntimeError raised with descriptive message, 2) `test_claude_cli_nonzero_exit_handled` - mock returncode=1 with stderr, verify RuntimeError includes stderr, 3) `test_json_parse_failure_retries` - mock malformed JSON response first, valid JSON second, verify retry occurs and succeeds, 4) `test_single_platform_failure_doesnt_break_others` - in Stage 2 parallel adaptation, if one platform fails, verify other platforms still get captions, verify partial result returned with error info, 5) `test_knowledge_retrieval_failure_continues` - if knowledge_context.py raises exception, verify generation continues without knowledge (graceful degradation), 6) `test_missing_voice_profile_continues` - verify generation works without voice profile file.",
             "status": "pending",
-            "testStrategy": "Configure mocks to raise specific exceptions, verify error handling produces expected exceptions or graceful fallbacks, verify partial results are returned where appropriate."
+            "testStrategy": "Configure mocks to raise specific exceptions, verify error handling produces expected exceptions or graceful fallbacks, verify partial results are returned where appropriate.",
+            "parentId": "undefined"
           },
           {
             "id": 5,
@@ -6353,15 +6469,24 @@
             ],
             "details": "Create TestPerformanceAndAudit class with tests: 1) `test_total_latency_logged` - verify pipeline logs total execution time, assert mocked pipeline completes under 60s, 2) `test_stage_latencies_captured` - verify individual stage times (Stage 1, Stage 2 per platform) are captured in metadata or logs, 3) `test_audit_trail_saved_for_reprompt` - verify ContentIteration rows are created for each generation/iteration with old_caption, new_caption, mode, refinement_instruction, 4) `test_iteration_preserves_reprompt_context` - verify saved iteration includes enough context to reproduce the generation (raw_text, pillar, platform), 5) `test_generation_metadata_captured` - verify metadata includes: model used per stage, slop_score, self_refine_score, was_regenerated boolean, 6) `test_parallel_platform_adaptation_timing` - verify Stage 2 runs platforms in parallel (not sequential), check timing indicates concurrency.",
             "status": "pending",
-            "testStrategy": "Use time mocking or timing assertions on mocked calls, verify database contains expected ContentIteration rows after generation, verify metadata dictionary contains all required fields."
+            "testStrategy": "Use time mocking or timing assertions on mocked calls, verify database contains expected ContentIteration rows after generation, verify metadata dictionary contains all required fields.",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 7,
+        "recommendedSubtasks": 5,
+        "expansionPrompt": "Break down into: 1) Create tests/integration/test_generation_pipeline.py with pytest fixtures, 2) Test happy path: raw_text → core narrative → platform captions, 3) Test quality gates: slop detection, self-refine, 4) Test error handling and graceful degradation, 5) Test performance and audit trail. Depends on tasks 12, 13, 7 being complete.",
+        "updatedAt": "2026-03-24T22:50:52.946Z"
       }
     ],
     "metadata": {
-      "created": "2026-03-24T19:49:26.376Z",
-      "updated": "2026-03-24T19:56:13.626Z",
-      "description": "Tasks for content-intelligence-v2 context"
+      "version": "1.0.0",
+      "lastModified": "2026-03-24T22:50:52.946Z",
+      "taskCount": 21,
+      "completedCount": 20,
+      "tags": [
+        "content-intelligence-v2"
+      ]
     }
   }
 }
