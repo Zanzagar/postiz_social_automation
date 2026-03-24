@@ -10,6 +10,7 @@ import json
 import logging
 import re
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -58,6 +59,8 @@ PLATFORM_INSTRUCTIONS: dict[Platform, str] = {
 }
 
 CLI_TIMEOUT = 120  # seconds
+MAX_RETRIES = 2  # 3 total attempts (initial + 2 retries)
+RETRY_BASE_DELAY = 2  # seconds — doubles each retry (2s, 4s)
 
 # Run claude -p from /tmp so it doesn't load the project's .claude/ directory
 # (rules, hooks, plugins, 1000+ session files) which adds 40s+ of startup.
@@ -65,24 +68,44 @@ _CLEAN_CWD = "/tmp"
 
 
 def _call_claude(prompt: str) -> str:
-    """Call Claude Code CLI and return stdout. Raises RuntimeError on failure."""
-    with rate_limit_sync():
-        try:
-            result = subprocess.run(
-                ["claude", "-p", prompt, "--model", "sonnet"],
-                capture_output=True,
-                text=True,
-                timeout=CLI_TIMEOUT,
-                stdin=subprocess.DEVNULL,
-                cwd=_CLEAN_CWD,
+    """Call Claude Code CLI with retry on transient failures.
+
+    Retries up to MAX_RETRIES times with exponential backoff (2s, 4s).
+    Timeout errors are NOT retried (the CLI genuinely hung).
+    """
+    last_error: RuntimeError | None = None
+
+    for attempt in range(MAX_RETRIES + 1):
+        with rate_limit_sync():
+            try:
+                result = subprocess.run(
+                    ["claude", "-p", prompt, "--model", "sonnet"],
+                    capture_output=True,
+                    text=True,
+                    timeout=CLI_TIMEOUT,
+                    stdin=subprocess.DEVNULL,
+                    cwd=_CLEAN_CWD,
+                )
+            except subprocess.TimeoutExpired as e:
+                # Timeouts are not retried — the CLI genuinely hung
+                raise RuntimeError(f"Claude CLI timed out after {CLI_TIMEOUT}s") from e
+
+        if result.returncode == 0:
+            return result.stdout.strip()
+
+        last_error = RuntimeError(f"Claude CLI failed (exit {result.returncode}): {result.stderr}")
+
+        if attempt < MAX_RETRIES:
+            delay = RETRY_BASE_DELAY * (2**attempt)
+            logger.warning(
+                "Claude CLI attempt %d/%d failed, retrying in %ds...",
+                attempt + 1,
+                MAX_RETRIES + 1,
+                delay,
             )
-        except subprocess.TimeoutExpired as e:
-            raise RuntimeError(f"Claude CLI timed out after {CLI_TIMEOUT}s") from e
+            time.sleep(delay)
 
-    if result.returncode != 0:
-        raise RuntimeError(f"Claude CLI failed (exit {result.returncode}): {result.stderr}")
-
-    return result.stdout.strip()
+    raise last_error  # type: ignore[misc]
 
 
 _DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
