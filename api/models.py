@@ -64,6 +64,7 @@ class ContentIteration(Base):
     new_caption: Mapped[str] = mapped_column(Text, nullable=False)
     refinement_instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
     mode: Mapped[str] = mapped_column(String(20), default="refine")
+    model_used: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 

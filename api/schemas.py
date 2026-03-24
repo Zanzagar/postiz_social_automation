@@ -373,5 +373,6 @@ class IterationResponse(BaseModel):
     new_caption: str
     refinement_instruction: str | None
     mode: str
+    model_used: str | None = None
     created_by: int | None
     created_at: datetime

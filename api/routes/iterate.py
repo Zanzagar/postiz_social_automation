@@ -10,6 +10,7 @@ from api.auth import get_current_user
 from api.dependencies import get_caption_generator, get_content_repo, get_settings
 from api.repositories.content import ContentRepository
 from api.schemas import IterateRequest, IterateResponse, IterationResponse
+from content_engine.model_config import get_model
 from content_engine.preference_pairs import save_preference_pair
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ async def iterate_caption(
     )
 
     # Save iteration history
+    model_used = get_model("iterate")
     iteration = await repo.add_iteration(
         {
             "content_row_id": req.content_row_id,
@@ -59,6 +61,7 @@ async def iterate_caption(
             "new_caption": new_caption,
             "refinement_instruction": req.instruction,
             "mode": req.mode,
+            "model_used": model_used,
         }
     )
 
@@ -99,6 +102,7 @@ async def get_iterations(
             new_caption=i.new_caption,
             refinement_instruction=i.refinement_instruction,
             mode=i.mode,
+            model_used=i.model_used,
             created_by=i.created_by,
             created_at=i.created_at,
         )
