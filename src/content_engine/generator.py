@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from content_engine.models import ContentRow, Platform, Suggestion
+from content_engine.rate_limiter import rate_limit_sync
 
 logger = logging.getLogger(__name__)
 
@@ -64,17 +65,18 @@ _CLEAN_CWD = "/tmp"
 
 def _call_claude(prompt: str) -> str:
     """Call Claude Code CLI and return stdout. Raises RuntimeError on failure."""
-    try:
-        result = subprocess.run(
-            ["claude", "-p", prompt, "--model", "sonnet"],
-            capture_output=True,
-            text=True,
-            timeout=CLI_TIMEOUT,
-            stdin=subprocess.DEVNULL,
-            cwd=_CLEAN_CWD,
-        )
-    except subprocess.TimeoutExpired as e:
-        raise RuntimeError(f"Claude CLI timed out after {CLI_TIMEOUT}s") from e
+    with rate_limit_sync():
+        try:
+            result = subprocess.run(
+                ["claude", "-p", prompt, "--model", "sonnet"],
+                capture_output=True,
+                text=True,
+                timeout=CLI_TIMEOUT,
+                stdin=subprocess.DEVNULL,
+                cwd=_CLEAN_CWD,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(f"Claude CLI timed out after {CLI_TIMEOUT}s") from e
 
     if result.returncode != 0:
         raise RuntimeError(f"Claude CLI failed (exit {result.returncode}): {result.stderr}")
