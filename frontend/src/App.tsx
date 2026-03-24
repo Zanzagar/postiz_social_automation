@@ -9,6 +9,7 @@ import { HealthPage } from "@/pages/HealthPage";
 import { TemplatesPage } from "@/pages/TemplatesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { KnowledgePage } from "@/pages/KnowledgePage";
+import { MediaPage } from "@/pages/MediaPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppShell } from "@/components/layout/AppShell";
 
@@ -31,6 +32,7 @@ function App() {
         <Route path="templates" element={<TemplatesPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="knowledge" element={<KnowledgePage />} />
+        <Route path="media" element={<MediaPage />} />
         <Route path="health" element={<HealthPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

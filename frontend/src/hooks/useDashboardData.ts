@@ -16,6 +16,7 @@ export function useDashboardData() {
   const health = useQuery({
     queryKey: ["health"],
     queryFn: () => api.getHealth(),
+    staleTime: 5 * 60 * 1000,
   });
 
   const now = new Date();
@@ -41,7 +42,7 @@ export function useDashboardData() {
     postedCount,
     calendarEntries: calendar.data?.entries ?? [],
     services: health.data?.services ?? [],
-    isLoading: drafts.isLoading || calendar.isLoading || health.isLoading,
-    isError: drafts.isError || calendar.isError || health.isError,
+    isLoading: drafts.isLoading || calendar.isLoading,
+    isError: drafts.isError || calendar.isError,
   };
 }

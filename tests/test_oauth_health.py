@@ -1,18 +1,19 @@
-"""Tests for OAuth token health monitoring (Task 24).
+"""Tests for OAuth token health monitoring.
 
 Tests verify:
-- check_oauth_health function exists and returns (bool, str) tuple
-- Healthy token returns (True, message)
-- Expired/invalid token returns (False, message with re-auth hint)
+- check_oauth_health uses 'claude auth status' (JSON output)
+- Authenticated returns (True, message with auth method)
+- Not logged in returns (False, message with login hint)
 - Timeout returns (False, timeout message)
 - CLI not found returns (False, message)
 """
 
+import json
 from unittest.mock import MagicMock, patch
 
 
 class TestCheckOauthHealth:
-    """Test OAuth token health checking."""
+    """Test OAuth token health checking via 'claude auth status'."""
 
     @patch("content_engine.health.subprocess.run")
     def test_valid_token_returns_true(self, mock_run: MagicMock) -> None:
@@ -20,25 +21,35 @@ class TestCheckOauthHealth:
 
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout="OK",
-            stderr="",
+            stdout=json.dumps({"loggedIn": True, "authMethod": "claude.ai"}),
         )
         ok, msg = check_oauth_health()
         assert ok is True
-        assert "valid" in msg.lower() or "ok" in msg.lower()
+        assert "claude.ai" in msg
 
     @patch("content_engine.health.subprocess.run")
-    def test_expired_token_returns_false(self, mock_run: MagicMock) -> None:
+    def test_api_key_auth_returns_true(self, mock_run: MagicMock) -> None:
         from content_engine.health import check_oauth_health
 
         mock_run.return_value = MagicMock(
-            returncode=1,
-            stdout="",
-            stderr="Error: not authenticated. Please run 'claude login'",
+            returncode=0,
+            stdout=json.dumps({"loggedIn": True, "authMethod": "api_key"}),
+        )
+        ok, msg = check_oauth_health()
+        assert ok is True
+        assert "api_key" in msg
+
+    @patch("content_engine.health.subprocess.run")
+    def test_not_logged_in_returns_false(self, mock_run: MagicMock) -> None:
+        from content_engine.health import check_oauth_health
+
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"loggedIn": False}),
         )
         ok, msg = check_oauth_health()
         assert ok is False
-        assert "login" in msg.lower() or "expired" in msg.lower()
+        assert "login" in msg.lower()
 
     @patch("content_engine.health.subprocess.run")
     def test_timeout_returns_false(self, mock_run: MagicMock) -> None:
@@ -46,7 +57,7 @@ class TestCheckOauthHealth:
 
         from content_engine.health import check_oauth_health
 
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd="claude", timeout=30)
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="claude", timeout=10)
         ok, msg = check_oauth_health()
         assert ok is False
         assert "timeout" in msg.lower()
@@ -60,14 +71,13 @@ class TestCheckOauthHealth:
         assert ok is False
 
     @patch("content_engine.health.subprocess.run")
-    def test_unknown_error_returns_false(self, mock_run: MagicMock) -> None:
+    def test_invalid_json_returns_false(self, mock_run: MagicMock) -> None:
         from content_engine.health import check_oauth_health
 
         mock_run.return_value = MagicMock(
             returncode=1,
-            stdout="",
-            stderr="Some unknown error",
+            stdout="not json",
         )
         ok, msg = check_oauth_health()
         assert ok is False
-        assert msg  # Should have some message
+        assert msg

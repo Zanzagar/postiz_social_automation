@@ -1,7 +1,9 @@
 """System health check endpoints."""
 
+import asyncio
 import time
 from datetime import UTC, datetime
+from functools import partial
 
 from fastapi import APIRouter, Depends
 
@@ -20,6 +22,10 @@ router = APIRouter(prefix="/api", tags=["health"], dependencies=[Depends(get_cur
 # Simple cache for health checks
 _health_cache: dict = {"data": None, "expires": 0}
 _CACHE_TTL = 30  # seconds
+
+# OAuth check is slow (subprocess) and rarely changes — cache separately
+_oauth_cache: dict = {"result": None, "expires": 0}
+_OAUTH_CACHE_TTL = 300  # 5 minutes
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -47,16 +53,42 @@ async def system_health(
                 ServiceHealth(name=name, status="ok", message=msg, last_checked=checked_at)
             )
     else:
-        for name, check_fn, args in [
-            ("sheets", check_sheets_health, (sheets,)),
-            ("postiz", check_postiz_health, (postiz,)),
-            ("claude", check_claude_health, ()),
-            ("oauth", check_oauth_health, ()),
-        ]:
-            ok, msg = check_fn(*args)
+        # Run all checks concurrently in thread pool to avoid blocking the event loop.
+        # OAuth uses a longer cache since it rarely changes and is the slowest check.
+        oauth_result = None
+        if _oauth_cache["result"] and now < _oauth_cache["expires"]:
+            oauth_result = _oauth_cache["result"]
+
+        loop = asyncio.get_event_loop()
+        checks_to_run = [
+            ("sheets", partial(check_sheets_health, sheets)),
+            ("postiz", partial(check_postiz_health, postiz)),
+            ("claude", check_claude_health),
+        ]
+        if oauth_result is None:
+            checks_to_run.append(("oauth", check_oauth_health))
+
+        results = await asyncio.gather(*(loop.run_in_executor(None, fn) for _, fn in checks_to_run))
+
+        for (name, _), (ok, msg) in zip(checks_to_run, results):
+            if name == "oauth":
+                _oauth_cache["result"] = (ok, msg)
+                _oauth_cache["expires"] = time.time() + _OAUTH_CACHE_TTL
             services.append(
                 ServiceHealth(
                     name=name,
+                    status="ok" if ok else "error",
+                    message=msg,
+                    last_checked=checked_at,
+                )
+            )
+
+        # Append cached OAuth if we didn't re-check it
+        if oauth_result is not None:
+            ok, msg = oauth_result
+            services.append(
+                ServiceHealth(
+                    name="oauth",
                     status="ok" if ok else "error",
                     message=msg,
                     last_checked=checked_at,

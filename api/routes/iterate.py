@@ -86,3 +86,74 @@ async def get_iterations(
         )
         for i in iterations
     ]
+
+
+@router.post("/iterate/revert", response_model=IterateResponse)
+async def revert_caption(
+    content_row_id: int,
+    platform: str,
+    iteration_id: int | None = None,
+    repo: ContentRepository = Depends(get_content_repo),
+):
+    """Revert a caption to a previous version.
+
+    If iteration_id is provided, reverts to that iteration's old_caption.
+    If omitted, reverts to the very first (original) caption.
+    """
+    row = await repo.get_content_row(content_row_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Content row not found")
+
+    iterations = await repo.get_iterations(content_row_id)
+    platform_iters = [i for i in iterations if i.platform == platform]
+    if not platform_iters:
+        raise HTTPException(status_code=404, detail="No iteration history for this platform")
+
+    if iteration_id is not None:
+        # Revert to a specific iteration's old_caption
+        target = next((i for i in platform_iters if i.id == iteration_id), None)
+        if not target:
+            raise HTTPException(status_code=404, detail="Iteration not found")
+        revert_to = target.old_caption
+    else:
+        # Revert to original — the oldest iteration's old_caption
+        oldest = min(platform_iters, key=lambda i: i.id)
+        revert_to = oldest.old_caption
+
+    if revert_to is None:
+        raise HTTPException(status_code=400, detail="No original caption to revert to")
+
+    # Save the revert as an iteration for audit trail
+    captions = _parse_json_field(row.captions)
+    current_caption = captions.get(platform)
+
+    iteration = await repo.add_iteration(
+        {
+            "content_row_id": content_row_id,
+            "platform": platform,
+            "old_caption": current_caption,
+            "new_caption": revert_to,
+            "refinement_instruction": "Reverted to original"
+            if iteration_id is None
+            else f"Reverted to iteration {iteration_id}",
+            "mode": "revert",
+        }
+    )
+
+    # Update content row
+    captions[platform] = revert_to
+    await repo.update_captions(content_row_id, json.dumps(captions))
+
+    return IterateResponse(caption=revert_to, iteration_id=iteration.id)
+
+
+@router.delete("/iterations/{iteration_id}")
+async def delete_iteration(
+    iteration_id: int,
+    repo: ContentRepository = Depends(get_content_repo),
+):
+    """Delete a single iteration log entry."""
+    deleted = await repo.delete_iteration(iteration_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Iteration not found")
+    return {"ok": True}

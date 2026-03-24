@@ -1,12 +1,17 @@
 """Content reading and action endpoints."""
 
 import json
+import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
+from PIL import Image
 
 from api.auth import get_current_user
 from api.dependencies import get_content_repo, get_postiz_client, get_sheets_client
+from api.models import MediaAdapted, MediaCatalog
 from api.repositories.content import ContentRepository
+from api.routes.media import PLATFORM_DIMENSIONS, _smart_crop
 from api.schemas import (
     ApproveResponse,
     CalendarEntry,
@@ -16,6 +21,8 @@ from api.schemas import (
     SuggestionResponse,
 )
 from content_engine.postiz import PostizAPIError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["content"], dependencies=[Depends(get_current_user)])
 
@@ -179,3 +186,91 @@ async def approve_draft(
             pass
 
     return ApproveResponse(success=True, postiz_ids=draft_ids)
+
+
+@router.put("/content/{row_id}/attach-media")
+async def attach_media(
+    row_id: int,
+    media_id: int,
+    repo: ContentRepository = Depends(get_content_repo),
+):
+    """Attach a media catalog item to a content row and auto-adapt."""
+    row = await repo.get_content_row(row_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Row {row_id} not found.")
+
+    current_ids: list[int] = []
+    if row.media_catalog_ids:
+        try:
+            current_ids = json.loads(row.media_catalog_ids)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    if media_id not in current_ids:
+        current_ids.append(media_id)
+
+    row.media_catalog_ids = json.dumps(current_ids)
+
+    # Auto-adapt media for content row's platforms
+    adapted_count = 0
+    platforms = _parse_json_field(row.platforms)
+    enabled_platforms = [p for p, on in platforms.items() if on]
+
+    media = await repo.session.get(MediaCatalog, media_id)
+    if media and media.local_path:
+        src_path = Path(media.local_path)
+        if src_path.exists():
+            adapted_dir = src_path.parent / "adapted"
+            adapted_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                with Image.open(src_path) as src_img:
+                    for platform in enabled_platforms:
+                        dims = PLATFORM_DIMENSIONS.get(platform, {})
+                        for fmt, (tw, th) in dims.items():
+                            out_name = f"{media_id}_{platform}_{fmt}.jpg"
+                            out_path = adapted_dir / out_name
+                            adapted_img = _smart_crop(src_img, tw, th)
+                            adapted_img.save(out_path, "JPEG", quality=90)
+                            repo.session.add(
+                                MediaAdapted(
+                                    media_id=media_id,
+                                    platform=platform,
+                                    format=fmt,
+                                    adapted_path=str(out_path),
+                                    width=tw,
+                                    height=th,
+                                )
+                            )
+                            adapted_count += 1
+            except Exception:
+                logger.warning("Auto-adapt failed for media %d", media_id, exc_info=True)
+
+    await repo.session.commit()
+    return {
+        "media_catalog_ids": current_ids,
+        "adapted_count": adapted_count,
+    }
+
+
+@router.put("/content/{row_id}/detach-media")
+async def detach_media(
+    row_id: int,
+    media_id: int,
+    repo: ContentRepository = Depends(get_content_repo),
+):
+    """Detach a media catalog item from a content row."""
+    row = await repo.get_content_row(row_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Row {row_id} not found.")
+
+    current_ids: list[int] = []
+    if row.media_catalog_ids:
+        try:
+            current_ids = json.loads(row.media_catalog_ids)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    current_ids = [mid for mid in current_ids if mid != media_id]
+    row.media_catalog_ids = json.dumps(current_ids) if current_ids else None
+    await repo.session.commit()
+    return {"media_catalog_ids": current_ids}

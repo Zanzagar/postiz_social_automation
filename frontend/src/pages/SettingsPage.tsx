@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Settings,
   Loader2,
@@ -16,6 +17,8 @@ import {
   GripVertical,
   Check,
   X,
+  Trash2,
+  MessageSquare,
 } from "lucide-react";
 
 export function SettingsPage() {
@@ -148,9 +151,156 @@ export function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+      {/* Voice Rules section */}
+      <VoiceRulesManager />
+
       {/* Content Pillars section */}
       <PillarManager />
     </div>
+  );
+}
+
+// --- Voice Rules Management ---
+
+function VoiceRulesManager() {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ["voiceRules"],
+    queryFn: () => api.getVoiceRules(),
+  });
+
+  const [rules, setRules] = useState<string[]>([]);
+  const [newRule, setNewRule] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (data?.rules) {
+      setRules(data.rules);
+    }
+  }, [data]);
+
+  async function handleSave() {
+    setIsSaving(true);
+    setSaved(false);
+    try {
+      await api.updateVoiceRules(rules);
+      queryClient.invalidateQueries({ queryKey: ["voiceRules"] });
+      setSaved(true);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function handleAdd() {
+    if (!newRule.trim()) return;
+    setRules((prev) => [...prev, newRule.trim()]);
+    setNewRule("");
+    setSaved(false);
+  }
+
+  function handleRemove(index: number) {
+    setRules((prev) => prev.filter((_, i) => i !== index));
+    setSaved(false);
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Voice Rules</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-24 rounded-xl" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <MessageSquare className="h-4 w-4 text-sage-600" />
+          <CardTitle className="text-base">Voice Rules</CardTitle>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Rules that guide AI content generation. These are injected into every
+          prompt as &ldquo;LEARNED PREFERENCES&rdquo;. Add your own or let the
+          system extract them from your editing history.
+        </p>
+
+        {/* Existing rules */}
+        {rules.length > 0 ? (
+          <div className="space-y-2">
+            {rules.map((rule, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-2 rounded-md border px-3 py-2"
+              >
+                <span className="flex-1 text-sm">{rule}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-destructive"
+                  onClick={() => handleRemove(i)}
+                  aria-label="Remove rule"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-center text-sm text-muted-foreground py-3 rounded-md border border-dashed">
+            No voice rules yet. Add one below.
+          </p>
+        )}
+
+        {/* Add new rule */}
+        <div className="flex gap-2">
+          <Textarea
+            value={newRule}
+            onChange={(e) => setNewRule(e.target.value)}
+            placeholder='e.g. "Keep posts under 60 words" or "Always mention cow names when available"'
+            className="min-h-[60px]"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleAdd();
+              }
+            }}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 self-end"
+            onClick={handleAdd}
+            disabled={!newRule.trim()}
+          >
+            <Plus className="mr-1 h-3.5 w-3.5" />
+            Add
+          </Button>
+        </div>
+
+        {/* Save */}
+        <div className="flex items-center gap-3">
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" />
+            )}
+            Save Rules
+          </Button>
+          {saved && (
+            <span className="text-sm text-sage-600">Rules saved</span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

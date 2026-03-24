@@ -1,0 +1,117 @@
+{
+  "sentence_style": "Short, simple declarative sentences. Rarely compound or complex. Often fragments ('Prima is such a beauty'). Conversational and unpolished \u2014 reads like a neighbor talking, not a brand. Personality descriptions use a pattern of: name \u2192 trait \u2192 anecdote. Fundraising posts are the only ones that run longer, and they lose engagement when they do.",
+  "opening_patterns": [
+    {
+      "pattern": "Cow name + identity statement",
+      "examples": [
+        "Nandini is a cow who requires extra care due to her disability.",
+        "Harini is one of our youngest cows.",
+        "Rena is a real lady indeed.",
+        "She's one of the older cows, retired."
+      ]
+    },
+    {
+      "pattern": "Simple scene/moment caption",
+      "examples": [
+        "Early morning in Gita Nagari \ud83c\udf28\ufe0f\ud83c\udf28\ufe0f",
+        "The first snow in Gita Nagari",
+        "Beautiful sunrise on the farm."
+      ]
+    },
+    {
+      "pattern": "Direct warm invitation",
+      "examples": [
+        "You are invited! Join us!",
+        "We would love for you to join in on the country style Chariot Festival!",
+        "Here is an invitation to Gita Nagari / Gita Valley! Join us!"
+      ]
+    },
+    {
+      "pattern": "We-statement about shared experience",
+      "examples": [
+        "We live in a constant rush; daily responsibilities are often a source of stress, burnout, and lack of energy.",
+        "We have once again successfully concluded our Community Supported Agriculture (CSA) 2023 season."
+      ]
+    },
+    {
+      "pattern": "Greetings Friends!",
+      "examples": [
+        "Greetings Friends! Gita Nagari is expanding!",
+        "Greetings Friends. Excited to be seeing all of you at our annual Chariot Festival tomorrow.",
+        "Greetings Friends! You are invited!"
+      ]
+    }
+  ],
+  "emotional_register": "Warm, gentle, and nurturing \u2014 like a soft-spoken host welcoming you to their home. Playful when describing cows (light humor, affectionate teasing). Never urgent, never guilt-tripping, never confrontational. Fundraising asks are framed as invitations, not demands. Spiritual references are present but understated \u2014 never preachy. The overall feeling is 'come be with us' rather than 'support our cause.' Avoids: negativity, industry criticism, activist anger, guilt, scarcity pressure, hard sells.",
+  "vocabulary": {
+    "characteristic_words": [
+      "sweet",
+      "gentle",
+      "curious",
+      "beautiful",
+      "positive",
+      "warm",
+      "energy",
+      "cruelty-free",
+      "join us",
+      "you are invited",
+      "support",
+      "Greetings Friends",
+      "adventure",
+      "fun",
+      "enjoy",
+      "love",
+      "nature"
+    ],
+    "characteristic_phrases": [
+      "one of our youngest/oldest cows",
+      "she's very",
+      "join us",
+      "you are invited",
+      "your support is",
+      "we grow the hay, love the cows",
+      "Happy Cows"
+    ],
+    "avoided_language": [
+      "factory",
+      "slaughter",
+      "exploitation",
+      "vegan vs vegetarian debates",
+      "corporate language",
+      "KPIs/metrics",
+      "urgent/last chance/don't miss out",
+      "industry jargon",
+      "political framing",
+      "guilt-based appeals"
+    ]
+  },
+  "content_patterns": {
+    "highest_engagement": "Individual cow personality portraits \u2014 named cows with specific traits, quirks, and anecdotes. These consistently outperform fundraising posts by 2-5x.",
+    "second_tier": "Simple scenic/seasonal moments with minimal text ('The first snow', 'Early morning'). These get 32 engagements with 5-8 words.",
+    "third_tier": "Event invitations framed as warm, inclusive gatherings rather than organizational announcements.",
+    "lowest_engagement": "Link-only fundraising posts, generic 'save the date' announcements, and posts heavy on logistics or hashtags.",
+    "framing_pattern": "Products are framed as mission participation ('you don't just buy a commodity \u2014 you invest in our future as a planet'). Donations are framed as cow care ('Comfy-A-Cow'). Events are framed as community ('join us')."
+  },
+  "length_range": "5-150 words. Sweet spot is either very short (5-15 words for scenic moments) or medium (30-80 words for cow personality stories). Posts over 100 words consistently underperform. The highest-engagement post is ~60 words.",
+  "what_works": [
+    "Name-and-personality cow portraits: give the cow a name, one defining trait, and one specific behavioral anecdote ('she regularly manages to venture outside the field fence'). These are the #1 engagement driver.",
+    "Ultra-short scenic captions: a single sentence about a farm moment with 1-2 emojis. No call to action, no link. Pure atmosphere.",
+    "Playful cow-perspective voice: occasional first-person from the cow's POV ('I am someone!!', 'Yes the grass was delicious \ud83d\ude0b'). Light, not overused.",
+    "Mission-framed product pitches: connect the purchase directly to the cow care mission in one sentence, then product details. Lead with purpose, not product.",
+    "Warm inclusive invitations: 'We would love for you to join' beats 'Save the date' every time. Personal warmth over announcement formatting."
+  ],
+  "what_to_avoid": [
+    "Link-only posts with no caption or context \u2014 these get 2-3 engagements consistently.",
+    "Long fundraising paragraphs with multiple links and detailed financial explanations \u2014 engagement drops sharply past 100 words.",
+    "Stacking hashtags (#isckon #farmlife #harekrishna\ud83d\ude4f #srilaprabhupadaquotes) \u2014 posts with 3+ hashtags average 5 engagements vs 20+ without.",
+    "Generic event announcements without personality or warmth ('Save the Date! See you in the Summer! or sooner!' \u2014 2 engagements).",
+    "Talking about the farm abstractly without centering a specific cow, person, or moment \u2014 the audience connects to individuals, not the organization."
+  ],
+  "sample_hooks": [
+    "We live in a constant rush; daily responsibilities are often a source of stress, burnout, and lack of energy.",
+    "She's one of the older cows, retired.",
+    "Nandini is a cow who requires extra care due to her disability.",
+    "We would love for you to join in on the country style Chariot Festival!",
+    "I am someone!! those guys in the back feel respect when I'm around."
+  ]
+}

@@ -12,6 +12,18 @@ from api.schemas import PillarCreateRequest, PillarResponse, PillarUpdateRequest
 router = APIRouter(prefix="/api", tags=["pillars"], dependencies=[Depends(get_current_user)])
 
 
+def _pillar_response(p: Pillar) -> PillarResponse:
+    return PillarResponse(
+        id=p.id,
+        name=p.name,
+        description=p.description,
+        color=p.color,
+        is_active=p.is_active,
+        sort_order=p.sort_order,
+        target_distribution=p.target_distribution,
+    )
+
+
 @router.get("/pillars", response_model=list[PillarResponse])
 async def list_pillars(
     active_only: bool = False,
@@ -22,17 +34,7 @@ async def list_pillars(
     if active_only:
         stmt = stmt.where(Pillar.is_active == True)  # noqa: E712
     result = await session.execute(stmt)
-    return [
-        PillarResponse(
-            id=p.id,
-            name=p.name,
-            description=p.description,
-            color=p.color,
-            is_active=p.is_active,
-            sort_order=p.sort_order,
-        )
-        for p in result.scalars().all()
-    ]
+    return [_pillar_response(p) for p in result.scalars().all()]
 
 
 @router.post("/pillars", response_model=PillarResponse, status_code=201)
@@ -50,18 +52,12 @@ async def create_pillar(
         description=req.description,
         color=req.color,
         sort_order=req.sort_order,
+        target_distribution=req.target_distribution,
     )
     session.add(pillar)
     await session.commit()
     await session.refresh(pillar)
-    return PillarResponse(
-        id=pillar.id,
-        name=pillar.name,
-        description=pillar.description,
-        color=pillar.color,
-        is_active=pillar.is_active,
-        sort_order=pillar.sort_order,
-    )
+    return _pillar_response(pillar)
 
 
 @router.put("/pillars/{pillar_id}", response_model=PillarResponse)
@@ -85,14 +81,7 @@ async def update_pillar(
 
     result = await session.execute(select(Pillar).where(Pillar.id == pillar_id))
     pillar = result.scalar_one()
-    return PillarResponse(
-        id=pillar.id,
-        name=pillar.name,
-        description=pillar.description,
-        color=pillar.color,
-        is_active=pillar.is_active,
-        sort_order=pillar.sort_order,
-    )
+    return _pillar_response(pillar)
 
 
 @router.delete("/pillars/{pillar_id}")

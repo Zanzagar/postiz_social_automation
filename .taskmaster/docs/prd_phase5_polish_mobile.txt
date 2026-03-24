@@ -6,6 +6,13 @@ Add dark mode, in-app notifications with email digest, PWA support for mobile ac
 ## Background
 Phases 1-4 delivered content iteration, templates, auto-publish, web intelligence, analytics, media catalog, calendar planning, multi-user, audience segmentation, and Postiz admin integration. This phase focuses on polish and accessibility — making the dashboard pleasant to use, keeping staff informed via email, and enabling mobile access for farm staff away from PCs.
 
+**Phase 3 architecture changes (must account for):**
+- **Google Drive is the central media repository.** Media files are NOT stored locally — only thumbnail cache (~2MB) lives on disk. Full files stream via Drive proxy.
+- **Frontend pages added in Phase 3:** MediaPage (/media), CalendarPlanDialog, DriveImportDialog, SuggestedMediaPanel. All need dark mode audit.
+- **Health page already has Media Catalog health card** (GET /api/media-health) with sync status, cleanup button. Phase 5 health enhancements should build on this.
+- **New nav items:** Media page with Image icon in sidebar.
+- **Video streaming:** Drive proxy with range requests serves videos. PWA offline mode should handle gracefully (show poster thumbnail when offline, not attempt to stream).
+
 ## Prerequisites
 - Phases 1-4 complete: full feature set operational
 - SMTP server available for email digest (Gmail, SendGrid, or temple email server)
@@ -67,6 +74,7 @@ Enable "Add to Home Screen" and offline capabilities.
 - `manifest.json`: name "Gita Valley Social", short_name "GV Social", theme_color matching brand (warm earth tone), background_color, icons (192x192 and 512x512 — create from Gita Valley logo or generate placeholder), display "standalone", start_url "/"
 - Service worker: cache app shell (HTML, CSS, JS bundles) for offline access
 - Offline behavior: when offline, show cached pages with "Offline — changes will sync when connected" banner
+- **NOTE:** Media thumbnails are cached locally (media/thumbnails/) and served via FastAPI static mount + nginx proxy. Service worker should cache thumbnail requests. Full-res media streams from Drive proxy — show poster/thumbnail when offline, not attempt to stream.
 - Offline draft editing: save draft content to IndexedDB when offline, sync to API when connection returns
 - "Add to Home Screen" prompt: show install banner on first mobile visit (standard PWA behavior)
 - No push notifications (using email digest instead)
@@ -87,11 +95,12 @@ Verify Login page works well after Phase 4 multi-user changes.
 ### 6. Health Page — Add New Service Checks
 Extend existing Health page with checks for Phase 2-4 services.
 
-**NOTE:** HealthPage.tsx was built in Phase 1 with service status cards, auto-refresh, and manual refresh button. No full rebuild needed.
+**NOTE:** HealthPage.tsx was built in Phase 1 and enhanced in Phase 3 with a Media Catalog health card showing total/healthy/drive refs/orphans with cleanup button. No full rebuild needed.
 
 **Requirements:**
-- Add service checks for: WordPress MCP (Phase 2), Meta Graph API (Phase 2), SMTP server (Phase 5 email digest)
+- Add service checks for: WordPress MCP (Phase 2), Meta Graph API (Phase 2), Google Drive API (Phase 3), SMTP server (Phase 5 email digest)
 - Existing checks already cover: SQLite database, Postiz API, Google Sheets adapter, Claude CLI
+- **Already built in Phase 3:** Media Catalog health card (GET /api/media-health) with sync status, missing files, orphan detection, and "Clean Up" button
 - Each service: name, status (healthy/degraded/down), last checked, response time (existing pattern)
 - Health history: simple sparkline or status dots showing last 24 hours (stored in memory, not database) — new enhancement
 - Alert banner if any critical service is down — new enhancement

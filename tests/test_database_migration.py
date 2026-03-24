@@ -45,6 +45,13 @@ class TestMigration:
             "social_history",
             "analytics_cache",
             "hashtag_performance",
+            # Phase 3
+            "media_catalog",
+            "media_tags",
+            "media_performance",
+            "media_adapted",
+            "pillars",
+            "calendar_plans",
         }
         assert expected == tables
 
