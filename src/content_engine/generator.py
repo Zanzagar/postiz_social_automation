@@ -346,16 +346,37 @@ class CaptionGenerator:
         return "\n".join(parts)
 
     def _parse_response(self, raw: str, platforms: list[Platform]) -> dict[Platform, str]:
-        """Parse Claude's JSON response into platform-caption mapping."""
+        """Parse Claude's JSON response into platform-caption mapping.
+
+        Recovery pipeline for malformed Claude responses:
+        1. Strip markdown code fences (```json ... ```)
+        2. Direct JSON parse
+        3. Extract JSON object from mixed text via regex
+        4. Raise RuntimeError if all recovery fails
+        """
         text = raw.strip()
-        # Strip markdown code fence if present
+        # Step 1: Strip markdown code fence if present
         fence_match = re.search(r"```(?:json)?\s*([\s\S]+?)```", text)
         if fence_match:
             text = fence_match.group(1).strip()
+
+        # Step 2: Try direct parse
         try:
             data = json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"Could not parse Claude response as JSON: {raw[:200]}") from exc
+        except json.JSONDecodeError:
+            data = None
+
+        # Step 3: Try extracting a JSON object from mixed text
+        if data is None:
+            json_match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", text)
+            if json_match:
+                try:
+                    data = json.loads(json_match.group(0))
+                except json.JSONDecodeError:
+                    data = None
+
+        if data is None:
+            raise RuntimeError(f"Could not parse Claude response as JSON: {raw[:200]}")
 
         captions = {}
         for platform in platforms:
