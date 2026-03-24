@@ -73,7 +73,7 @@ describe("SettingsPage", () => {
       expect(screen.getByText(/facebook/i)).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole("button", { name: /save/i }));
+    await user.click(screen.getAllByRole("button", { name: /save/i })[0]);
 
     await waitFor(() => {
       expect(mockUpdateConfig).toHaveBeenCalled();

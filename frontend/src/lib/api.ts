@@ -649,6 +649,17 @@ export const api = {
     });
   },
 
+  getVoiceRules() {
+    return request<{ rules: string[]; summary: string }>("/api/settings/voice-rules");
+  },
+
+  updateVoiceRules(rules: string[]) {
+    return request<{ rules: string[]; summary: string }>("/api/settings/voice-rules", {
+      method: "PUT",
+      body: JSON.stringify({ rules }),
+    });
+  },
+
   // Analytics
   getAnalyticsOverview() {
     return request<AnalyticsOverview>("/api/analytics/overview");
