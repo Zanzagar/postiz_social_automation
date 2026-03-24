@@ -305,6 +305,17 @@ class MediaPerformance(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
+class PreferencePair(Base):
+    __tablename__ = "preference_pairs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    platform: Mapped[str] = mapped_column(String(50), nullable=False)
+    original_text: Mapped[str] = mapped_column(Text, nullable=False)
+    edited_text: Mapped[str] = mapped_column(Text, nullable=False)
+    instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
 class MediaAdapted(Base):
     __tablename__ = "media_adapted"
 
