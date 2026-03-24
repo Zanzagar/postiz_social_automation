@@ -67,8 +67,12 @@ RETRY_BASE_DELAY = 2  # seconds — doubles each retry (2s, 4s)
 _CLEAN_CWD = "/tmp"
 
 
-def _call_claude(prompt: str) -> str:
+def _call_claude(prompt: str, model: str = "sonnet") -> str:
     """Call Claude Code CLI with retry on transient failures.
+
+    Args:
+        prompt: The prompt text to send to Claude.
+        model: The Claude model to use (e.g. "sonnet", "haiku", "opus").
 
     Retries up to MAX_RETRIES times with exponential backoff (2s, 4s).
     Timeout errors are NOT retried (the CLI genuinely hung).
@@ -79,7 +83,7 @@ def _call_claude(prompt: str) -> str:
         with rate_limit_sync():
             try:
                 result = subprocess.run(
-                    ["claude", "-p", prompt, "--model", "sonnet"],
+                    ["claude", "-p", prompt, "--model", model],
                     capture_output=True,
                     text=True,
                     timeout=CLI_TIMEOUT,
