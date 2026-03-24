@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from content_engine.generator import _call_claude
-from content_engine.prompt_builder import PromptBuilder
+from content_engine.prompt_builder import PLATFORM_CONSTRAINTS, PromptBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -161,3 +161,58 @@ class TwoStageGenerator:
             emotional_hook=data.get("emotional_hook", ""),
             cta=data.get("cta", ""),
         )
+
+    # --- Stage 2: Platform adaptation ---
+
+    def adapt_to_platform(
+        self,
+        narrative: CoreNarrative,
+        platform: str,
+    ) -> str:
+        """Stage 2: Adapt core narrative to a specific platform.
+
+        Returns a single caption string.
+        """
+        constraints = PLATFORM_CONSTRAINTS.get(platform.lower(), "")
+        prompt = self.prompt_builder._wrap_xml(
+            "system",
+            "You are a social media copywriter for Gita Valley farm. "
+            "Adapt the core narrative below into a platform-specific "
+            "caption. Match the brand voice.",
+        )
+        prompt += "\n\n" + self.prompt_builder._wrap_xml(
+            "content",
+            f"Core message: {narrative.core_message}\n"
+            f"Key details: {', '.join(narrative.key_details)}\n"
+            f"Emotional hook: {narrative.emotional_hook}\n"
+            f"Call to action: {narrative.cta}",
+        )
+        prompt += "\n\n" + self.prompt_builder._wrap_xml(
+            "constraints",
+            f"Platform: {platform}\n{constraints}",
+        )
+        prompt += "\n\n" + self.prompt_builder._wrap_xml(
+            "output_format",
+            "Respond with ONLY the caption text. No explanations.",
+        )
+
+        return _call_claude(prompt)
+
+    def adapt_to_all_platforms(
+        self,
+        narrative: CoreNarrative,
+        platforms: list[str],
+    ) -> dict[str, str]:
+        """Adapt core narrative to all platforms (sequentially).
+
+        Returns dict mapping platform name to caption. Failed platforms
+        are excluded from results (logged as warnings).
+        """
+        results: dict[str, str] = {}
+        for platform in platforms:
+            try:
+                caption = self.adapt_to_platform(narrative, platform)
+                results[platform] = caption
+            except Exception:
+                logger.warning("Stage 2 adaptation failed for %s", platform)
+        return results
