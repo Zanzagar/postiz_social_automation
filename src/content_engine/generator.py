@@ -15,6 +15,7 @@ from pathlib import Path
 
 from content_engine.models import ContentRow, Platform, Suggestion
 from content_engine.rate_limiter import rate_limit_sync
+from content_engine.slop_detector import SlopDetector
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,8 @@ class CaptionGenerator:
         self.learning_context = self._load_learning_context()
         self.voice_profile = self._load_voice_profile()
         self.learned_rules = self._load_learned_rules()
+        self.slop_detector = SlopDetector()
+        self.last_slop_result = None
 
     def generate_captions(
         self, row: ContentRow, feedback: str | None = None
@@ -120,8 +123,59 @@ class CaptionGenerator:
                 "Please regenerate the captions incorporating this feedback."
             )
         raw = _call_claude(prompt)
+        captions = self._parse_response(raw, platforms)
 
-        return self._parse_response(raw, platforms)
+        # Slop gate: check and optionally regenerate
+        captions = self._slop_gate(captions, row, platforms, feedback)
+
+        return captions
+
+    def _slop_gate(
+        self,
+        captions: dict[Platform, str],
+        row: ContentRow,
+        platforms: list[Platform],
+        feedback: str | None = None,
+    ) -> dict[Platform, str]:
+        """Check captions for slop; retry once if too generic."""
+        all_text = " ".join(captions.values())
+        result = self.slop_detector.detect(all_text)
+        self.last_slop_result = result
+
+        if not result.is_slop():
+            return captions
+
+        logger.warning(
+            "Slop detected (score=%.2f, matches=%s), regenerating...",
+            result.score,
+            result.matches,
+        )
+
+        # One retry with anti-slop feedback
+        anti_slop = (
+            "The previous attempt was too generic. "
+            "AVOID these AI cliches: " + ", ".join(result.matches[:5]) + ". "
+            "Write like a real farmer, not a marketing agency."
+        )
+        prompt = self._build_prompt(row, platforms)
+        prompt += f"\n\nANTI-SLOP FEEDBACK:\n{anti_slop}"
+        if feedback:
+            sanitized = feedback[:500].replace("```", "")
+            prompt += f"\n\nSTAFF FEEDBACK:\n---\n{sanitized}\n---"
+
+        raw2 = _call_claude(prompt)
+        captions2 = self._parse_response(raw2, platforms)
+
+        # Return whichever is less sloppy
+        all_text2 = " ".join(captions2.values())
+        result2 = self.slop_detector.detect(all_text2)
+
+        if result2.score < result.score:
+            self.last_slop_result = result2
+            return captions2
+
+        self.last_slop_result = result
+        return captions
 
     def generate_suggestions(
         self,
