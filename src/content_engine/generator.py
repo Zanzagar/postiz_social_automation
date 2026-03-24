@@ -17,6 +17,7 @@ from pathlib import Path
 from content_engine.models import ContentRow, Platform, Suggestion
 from content_engine.rate_limiter import rate_limit_sync
 from content_engine.slop_detector import SlopDetector
+from content_engine.two_stage_generator import TwoStageGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,10 @@ class CaptionGenerator:
         self.learned_rules = self._load_learned_rules()
         self.slop_detector = SlopDetector()
         self.last_slop_result = None
+        # Lazy import to avoid circular dependency (two_stage_generator imports _call_claude)
+        from content_engine.two_stage_generator import TwoStageGenerator
+
+        self.two_stage = TwoStageGenerator(data_dir=data_dir)
 
     def generate_captions(
         self, row: ContentRow, feedback: str | None = None
@@ -153,6 +158,43 @@ class CaptionGenerator:
 
         # Slop gate: check and optionally regenerate
         captions = self._slop_gate(captions, row, platforms, feedback)
+
+        return captions
+
+    def generate_captions_two_stage(self, row: ContentRow) -> dict[Platform, str]:
+        """Generate captions using the two-stage pipeline.
+
+        Stage 1: Extract core narrative (Sonnet)
+        Stage 2: Adapt to each platform (Sonnet)
+        + Slop gate on final output
+        """
+        platforms = [p for p, enabled in row.platforms.items() if enabled]
+        if not platforms:
+            return {}
+
+        # Get knowledge context
+        knowledge_ctx = self._get_knowledge_context(row.content_pillar)
+
+        # Stage 1: Core narrative
+        narrative = self.two_stage.generate_core_narrative(
+            raw_text=row.raw_text,
+            pillar=row.content_pillar or "General",
+            knowledge_context=knowledge_ctx or None,
+        )
+
+        # Stage 2: Adapt to all platforms
+        platform_names = [p.value for p in platforms]
+        adapted = self.two_stage.adapt_to_all_platforms(narrative, platform_names)
+
+        # Map back to Platform enums
+        captions = {}
+        for p in platforms:
+            if p.value in adapted:
+                captions[p] = adapted[p.value]
+
+        # Slop gate
+        if captions:
+            captions = self._slop_gate(captions, row, platforms)
 
         return captions
 
