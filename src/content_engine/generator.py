@@ -117,7 +117,6 @@ class CaptionGenerator:
     def __init__(self, data_dir: Path = _DEFAULT_DATA_DIR, db_path: str | None = None) -> None:
         self.data_dir = data_dir
         self.db_path = db_path or str(data_dir / "gvsa.db")
-        self.learning_context = self._load_learning_context()
         self.voice_profile = self._load_voice_profile()
         self.learned_rules = self._load_learned_rules()
         self.slop_detector = SlopDetector()
@@ -409,13 +408,6 @@ class CaptionGenerator:
             else:
                 logger.warning("No caption returned for %s", key)
         return captions
-
-    def _load_learning_context(self) -> dict:
-        """Load learning context from data/learning-context.json."""
-        path = self.data_dir / "learning-context.json"
-        if path.exists():
-            return json.loads(path.read_text())
-        return {}
 
     def _load_voice_profile(self) -> dict:
         """Load extracted voice profile from data/voice-profile.json."""

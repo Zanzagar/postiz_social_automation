@@ -67,13 +67,6 @@ class TestBuildPrompt:
         assert "instagram" in prompt.lower()
         assert "hashtag" in prompt.lower()
 
-    def test_prompt_includes_learning_context(self, generator, sample_row) -> None:
-        generator.learning_context = {"top_performing_pillars": ["Cow Life"]}
-        platforms = [Platform.INSTAGRAM]
-        prompt = generator._build_prompt(sample_row, platforms)
-
-        assert "Cow Life" in prompt
-
     def test_prompt_requests_json_output(self, generator, sample_row) -> None:
         platforms = [Platform.INSTAGRAM]
         prompt = generator._build_prompt(sample_row, platforms)
@@ -171,15 +164,3 @@ class TestGenerateSuggestions:
         assert len(suggestions) == 1
         assert isinstance(suggestions[0], Suggestion)
         assert suggestions[0].suggested_pillar == "Farm Ops"
-
-
-class TestLearningContext:
-    def test_loads_empty_when_no_file(self, generator) -> None:
-        assert generator.learning_context == {}
-
-    def test_loads_from_file(self, tmp_path) -> None:
-        ctx = {"top_performing_pillars": ["Cow Life"], "insights": ["cows do well"]}
-        (tmp_path / "learning-context.json").write_text(json.dumps(ctx))
-
-        gen = CaptionGenerator(data_dir=tmp_path)
-        assert gen.learning_context["top_performing_pillars"] == ["Cow Life"]
