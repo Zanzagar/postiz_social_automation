@@ -31,6 +31,7 @@ import {
   Copy,
   Save,
   Undo2,
+  Trash2,
 } from "lucide-react";
 import { SuggestedMediaPanel } from "@/components/content/SuggestedMediaPanel";
 
@@ -758,7 +759,25 @@ export function ContentEditor({
                         <div className="rounded-md bg-muted/30 px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
                           {iter.new_caption}
                         </div>
-                        <div className="mt-2 flex justify-end">
+                        <div className="mt-2 flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-destructive hover:text-destructive"
+                            onClick={async () => {
+                              try {
+                                await api.deleteIteration(iter.id);
+                                queryClient.invalidateQueries({
+                                  queryKey: ["iterations", contentRow?.row_number],
+                                });
+                              } catch {
+                                setError("Failed to delete iteration");
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" />
+                            Delete
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"

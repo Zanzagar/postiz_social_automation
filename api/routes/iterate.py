@@ -145,3 +145,15 @@ async def revert_caption(
     await repo.update_captions(content_row_id, json.dumps(captions))
 
     return IterateResponse(caption=revert_to, iteration_id=iteration.id)
+
+
+@router.delete("/iterations/{iteration_id}")
+async def delete_iteration(
+    iteration_id: int,
+    repo: ContentRepository = Depends(get_content_repo),
+):
+    """Delete a single iteration log entry."""
+    deleted = await repo.delete_iteration(iteration_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Iteration not found")
+    return {"ok": True}

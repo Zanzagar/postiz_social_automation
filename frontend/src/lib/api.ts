@@ -556,6 +556,12 @@ export const api = {
     });
   },
 
+  deleteIteration(iterationId: number) {
+    return request<{ ok: boolean }>(`/api/iterations/${iterationId}`, {
+      method: "DELETE",
+    });
+  },
+
   // Templates
   getTemplates() {
     return request<Template[]>("/api/templates");
