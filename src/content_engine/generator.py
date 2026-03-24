@@ -187,9 +187,9 @@ class CaptionGenerator:
         """Regenerate a single platform caption based on user instruction."""
         platform_rules = PLATFORM_INSTRUCTIONS.get(Platform(platform), "")
 
-        # Include knowledge context so iterations are as informed as generation
-        knowledge_ctx = self._get_knowledge_context(pillar)
-
+        # No knowledge facts for iterations — they cause the model to shoehorn
+        # unrelated facts into the caption. Voice profile + learned rules are
+        # enough context for refining an existing caption.
         parts = [BRAND_RULES, ""]
 
         voice = self._format_voice_profile()
@@ -198,8 +198,6 @@ class CaptionGenerator:
         rules = self._format_learned_rules()
         if rules:
             parts.append(rules)
-        if knowledge_ctx:
-            parts.append(knowledge_ctx)
 
         parts.extend(
             [
