@@ -210,6 +210,28 @@ class UpdatePublishConfigRequest(BaseModel):
     platforms: list[PlatformPublishConfig]
 
 
+# --- Brand Settings ---
+
+
+class BrandSettingsResponse(BaseModel):
+    """All brand settings as a flat dict."""
+
+    brand_name: str = ""
+    tagline: str = ""
+    website: str = ""
+    key_claim: str = ""
+    products: str = ""
+    voice_description: str = ""
+
+    model_config = {"extra": "allow"}
+
+
+class BrandSettingsUpdate(BaseModel):
+    """Partial update — only provided keys are changed."""
+
+    model_config = {"extra": "allow"}
+
+
 # --- Templates ---
 
 

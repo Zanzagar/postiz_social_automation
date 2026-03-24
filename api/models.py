@@ -214,6 +214,19 @@ class PublishConfig(Base):
     )
 
 
+class BrandSettings(Base):
+    __tablename__ = "brand_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
 # --- Phase 3: Media & Planning ---
 
 

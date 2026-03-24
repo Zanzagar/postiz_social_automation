@@ -6,7 +6,11 @@ better model parsing: <system>, <voice>, <rules>, <knowledge>,
 """
 
 import json
+import logging
+import sqlite3
 from html import escape as _html_escape
+
+logger = logging.getLogger(__name__)
 
 # Platform-specific constraints (mirrors generator.py)
 PLATFORM_CONSTRAINTS: dict[str, str] = {
@@ -43,6 +47,39 @@ SYSTEM_IDENTITY = (
     "- Short sentences. Let the content breathe. Don't over-explain.\n"
     "- Devotion shows through action (caring for cows), not flowery words about devotion."
 )
+
+
+def get_brand_context(db_path: str) -> str:
+    """Load brand settings from DB and format as prompt context.
+
+    Returns empty string if table doesn't exist or has no rows.
+    """
+    try:
+        conn = sqlite3.connect(db_path)
+        rows = conn.execute("SELECT key, value FROM brand_settings").fetchall()
+        conn.close()
+    except sqlite3.OperationalError:
+        return ""
+
+    if not rows:
+        return ""
+
+    settings = {r[0]: r[1] for r in rows}
+    parts = []
+    if settings.get("brand_name"):
+        parts.append(f"Brand: {settings['brand_name']}")
+    if settings.get("tagline"):
+        parts.append(f"Tagline: {settings['tagline']}")
+    if settings.get("website"):
+        parts.append(f"Website: {settings['website']}")
+    if settings.get("key_claim"):
+        parts.append(f"Key claim: {settings['key_claim']}")
+    if settings.get("products"):
+        parts.append(f"Products: {settings['products']}")
+    if settings.get("voice_description"):
+        parts.append(f"Voice: {settings['voice_description']}")
+
+    return "\n".join(parts) if parts else ""
 
 
 class PromptBuilder:

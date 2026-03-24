@@ -1,15 +1,18 @@
-"""Settings endpoints: auto-publish config, voice rules."""
+"""Settings endpoints: auto-publish config, brand settings, voice rules."""
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy import text
 
 from api.auth import get_current_user
-from api.dependencies import get_content_repo
+from api.dependencies import get_content_repo, get_db
 from api.repositories.content import ContentRepository
 from api.schemas import (
+    BrandSettingsUpdate,
     PlatformPublishConfig,
     PublishConfigResponse,
     UpdatePublishConfigRequest,
@@ -63,6 +66,46 @@ async def update_publish_config(
 
     configs = await repo.get_publish_configs()
     return PublishConfigResponse(platforms=[_config_to_response(c) for c in configs])
+
+
+# --- Brand Settings ---
+
+
+@router.get("/brand")
+async def get_brand_settings(session=Depends(get_db)):
+    """Return all brand settings as a flat dict."""
+    try:
+        result = await session.execute(text("SELECT key, value FROM brand_settings"))
+        rows = result.fetchall()
+    except Exception:
+        return {}
+    return {row[0]: row[1] for row in rows}
+
+
+@router.put("/brand")
+async def update_brand_settings(
+    req: BrandSettingsUpdate,
+    session=Depends(get_db),
+):
+    """Update brand settings. Only provided keys are changed."""
+    updates = req.model_dump(exclude_unset=True)
+    now = datetime.now(UTC).isoformat()
+    for key, value in updates.items():
+        await session.execute(
+            text(
+                "INSERT INTO brand_settings (key, value, updated_at) "
+                "VALUES (:key, :value, :now) "
+                "ON CONFLICT(key) DO UPDATE SET "
+                "value = :value, updated_at = :now"
+            ),
+            {"key": key, "value": str(value), "now": now},
+        )
+    await session.commit()
+
+    # Return full settings
+    result = await session.execute(text("SELECT key, value FROM brand_settings"))
+    rows = result.fetchall()
+    return {row[0]: row[1] for row in rows}
 
 
 # --- Voice Rules ---
