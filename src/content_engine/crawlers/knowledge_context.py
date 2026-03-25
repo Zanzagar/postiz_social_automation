@@ -139,12 +139,20 @@ def get_knowledge_context(
     char_count = 0
 
     # --- Knowledge facts ---
-    # Try FTS search first (if raw_text provided and FTS table exists)
+    # Try hybrid search first (FTS5 + vec via RRF), fall back to FTS-only
     facts: list = []
     if raw_text:
-        fts_results = _fts_search(db_path, raw_text, pillar=pillar, limit=max_facts)
-        if fts_results:
-            facts = fts_results
+        try:
+            from content_engine.hybrid_search import hybrid_search
+
+            hybrid_results = hybrid_search(db_path, raw_text, pillar=pillar, limit=max_facts)
+            if hybrid_results:
+                facts = hybrid_results
+        except Exception:
+            # Fall back to FTS-only if hybrid_search fails
+            fts_results = _fts_search(db_path, raw_text, pillar=pillar, limit=max_facts)
+            if fts_results:
+                facts = fts_results
 
     # Fall back to simple LIMIT query
     if not facts:

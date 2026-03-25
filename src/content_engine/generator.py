@@ -14,6 +14,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from content_engine.few_shot import get_few_shot_examples
 from content_engine.models import ContentRow, Platform, Suggestion
 from content_engine.rate_limiter import rate_limit_sync
 from content_engine.slop_detector import SlopDetector
@@ -195,6 +196,27 @@ class CaptionGenerator:
         if captions:
             captions = self._slop_gate(captions, row, platforms)
 
+        # Self-refine quality scoring (non-blocking, logs quality)
+        # Lazy import to avoid circular dependency (self_refine imports _call_claude)
+        from content_engine.self_refine import SELF_REFINE_ENABLED, score_caption
+
+        if captions and SELF_REFINE_ENABLED:
+            for p, caption in captions.items():
+                try:
+                    score = score_caption(caption, p.value, self.voice_profile)
+                    logger.info(
+                        "Self-refine score for %s: %.1f "
+                        "(voice=%d, platform=%d, specificity=%d, slop=%d)",
+                        p.value,
+                        score.overall,
+                        score.voice_match,
+                        score.platform_fit,
+                        score.specificity,
+                        score.slop_free,
+                    )
+                except Exception:
+                    logger.warning("Self-refine scoring failed for %s", p.value)
+
         return captions
 
     def _slop_gate(
@@ -358,6 +380,17 @@ class CaptionGenerator:
         if knowledge_ctx:
             parts.append(knowledge_ctx)
 
+        # Few-shot examples for the first enabled platform
+        first_platform = platforms[0].value if platforms else None
+        if first_platform:
+            examples = self._get_few_shot_examples(first_platform, row.content_pillar)
+            if examples:
+                parts.append("EXAMPLE POSTS (match this quality and style):")
+                for ex in examples:
+                    parts.append(f"  Input: {ex.get('raw_text', '')}")
+                    parts.append(f"  Output: {ex.get('caption', '')}")
+                parts.append("")
+
         # Content info
         parts.append("CONTENT TO POST:")
         parts.append(f"- Raw text: {row.raw_text}")
@@ -515,3 +548,10 @@ class CaptionGenerator:
             return get_knowledge_context(self.db_path, pillar=pillar)
         except Exception:
             return ""
+
+    def _get_few_shot_examples(self, platform: str, pillar: str | None = None) -> list[dict]:
+        """Retrieve few-shot examples from the database."""
+        try:
+            return get_few_shot_examples(self.db_path, platform, pillar=pillar, limit=3)
+        except Exception:
+            return []

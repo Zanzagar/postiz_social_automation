@@ -52,6 +52,16 @@ class TestMigration:
             "media_adapted",
             "pillars",
             "calendar_plans",
+            # Content Intelligence v2
+            "brand_settings",
+            "few_shot_examples",
+            "preference_pairs",
+            # FTS5 virtual table + internal tables
+            "web_knowledge_fts",
+            "web_knowledge_fts_data",
+            "web_knowledge_fts_idx",
+            "web_knowledge_fts_docsize",
+            "web_knowledge_fts_config",
         }
         assert expected == tables
 

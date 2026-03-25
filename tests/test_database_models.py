@@ -62,6 +62,10 @@ class TestTableCreation:
             "media_performance",
             "media_adapted",
             "calendar_plans",
+            # Content Intelligence v2
+            "brand_settings",
+            "few_shot_examples",
+            "preference_pairs",
         }
         assert expected == tables
 
@@ -109,6 +113,7 @@ class TestTableCreation:
             "new_caption",
             "refinement_instruction",
             "mode",
+            "model_used",
             "created_by",
             "created_at",
         }

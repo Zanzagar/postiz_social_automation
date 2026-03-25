@@ -89,9 +89,11 @@ class PromptBuilder:
         self,
         voice_profile: dict | None = None,
         learned_rules: list[str] | None = None,
+        db_path: str | None = None,
     ) -> None:
         self.voice_profile = voice_profile or {}
         self.learned_rules = learned_rules or []
+        self.db_path = db_path
 
     # --- XML helpers ---
 
@@ -110,6 +112,11 @@ class PromptBuilder:
     # --- Section builders ---
 
     def _system_section(self) -> str:
+        # Use DB brand settings if available, fall back to hardcoded identity
+        if self.db_path:
+            brand = get_brand_context(self.db_path)
+            if brand:
+                return self._wrap_xml("system", brand)
         return self._wrap_xml("system", SYSTEM_IDENTITY)
 
     def _voice_section(self) -> str:
