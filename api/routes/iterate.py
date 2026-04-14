@@ -2,13 +2,18 @@
 
 import asyncio
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.auth import get_current_user
-from api.dependencies import get_caption_generator, get_content_repo
+from api.dependencies import get_caption_generator, get_content_repo, get_settings
 from api.repositories.content import ContentRepository
 from api.schemas import IterateRequest, IterateResponse, IterationResponse
+from content_engine.model_config import get_model
+from content_engine.preference_pairs import save_preference_pair
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["iterate"], dependencies=[Depends(get_current_user)])
 
@@ -47,6 +52,7 @@ async def iterate_caption(
     )
 
     # Save iteration history
+    model_used = get_model("iterate")
     iteration = await repo.add_iteration(
         {
             "content_row_id": req.content_row_id,
@@ -55,12 +61,27 @@ async def iterate_caption(
             "new_caption": new_caption,
             "refinement_instruction": req.instruction,
             "mode": req.mode,
+            "model_used": model_used,
         }
     )
 
     # Update content row with new caption
     captions[req.platform] = new_caption
     await repo.update_captions(req.content_row_id, json.dumps(captions))
+
+    # Save preference pair for learning (fire-and-forget, non-blocking)
+    try:
+        settings = get_settings()
+        await asyncio.to_thread(
+            save_preference_pair,
+            db_path=settings.database_path,
+            original=old_caption or "",
+            edited=new_caption,
+            platform=req.platform,
+            instruction=req.instruction,
+        )
+    except Exception:
+        logger.warning("Failed to save preference pair", exc_info=True)
 
     return IterateResponse(caption=new_caption, iteration_id=iteration.id)
 
@@ -81,6 +102,7 @@ async def get_iterations(
             new_caption=i.new_caption,
             refinement_instruction=i.refinement_instruction,
             mode=i.mode,
+            model_used=i.model_used,
             created_by=i.created_by,
             created_at=i.created_at,
         )

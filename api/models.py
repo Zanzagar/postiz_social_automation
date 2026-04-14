@@ -64,6 +64,7 @@ class ContentIteration(Base):
     new_caption: Mapped[str] = mapped_column(Text, nullable=False)
     refinement_instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
     mode: Mapped[str] = mapped_column(String(20), default="refine")
+    model_used: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
@@ -214,6 +215,34 @@ class PublishConfig(Base):
     )
 
 
+class BrandSettings(Base):
+    __tablename__ = "brand_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class FewShotExample(Base):
+    __tablename__ = "few_shot_examples"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    platform: Mapped[str] = mapped_column(String(50), nullable=False)
+    pillar: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    caption: Mapped[str] = mapped_column(Text, nullable=False)
+    engagement_score: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.0)
+    is_active: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=True)
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, default=lambda: datetime.now(UTC)
+    )
+
+
 # --- Phase 3: Media & Planning ---
 
 
@@ -275,6 +304,17 @@ class MediaPerformance(Base):
     platform: Mapped[str] = mapped_column(String(50), nullable=False)
     engagement_score: Mapped[float] = mapped_column(Float, default=0.0)
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class PreferencePair(Base):
+    __tablename__ = "preference_pairs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    platform: Mapped[str] = mapped_column(String(50), nullable=False)
+    original_text: Mapped[str] = mapped_column(Text, nullable=False)
+    edited_text: Mapped[str] = mapped_column(Text, nullable=False)
+    instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class MediaAdapted(Base):

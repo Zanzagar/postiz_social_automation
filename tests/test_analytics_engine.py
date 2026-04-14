@@ -16,7 +16,7 @@ def engine_db(tmp_path):
         CREATE TABLE content_rows (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT,
-            content_pillar TEXT,
+            pillar TEXT,
             raw_text TEXT,
             platforms TEXT,
             status TEXT DEFAULT 'draft',
@@ -34,11 +34,11 @@ def engine_db(tmp_path):
             impressions INTEGER DEFAULT 0,
             fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
-        INSERT INTO content_rows (id, date, content_pillar, raw_text, status)
+        INSERT INTO content_rows (id, date, pillar, raw_text, status)
         VALUES (1, '2026-03-01', 'Cow Life', 'Our cows love sunrise', 'posted');
-        INSERT INTO content_rows (id, date, content_pillar, raw_text, status)
+        INSERT INTO content_rows (id, date, pillar, raw_text, status)
         VALUES (2, '2026-03-02', 'Community', 'Sunday Feast this week', 'posted');
-        INSERT INTO content_rows (id, date, content_pillar, raw_text, status)
+        INSERT INTO content_rows (id, date, pillar, raw_text, status)
         VALUES (3, '2026-03-05', 'Cow Life', 'New calves born today', 'posted');
         INSERT INTO analytics_cache (content_row_id, platform, likes, comments, shares, reach, impressions)
         VALUES (1, 'instagram', 60, 10, 5, 500, 1200);
