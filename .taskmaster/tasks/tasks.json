@@ -6411,7 +6411,7 @@
           "13",
           "7"
         ],
-        "status": "in-progress",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -6476,14 +6476,14 @@
         "complexity": 7,
         "recommendedSubtasks": 5,
         "expansionPrompt": "Break down into: 1) Create tests/integration/test_generation_pipeline.py with pytest fixtures, 2) Test happy path: raw_text → core narrative → platform captions, 3) Test quality gates: slop detection, self-refine, 4) Test error handling and graceful degradation, 5) Test performance and audit trail. Depends on tasks 12, 13, 7 being complete.",
-        "updatedAt": "2026-03-24T22:50:52.946Z"
+        "updatedAt": "2026-03-24T22:52:28.870Z"
       }
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-03-24T22:50:52.946Z",
+      "lastModified": "2026-03-24T22:52:28.870Z",
       "taskCount": 21,
-      "completedCount": 20,
+      "completedCount": 21,
       "tags": [
         "content-intelligence-v2"
       ]
