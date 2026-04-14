@@ -1,0 +1,329 @@
+{
+  "source": "wshobson/agents",
+  "version": "1.0.0",
+  "description": "Plugin registry for Claude Code agents from wshobson/agents",
+  "categories": {
+    "python": {
+      "name": "Python Development",
+      "description": "Python frameworks, testing, and tooling",
+      "plugins": [
+        {
+          "id": "python-development",
+          "name": "Python Development",
+          "description": "Python 3.12+ development with uv, ruff, pytest, and modern patterns",
+          "agents": ["python-pro", "fastapi-pro", "django-pro"],
+          "skills": ["async-python-patterns", "python-packaging", "python-performance-optimization", "python-testing-patterns", "uv-package-manager"],
+          "tokens": 300
+        }
+      ]
+    },
+    "javascript": {
+      "name": "JavaScript/TypeScript",
+      "description": "Modern JS/TS development and frameworks",
+      "plugins": [
+        {
+          "id": "javascript-typescript",
+          "name": "JavaScript/TypeScript",
+          "description": "Modern JS/TS development with Node.js, React, Vue, and more",
+          "agents": ["javascript-pro", "typescript-pro", "react-pro", "vue-pro"],
+          "skills": ["modern-js-patterns", "typescript-best-practices", "node-performance", "frontend-testing"],
+          "tokens": 350
+        }
+      ]
+    },
+    "backend": {
+      "name": "Backend Development",
+      "description": "APIs, databases, and server-side development",
+      "plugins": [
+        {
+          "id": "backend-development",
+          "name": "Backend Development",
+          "description": "General backend patterns, APIs, and architecture",
+          "agents": ["backend-architect"],
+          "skills": ["api-design", "authentication-patterns", "caching-strategies"],
+          "tokens": 280
+        },
+        {
+          "id": "database-design",
+          "name": "Database Design",
+          "description": "Schema design, optimization, and migrations",
+          "agents": ["database-architect"],
+          "skills": ["schema-design", "query-optimization", "indexing-strategies"],
+          "tokens": 250
+        },
+        {
+          "id": "database-migrations",
+          "name": "Database Migrations",
+          "description": "Safe migration strategies and rollback patterns",
+          "agents": ["migration-specialist"],
+          "skills": ["migration-patterns", "zero-downtime-migrations"],
+          "tokens": 200
+        }
+      ]
+    },
+    "frontend": {
+      "name": "Frontend Development",
+      "description": "UI/UX, mobile, and multi-platform apps",
+      "plugins": [
+        {
+          "id": "frontend-mobile-development",
+          "name": "Frontend & Mobile",
+          "description": "React Native, Flutter, and responsive web design",
+          "agents": ["frontend-architect", "mobile-developer"],
+          "skills": ["responsive-design", "accessibility-patterns", "mobile-optimization"],
+          "tokens": 320
+        },
+        {
+          "id": "multi-platform-apps",
+          "name": "Multi-Platform Apps",
+          "description": "Cross-platform development with Electron, Tauri, etc.",
+          "agents": ["cross-platform-developer"],
+          "skills": ["electron-patterns", "tauri-development"],
+          "tokens": 240
+        }
+      ]
+    },
+    "devops": {
+      "name": "DevOps & Infrastructure",
+      "description": "CI/CD, cloud, containers, and monitoring",
+      "plugins": [
+        {
+          "id": "cicd-automation",
+          "name": "CI/CD Automation",
+          "description": "GitHub Actions, GitLab CI, Jenkins, and deployment pipelines",
+          "agents": ["cicd-engineer"],
+          "skills": ["pipeline-optimization", "artifact-management", "deployment-strategies"],
+          "tokens": 290
+        },
+        {
+          "id": "kubernetes-operations",
+          "name": "Kubernetes Operations",
+          "description": "K8s deployment, scaling, and troubleshooting",
+          "agents": ["k8s-operator"],
+          "skills": ["helm-charts", "k8s-debugging", "resource-optimization", "service-mesh"],
+          "tokens": 350
+        },
+        {
+          "id": "cloud-infrastructure",
+          "name": "Cloud Infrastructure",
+          "description": "AWS, GCP, Azure infrastructure and IaC",
+          "agents": ["cloud-architect"],
+          "skills": ["terraform-patterns", "cloud-cost-optimization", "multi-cloud-strategies"],
+          "tokens": 320
+        },
+        {
+          "id": "observability-monitoring",
+          "name": "Observability & Monitoring",
+          "description": "Logging, metrics, tracing, and alerting",
+          "agents": ["observability-engineer"],
+          "skills": ["prometheus-grafana", "distributed-tracing", "log-aggregation"],
+          "tokens": 280
+        }
+      ]
+    },
+    "quality": {
+      "name": "Code Quality & Testing",
+      "description": "Testing, reviews, and code quality tools",
+      "plugins": [
+        {
+          "id": "code-review-ai",
+          "name": "AI Code Review",
+          "description": "Automated code review with best practices",
+          "agents": ["code-reviewer"],
+          "skills": ["review-patterns", "security-review", "performance-review"],
+          "tokens": 260
+        },
+        {
+          "id": "unit-testing",
+          "name": "Unit Testing",
+          "description": "Comprehensive unit testing strategies",
+          "agents": ["testing-specialist"],
+          "skills": ["mocking-patterns", "test-coverage", "property-based-testing"],
+          "tokens": 240
+        },
+        {
+          "id": "tdd-workflows",
+          "name": "TDD Workflows",
+          "description": "Test-driven development patterns and practices",
+          "agents": ["tdd-coach"],
+          "skills": ["red-green-refactor", "test-first-design"],
+          "tokens": 220
+        },
+        {
+          "id": "debugging-toolkit",
+          "name": "Debugging Toolkit",
+          "description": "Advanced debugging and troubleshooting",
+          "agents": ["debug-specialist"],
+          "skills": ["memory-debugging", "async-debugging", "distributed-debugging"],
+          "tokens": 280
+        }
+      ]
+    },
+    "security": {
+      "name": "Security & Compliance",
+      "description": "Security scanning, compliance, and incident response",
+      "plugins": [
+        {
+          "id": "security-scanning",
+          "name": "Security Scanning",
+          "description": "SAST, DAST, and dependency scanning",
+          "agents": ["security-scanner"],
+          "skills": ["vulnerability-assessment", "secure-coding", "dependency-audit"],
+          "tokens": 300
+        },
+        {
+          "id": "security-compliance",
+          "name": "Security Compliance",
+          "description": "SOC2, GDPR, HIPAA compliance patterns",
+          "agents": ["compliance-officer"],
+          "skills": ["audit-preparation", "policy-enforcement", "data-protection"],
+          "tokens": 280
+        },
+        {
+          "id": "incident-response",
+          "name": "Incident Response",
+          "description": "Security incident handling and forensics",
+          "agents": ["incident-responder"],
+          "skills": ["forensics-patterns", "containment-strategies", "post-mortem"],
+          "tokens": 260
+        }
+      ]
+    },
+    "ai-ml": {
+      "name": "AI/ML & Data",
+      "description": "Machine learning, LLM apps, and data engineering",
+      "plugins": [
+        {
+          "id": "llm-application-dev",
+          "name": "LLM Application Development",
+          "description": "Building applications with LLMs, RAG, and agents",
+          "agents": ["llm-architect"],
+          "skills": ["prompt-engineering", "rag-patterns", "agent-design"],
+          "tokens": 350
+        },
+        {
+          "id": "machine-learning-ops",
+          "name": "MLOps",
+          "description": "ML model deployment, monitoring, and lifecycle",
+          "agents": ["mlops-engineer"],
+          "skills": ["model-serving", "feature-stores", "experiment-tracking"],
+          "tokens": 320
+        },
+        {
+          "id": "data-engineering",
+          "name": "Data Engineering",
+          "description": "Data pipelines, ETL, and data warehousing",
+          "agents": ["data-engineer"],
+          "skills": ["pipeline-patterns", "data-quality", "streaming-architectures"],
+          "tokens": 300
+        }
+      ]
+    },
+    "documentation": {
+      "name": "Documentation & APIs",
+      "description": "API specs, documentation, and diagrams",
+      "plugins": [
+        {
+          "id": "api-scaffolding",
+          "name": "API Scaffolding",
+          "description": "OpenAPI, GraphQL schema design and generation",
+          "agents": ["api-designer"],
+          "skills": ["openapi-patterns", "graphql-design", "api-versioning"],
+          "tokens": 260
+        },
+        {
+          "id": "documentation-generation",
+          "name": "Documentation Generation",
+          "description": "Automated docs from code and schemas",
+          "agents": ["doc-generator"],
+          "skills": ["docstring-patterns", "api-documentation", "readme-generation"],
+          "tokens": 220
+        },
+        {
+          "id": "c4-architecture",
+          "name": "C4 Architecture Diagrams",
+          "description": "C4 model diagrams and architecture documentation",
+          "agents": ["architecture-visualizer"],
+          "skills": ["c4-modeling", "architecture-decisions"],
+          "tokens": 200
+        }
+      ]
+    },
+    "specialized": {
+      "name": "Specialized Domains",
+      "description": "Blockchain, gaming, embedded, and niche domains",
+      "plugins": [
+        {
+          "id": "blockchain-web3",
+          "name": "Blockchain & Web3",
+          "description": "Smart contracts, DeFi, and Web3 development",
+          "agents": ["blockchain-developer"],
+          "skills": ["solidity-patterns", "defi-protocols", "web3-security"],
+          "tokens": 350
+        },
+        {
+          "id": "game-development",
+          "name": "Game Development",
+          "description": "Unity, Unreal, and game architecture",
+          "agents": ["game-developer"],
+          "skills": ["game-architecture", "physics-systems", "multiplayer-patterns"],
+          "tokens": 320
+        },
+        {
+          "id": "quantitative-trading",
+          "name": "Quantitative Trading",
+          "description": "Algorithmic trading and financial analysis",
+          "agents": ["quant-developer"],
+          "skills": ["backtesting-patterns", "risk-management", "market-data"],
+          "tokens": 300
+        },
+        {
+          "id": "systems-programming",
+          "name": "Systems Programming",
+          "description": "Rust, C/C++, and low-level systems",
+          "agents": ["systems-programmer"],
+          "skills": ["memory-safety", "concurrency-patterns", "performance-optimization"],
+          "tokens": 320
+        }
+      ]
+    }
+  },
+  "presets": {
+    "python-web": {
+      "name": "Python Web Development",
+      "description": "Full Python web stack with testing and deployment",
+      "plugins": ["python-development", "backend-development", "database-design", "unit-testing", "cicd-automation"],
+      "estimated_tokens": 1360
+    },
+    "fullstack-js": {
+      "name": "Full-Stack JavaScript",
+      "description": "Complete JS/TS stack for web applications",
+      "plugins": ["javascript-typescript", "frontend-mobile-development", "backend-development", "unit-testing", "cicd-automation"],
+      "estimated_tokens": 1480
+    },
+    "devops-sre": {
+      "name": "DevOps/SRE",
+      "description": "Infrastructure, monitoring, and reliability",
+      "plugins": ["kubernetes-operations", "cloud-infrastructure", "cicd-automation", "observability-monitoring", "incident-response"],
+      "estimated_tokens": 1500
+    },
+    "security-focused": {
+      "name": "Security-Focused Development",
+      "description": "Security scanning, compliance, and secure coding",
+      "plugins": ["security-scanning", "security-compliance", "code-review-ai", "incident-response"],
+      "estimated_tokens": 1100
+    },
+    "ai-ml-engineer": {
+      "name": "AI/ML Engineering",
+      "description": "LLM apps, MLOps, and data pipelines",
+      "plugins": ["llm-application-dev", "machine-learning-ops", "data-engineering", "python-development"],
+      "estimated_tokens": 1270
+    },
+    "minimal": {
+      "name": "Minimal Setup",
+      "description": "Just the essentials for code quality",
+      "plugins": ["code-review-ai", "debugging-toolkit"],
+      "estimated_tokens": 540
+    }
+  }
+}

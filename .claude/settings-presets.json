@@ -1,0 +1,174 @@
+{
+  "version": "1.0.0",
+  "description": "Settings presets for different work styles",
+  "presets": {
+    "fast": {
+      "name": "Fast Mode",
+      "description": "Quick iterations, minimal confirmation. Best for experienced users on familiar codebases.",
+      "settings": {
+        "autoAcceptEdits": true,
+        "outputStyle": "Concise"
+      },
+      "hooks": {},
+      "use_case": "Rapid prototyping, quick fixes, familiar codebases"
+    },
+    "thorough": {
+      "name": "Thorough Mode",
+      "description": "Detailed explanations, careful validation. Best for learning or complex changes.",
+      "settings": {
+        "autoAcceptEdits": false,
+        "outputStyle": "Explanatory"
+      },
+      "hooks": {
+        "SessionStart": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-init.sh"
+              }
+            ]
+          }
+        ],
+        "PreToolUse": [
+          {
+            "matcher": "Bash",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pre-commit-check.sh",
+                "timeout": 120
+              },
+              {
+                "type": "command",
+                "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/long-running-tmux-hint.sh"
+              }
+            ]
+          }
+        ],
+        "PostToolUse": [
+          {
+            "matcher": "Bash",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pr-url-extract.sh"
+              }
+            ]
+          }
+        ],
+        "Stop": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-end.sh"
+              }
+            ]
+          }
+        ]
+      },
+      "use_case": "Learning new codebases, code reviews, critical systems"
+    },
+    "safe": {
+      "name": "Safe Mode",
+      "description": "Maximum guardrails. Blocks sensitive files, requires confirmation.",
+      "settings": {
+        "autoAcceptEdits": false,
+        "outputStyle": "Explanatory"
+      },
+      "hooks": {
+        "SessionStart": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-init.sh"
+              }
+            ]
+          }
+        ],
+        "PreToolUse": [
+          {
+            "matcher": "Edit|Write",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/protect-sensitive-files.sh"
+              }
+            ]
+          },
+          {
+            "matcher": "Bash",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pre-commit-check.sh",
+                "timeout": 120
+              },
+              {
+                "type": "command",
+                "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/long-running-tmux-hint.sh"
+              }
+            ]
+          }
+        ],
+        "PostToolUse": [
+          {
+            "matcher": "Bash",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pr-url-extract.sh"
+              }
+            ]
+          }
+        ],
+        "Stop": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-end.sh"
+              }
+            ]
+          }
+        ]
+      },
+      "use_case": "Production systems, unfamiliar codebases, shared environments"
+    },
+    "autoformat": {
+      "name": "Auto-Format Mode",
+      "description": "Automatically formats code after every edit. Good for strict style enforcement.",
+      "settings": {
+        "autoAcceptEdits": true,
+        "outputStyle": "Concise"
+      },
+      "hooks": {
+        "PostToolUse": [
+          {
+            "matcher": "Edit|Write",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-format.sh"
+              }
+            ]
+          }
+        ]
+      },
+      "use_case": "Teams with strict formatting rules, open source contributions"
+    },
+    "minimal": {
+      "name": "Minimal Mode",
+      "description": "Lightweight hook set for fast sessions. Keeps lifecycle and safety hooks only — no formatting, analysis, or learning overhead.",
+      "env": {
+        "TEMPLATE_HOOK_PROFILE": "minimal"
+      },
+      "env_docs": {
+        "TEMPLATE_HOOK_PROFILE": "Controls which hooks are active: minimal (8 hooks), standard (17), strict (21)."
+      },
+      "use_case": "Fast debugging sessions, exploration, quick fixes"
+    }
+  }
+}

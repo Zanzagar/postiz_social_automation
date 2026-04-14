@@ -1,0 +1,35 @@
+IMPORTANT: Each subtask you generate MUST include ALL of the following sections in its description field. This is not optional — every section must be present and specific, not generic.
+
+## Required Subtask Description Structure
+
+### 1. ACCEPTANCE CRITERIA (checkbox format)
+Write 3-7 checkbox acceptance criteria. Each criterion MUST be specific and measurable:
+- Include exact names: field names, function signatures, config keys, endpoints, CLI flags — whatever is concrete for this domain
+- Include exact values: status codes, thresholds, enum values, expected outputs, error messages
+- Include edge cases: what happens on invalid input, timeout, empty state, boundary conditions
+- NEVER write generic criteria like "works correctly" or "handles errors properly"
+- Each criterion should be independently verifiable by running a test or checking an output
+
+Format:
+- [ ] [Specific, measurable criterion with concrete names and values]
+
+### 2. SCOPE
+State explicitly what is IN scope and OUT of scope for this subtask:
+- In Scope: [specific components, modules, or behaviors this subtask covers]
+- Out of Scope: [related work explicitly excluded — reference sibling subtasks by name when applicable]
+
+### 3. BUSINESS CONTEXT
+One sentence explaining WHY this subtask matters to the product or user. Not what it does, but why it exists.
+
+### 4. IMPLEMENTATION HINTS (optional, only when non-obvious)
+Only include this section when the implementation approach is non-obvious or when the parent task or PRD specifies a required approach. Skip this section entirely for straightforward subtasks.
+- Name a specific existing function, class, or module to use as a reference pattern — but ONLY if you are confident it exists. Do not guess.
+- State any required library, service, or API that MUST be used (when specified by the PRD or parent task)
+- If nothing non-obvious needs to be said, omit this section
+
+## Quality Rules
+- Every name, value, and threshold mentioned must be specific to THIS project — never placeholder or generic
+- If the parent task references a PRD, use PRD-level specificity in the criteria
+- Subtasks should be independently implementable — each one produces a working, testable increment
+- Prefer fewer, richer subtasks over many thin ones
+- Do not restate coding standards, security practices, or testing requirements that are already enforced by project rules — focus on what is unique to THIS subtask

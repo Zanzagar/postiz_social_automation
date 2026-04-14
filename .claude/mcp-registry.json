@@ -1,0 +1,272 @@
+{
+  "version": "1.0.0",
+  "description": "MCP server registry for project-based enable/disable",
+  "servers": {
+    "task-master-ai": {
+      "name": "Task Master AI",
+      "description": "Task management, PRD parsing, project planning, and TDD workflows",
+      "tools": 45,
+      "estimated_tokens": 4000,
+      "categories": ["project-management", "development"],
+      "recommended_for": ["all"],
+      "install_command": "claude mcp add task-master-ai --scope user -- npx -y task-master-ai@latest",
+      "env_vars": ["ANTHROPIC_API_KEY"]
+    },
+    "context7": {
+      "name": "Context7",
+      "description": "Up-to-date library documentation and code examples",
+      "tools": 2,
+      "estimated_tokens": 300,
+      "categories": ["documentation", "development"],
+      "recommended_for": ["all"],
+      "install_command": "claude mcp add context7 --scope user -- npx -y @upstash/context7-mcp",
+      "env_vars": []
+    },
+    "playwright": {
+      "name": "Playwright",
+      "description": "Browser automation, web testing, scraping via accessibility snapshots",
+      "tools": 20,
+      "estimated_tokens": 2500,
+      "categories": ["testing", "automation", "frontend"],
+      "recommended_for": ["frontend", "testing", "fullstack", "scraping"],
+      "install_command": "claude mcp add playwright --scope user -- npx @playwright/mcp@latest --headless",
+      "env_vars": []
+    },
+    "github": {
+      "name": "GitHub",
+      "description": "GitHub integration for issues, PRs, and repository management",
+      "tools": 15,
+      "estimated_tokens": 2000,
+      "categories": ["version-control", "development"],
+      "recommended_for": ["all"],
+      "install_command": "claude mcp add github --scope user -- npx -y @modelcontextprotocol/server-github",
+      "env_vars": ["GITHUB_TOKEN"]
+    },
+    "paypal": {
+      "name": "PayPal",
+      "description": "Payment processing, invoices, orders, subscriptions, disputes",
+      "tools": 22,
+      "estimated_tokens": 3000,
+      "categories": ["payments", "e-commerce"],
+      "recommended_for": ["e-commerce", "payments", "saas"],
+      "install_command": "claude mcp add paypal --scope user -- npx -y @paypal/mcp --tools=all",
+      "env_vars": ["PAYPAL_CLIENT_ID", "PAYPAL_CLIENT_SECRET"]
+    },
+    "wpcom-mcp": {
+      "name": "WordPress.com",
+      "description": "WordPress site management, posts, comments, stats, domains",
+      "tools": 12,
+      "estimated_tokens": 2500,
+      "categories": ["cms", "content"],
+      "recommended_for": ["wordpress", "content", "blogging"],
+      "install_command": "claude mcp add wpcom-mcp --scope user -- npx -y @automattic/mcp-wpcom-remote@latest",
+      "env_vars": []
+    },
+    "canva-dev": {
+      "name": "Canva Developer",
+      "description": "Canva app SDK, UI kit, CLI for building Canva apps",
+      "tools": 8,
+      "estimated_tokens": 1500,
+      "categories": ["design", "apps"],
+      "recommended_for": ["canva", "design-tools"],
+      "install_command": "claude mcp add canva-dev --scope user -- npx -y @canva/cli@latest mcp",
+      "env_vars": []
+    },
+    "magic": {
+      "name": "21st.dev Magic",
+      "description": "AI-powered UI component generation from natural language, logo search, design inspiration",
+      "tools": 4,
+      "estimated_tokens": 800,
+      "categories": ["frontend", "design", "ui"],
+      "recommended_for": ["frontend", "ui", "design"],
+      "install_command": "claude mcp add magic --scope user --env API_KEY=your-api-key -- npx -y @21st-dev/magic@latest",
+      "env_vars": ["API_KEY"],
+      "api_key_url": "https://21st.dev/magic/console"
+    },
+    "figma": {
+      "name": "Figma Context",
+      "description": "Extract Figma designs for AI-powered implementation, layout and styling information",
+      "tools": 3,
+      "estimated_tokens": 600,
+      "categories": ["design", "frontend", "ui"],
+      "recommended_for": ["frontend", "ui", "design", "design-to-code"],
+      "install_command": "claude mcp add figma --scope user -- npx -y figma-developer-mcp --figma-api-key=YOUR-KEY --stdio",
+      "env_vars": ["FIGMA_API_KEY"],
+      "api_key_url": "https://help.figma.com/hc/en-us/articles/8085703771159-Manage-personal-access-tokens"
+    },
+    "filesystem": {
+      "name": "Filesystem",
+      "description": "Extended filesystem operations beyond built-in tools",
+      "tools": 10,
+      "estimated_tokens": 1000,
+      "categories": ["development"],
+      "recommended_for": ["all"],
+      "install_command": "claude mcp add filesystem --scope user -- npx -y @anthropic/mcp-filesystem",
+      "env_vars": []
+    },
+    "postgres": {
+      "name": "PostgreSQL",
+      "description": "Read-only PostgreSQL database access, schema inspection, and SQL queries",
+      "tools": 4,
+      "estimated_tokens": 800,
+      "categories": ["database", "backend"],
+      "recommended_for": ["backend", "data", "fullstack"],
+      "install_command": "claude mcp add postgres --scope user -- npx -y @modelcontextprotocol/server-postgres postgresql://localhost/postgres",
+      "env_vars": ["DATABASE_URL"]
+    },
+    "mongodb": {
+      "name": "MongoDB",
+      "description": "MongoDB database access, Atlas management, queries, and aggregations",
+      "tools": 15,
+      "estimated_tokens": 2000,
+      "categories": ["database", "backend", "nosql"],
+      "recommended_for": ["backend", "data", "fullstack", "nosql"],
+      "install_command": "claude mcp add mongodb --scope user -- npx -y mongodb-mcp-server@latest --readOnly",
+      "env_vars": ["MDB_MCP_CONNECTION_STRING"]
+    },
+    "sqlite": {
+      "name": "SQLite",
+      "description": "SQLite database access for local development",
+      "tools": 6,
+      "estimated_tokens": 800,
+      "categories": ["database", "backend"],
+      "recommended_for": ["backend", "data", "prototyping"],
+      "install_command": "claude mcp add sqlite --scope user -- npx -y @anthropic/mcp-sqlite",
+      "env_vars": []
+    },
+    "slack": {
+      "name": "Slack",
+      "description": "Slack workspace integration for messages and channels",
+      "tools": 10,
+      "estimated_tokens": 1500,
+      "categories": ["communication", "automation"],
+      "recommended_for": ["automation", "devops", "team"],
+      "install_command": "claude mcp add slack --scope user -- npx -y @anthropic/mcp-slack",
+      "env_vars": ["SLACK_TOKEN"]
+    }
+  },
+  "presets": {
+    "minimal": {
+      "name": "Minimal",
+      "description": "Just the essentials - task management and docs",
+      "servers": ["task-master-ai", "context7"],
+      "estimated_tokens": 4300
+    },
+    "python-backend": {
+      "name": "Python Backend",
+      "description": "Backend development with database support",
+      "servers": ["task-master-ai", "context7", "github", "postgres"],
+      "estimated_tokens": 7500
+    },
+    "frontend": {
+      "name": "Frontend Development",
+      "description": "Frontend with UI tools, browser testing, and design-to-code",
+      "servers": ["task-master-ai", "context7", "github", "playwright", "magic", "figma"],
+      "estimated_tokens": 10200
+    },
+    "fullstack": {
+      "name": "Full-Stack Development",
+      "description": "Complete web development stack",
+      "servers": ["task-master-ai", "context7", "github", "playwright", "postgres"],
+      "estimated_tokens": 10800
+    },
+    "e-commerce": {
+      "name": "E-Commerce",
+      "description": "Online store and payment processing",
+      "servers": ["task-master-ai", "context7", "github", "paypal", "postgres"],
+      "estimated_tokens": 11500
+    },
+    "content": {
+      "name": "Content & CMS",
+      "description": "WordPress and content management",
+      "servers": ["task-master-ai", "context7", "github", "wpcom-mcp"],
+      "estimated_tokens": 8800
+    },
+    "testing": {
+      "name": "Testing & QA",
+      "description": "Browser automation and testing focus",
+      "servers": ["task-master-ai", "context7", "playwright"],
+      "estimated_tokens": 6800
+    },
+    "data-engineering": {
+      "name": "Data Engineering",
+      "description": "Database-heavy projects with both SQL and NoSQL",
+      "servers": ["task-master-ai", "context7", "github", "postgres", "mongodb"],
+      "estimated_tokens": 9100
+    }
+  },
+  "project_types": {
+    "all": {
+      "description": "Recommended for all projects",
+      "servers": ["task-master-ai", "context7"]
+    },
+    "frontend": {
+      "description": "React, Vue, Angular, or other frontend frameworks",
+      "servers": ["playwright", "magic"]
+    },
+    "backend": {
+      "description": "APIs, servers, and backend services",
+      "servers": ["postgres", "mongodb", "sqlite"]
+    },
+    "nosql": {
+      "description": "NoSQL database projects",
+      "servers": ["mongodb"]
+    },
+    "fullstack": {
+      "description": "Full-stack web applications",
+      "servers": ["playwright", "postgres"]
+    },
+    "e-commerce": {
+      "description": "Online stores and payment processing",
+      "servers": ["paypal"]
+    },
+    "payments": {
+      "description": "Payment integration projects",
+      "servers": ["paypal"]
+    },
+    "saas": {
+      "description": "SaaS applications",
+      "servers": ["paypal", "postgres"]
+    },
+    "wordpress": {
+      "description": "WordPress development",
+      "servers": ["wpcom-mcp"]
+    },
+    "content": {
+      "description": "Content management and blogging",
+      "servers": ["wpcom-mcp"]
+    },
+    "canva": {
+      "description": "Canva app development",
+      "servers": ["canva-dev"]
+    },
+    "design-tools": {
+      "description": "Design tool integrations",
+      "servers": ["canva-dev", "magic", "figma"]
+    },
+    "design-to-code": {
+      "description": "Figma-to-code and design implementation",
+      "servers": ["figma", "magic", "playwright"]
+    },
+    "testing": {
+      "description": "Testing and QA automation",
+      "servers": ["playwright"]
+    },
+    "scraping": {
+      "description": "Web scraping projects",
+      "servers": ["playwright"]
+    },
+    "automation": {
+      "description": "Workflow automation",
+      "servers": ["playwright", "slack"]
+    },
+    "data": {
+      "description": "Data analysis and pipelines",
+      "servers": ["postgres", "mongodb", "sqlite"]
+    },
+    "prototyping": {
+      "description": "Quick prototypes and MVPs",
+      "servers": ["sqlite", "magic"]
+    }
+  }
+}
