@@ -10,10 +10,14 @@ import json
 import logging
 import re
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 
+from content_engine.few_shot import get_few_shot_examples
 from content_engine.models import ContentRow, Platform, Suggestion
+from content_engine.rate_limiter import rate_limit_sync
+from content_engine.slop_detector import SlopDetector
 
 logger = logging.getLogger(__name__)
 
@@ -56,30 +60,57 @@ PLATFORM_INSTRUCTIONS: dict[Platform, str] = {
 }
 
 CLI_TIMEOUT = 120  # seconds
+MAX_RETRIES = 2  # 3 total attempts (initial + 2 retries)
+RETRY_BASE_DELAY = 2  # seconds — doubles each retry (2s, 4s)
 
 # Run claude -p from /tmp so it doesn't load the project's .claude/ directory
 # (rules, hooks, plugins, 1000+ session files) which adds 40s+ of startup.
 _CLEAN_CWD = "/tmp"
 
 
-def _call_claude(prompt: str) -> str:
-    """Call Claude Code CLI and return stdout. Raises RuntimeError on failure."""
-    try:
-        result = subprocess.run(
-            ["claude", "-p", prompt, "--model", "sonnet"],
-            capture_output=True,
-            text=True,
-            timeout=CLI_TIMEOUT,
-            stdin=subprocess.DEVNULL,
-            cwd=_CLEAN_CWD,
-        )
-    except subprocess.TimeoutExpired as e:
-        raise RuntimeError(f"Claude CLI timed out after {CLI_TIMEOUT}s") from e
+def _call_claude(prompt: str, model: str = "sonnet") -> str:
+    """Call Claude Code CLI with retry on transient failures.
 
-    if result.returncode != 0:
-        raise RuntimeError(f"Claude CLI failed (exit {result.returncode}): {result.stderr}")
+    Args:
+        prompt: The prompt text to send to Claude.
+        model: The Claude model to use (e.g. "sonnet", "haiku", "opus").
 
-    return result.stdout.strip()
+    Retries up to MAX_RETRIES times with exponential backoff (2s, 4s).
+    Timeout errors are NOT retried (the CLI genuinely hung).
+    """
+    last_error: RuntimeError | None = None
+
+    for attempt in range(MAX_RETRIES + 1):
+        with rate_limit_sync():
+            try:
+                result = subprocess.run(
+                    ["claude", "-p", prompt, "--model", model],
+                    capture_output=True,
+                    text=True,
+                    timeout=CLI_TIMEOUT,
+                    stdin=subprocess.DEVNULL,
+                    cwd=_CLEAN_CWD,
+                )
+            except subprocess.TimeoutExpired as e:
+                # Timeouts are not retried — the CLI genuinely hung
+                raise RuntimeError(f"Claude CLI timed out after {CLI_TIMEOUT}s") from e
+
+        if result.returncode == 0:
+            return result.stdout.strip()
+
+        last_error = RuntimeError(f"Claude CLI failed (exit {result.returncode}): {result.stderr}")
+
+        if attempt < MAX_RETRIES:
+            delay = RETRY_BASE_DELAY * (2**attempt)
+            logger.warning(
+                "Claude CLI attempt %d/%d failed, retrying in %ds...",
+                attempt + 1,
+                MAX_RETRIES + 1,
+                delay,
+            )
+            time.sleep(delay)
+
+    raise last_error  # type: ignore[misc]
 
 
 _DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
@@ -91,9 +122,14 @@ class CaptionGenerator:
     def __init__(self, data_dir: Path = _DEFAULT_DATA_DIR, db_path: str | None = None) -> None:
         self.data_dir = data_dir
         self.db_path = db_path or str(data_dir / "gvsa.db")
-        self.learning_context = self._load_learning_context()
         self.voice_profile = self._load_voice_profile()
         self.learned_rules = self._load_learned_rules()
+        self.slop_detector = SlopDetector()
+        self.last_slop_result = None
+        # Lazy import to avoid circular dependency
+        from content_engine.two_stage_generator import TwoStageGenerator
+
+        self.two_stage = TwoStageGenerator(data_dir=data_dir)
 
     def generate_captions(
         self, row: ContentRow, feedback: str | None = None
@@ -118,8 +154,117 @@ class CaptionGenerator:
                 "Please regenerate the captions incorporating this feedback."
             )
         raw = _call_claude(prompt)
+        captions = self._parse_response(raw, platforms)
 
-        return self._parse_response(raw, platforms)
+        # Slop gate: check and optionally regenerate
+        captions = self._slop_gate(captions, row, platforms, feedback)
+
+        return captions
+
+    def generate_captions_two_stage(self, row: ContentRow) -> dict[Platform, str]:
+        """Generate captions using the two-stage pipeline.
+
+        Stage 1: Extract core narrative (Sonnet)
+        Stage 2: Adapt to each platform (Sonnet)
+        + Slop gate on final output
+        """
+        platforms = [p for p, enabled in row.platforms.items() if enabled]
+        if not platforms:
+            return {}
+
+        # Get knowledge context
+        knowledge_ctx = self._get_knowledge_context(row.content_pillar)
+
+        # Stage 1: Core narrative
+        narrative = self.two_stage.generate_core_narrative(
+            raw_text=row.raw_text,
+            pillar=row.content_pillar or "General",
+            knowledge_context=knowledge_ctx or None,
+        )
+
+        # Stage 2: Adapt to all platforms
+        platform_names = [p.value for p in platforms]
+        adapted = self.two_stage.adapt_to_all_platforms(narrative, platform_names)
+
+        # Map back to Platform enums
+        captions = {}
+        for p in platforms:
+            if p.value in adapted:
+                captions[p] = adapted[p.value]
+
+        # Slop gate
+        if captions:
+            captions = self._slop_gate(captions, row, platforms)
+
+        # Self-refine quality scoring (non-blocking, logs quality)
+        # Lazy import to avoid circular dependency (self_refine imports _call_claude)
+        from content_engine.self_refine import SELF_REFINE_ENABLED, score_caption
+
+        if captions and SELF_REFINE_ENABLED:
+            for p, caption in captions.items():
+                try:
+                    score = score_caption(caption, p.value, self.voice_profile)
+                    logger.info(
+                        "Self-refine score for %s: %.1f "
+                        "(voice=%d, platform=%d, specificity=%d, slop=%d)",
+                        p.value,
+                        score.overall,
+                        score.voice_match,
+                        score.platform_fit,
+                        score.specificity,
+                        score.slop_free,
+                    )
+                except Exception:
+                    logger.warning("Self-refine scoring failed for %s", p.value)
+
+        return captions
+
+    def _slop_gate(
+        self,
+        captions: dict[Platform, str],
+        row: ContentRow,
+        platforms: list[Platform],
+        feedback: str | None = None,
+    ) -> dict[Platform, str]:
+        """Check captions for slop; retry once if too generic."""
+        all_text = " ".join(captions.values())
+        result = self.slop_detector.detect(all_text)
+        self.last_slop_result = result
+
+        if not result.is_slop():
+            return captions
+
+        logger.warning(
+            "Slop detected (score=%.2f, matches=%s), regenerating...",
+            result.score,
+            result.matches,
+        )
+
+        # One retry with anti-slop feedback
+        anti_slop = (
+            "The previous attempt was too generic. "
+            "AVOID these AI cliches: " + ", ".join(result.matches[:5]) + ". "
+            "Write like a real farmer, not a marketing agency."
+        )
+        prompt = self._build_prompt(row, platforms)
+        prompt += f"\n\nANTI-SLOP FEEDBACK:\n{anti_slop}"
+        if feedback:
+            sanitized = feedback[:500].replace("```", "")
+            prompt += f"\n\nSTAFF FEEDBACK:\n---\n{sanitized}\n---"
+
+        raw2 = _call_claude(prompt)
+        captions2 = self._parse_response(raw2, platforms)
+
+        # Return whichever is less sloppy
+        all_text2 = " ".join(captions2.values())
+        result2 = self.slop_detector.detect(all_text2)
+
+        if result2.score < result.score:
+            self.last_slop_result = result2
+            return captions2
+
+        self.last_slop_result = result
+        return captions
 
     def generate_suggestions(
         self,
@@ -235,6 +380,17 @@ class CaptionGenerator:
         if knowledge_ctx:
             parts.append(knowledge_ctx)
 
+        # Few-shot examples for the first enabled platform
+        first_platform = platforms[0].value if platforms else None
+        if first_platform:
+            examples = self._get_few_shot_examples(first_platform, row.content_pillar)
+            if examples:
+                parts.append("EXAMPLE POSTS (match this quality and style):")
+                for ex in examples:
+                    parts.append(f"  Input: {ex.get('raw_text', '')}")
+                    parts.append(f"  Output: {ex.get('caption', '')}")
+                parts.append("")
+
         # Content info
         parts.append("CONTENT TO POST:")
         parts.append(f"- Raw text: {row.raw_text}")
@@ -290,16 +446,37 @@ class CaptionGenerator:
         return "\n".join(parts)
 
     def _parse_response(self, raw: str, platforms: list[Platform]) -> dict[Platform, str]:
-        """Parse Claude's JSON response into platform-caption mapping."""
+        """Parse Claude's JSON response into platform-caption mapping.
+
+        Recovery pipeline for malformed Claude responses:
+        1. Strip markdown code fences (```json ... ```)
+        2. Direct JSON parse
+        3. Extract JSON object from mixed text via regex
+        4. Raise RuntimeError if all recovery fails
+        """
         text = raw.strip()
-        # Strip markdown code fence if present
+        # Step 1: Strip markdown code fence if present
         fence_match = re.search(r"```(?:json)?\s*([\s\S]+?)```", text)
         if fence_match:
             text = fence_match.group(1).strip()
+
+        # Step 2: Try direct parse
         try:
             data = json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"Could not parse Claude response as JSON: {raw[:200]}") from exc
+        except json.JSONDecodeError:
+            data = None
+
+        # Step 3: Try extracting a JSON object from mixed text
+        if data is None:
+            json_match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", text)
+            if json_match:
+                try:
+                    data = json.loads(json_match.group(0))
+                except json.JSONDecodeError:
+                    data = None
+
+        if data is None:
+            raise RuntimeError(f"Could not parse Claude response as JSON: {raw[:200]}")
 
         captions = {}
         for platform in platforms:
@@ -309,13 +486,6 @@ class CaptionGenerator:
             else:
                 logger.warning("No caption returned for %s", key)
         return captions
-
-    def _load_learning_context(self) -> dict:
-        """Load learning context from data/learning-context.json."""
-        path = self.data_dir / "learning-context.json"
-        if path.exists():
-            return json.loads(path.read_text())
-        return {}
 
     def _load_voice_profile(self) -> dict:
         """Load extracted voice profile from data/voice-profile.json."""
@@ -378,3 +548,10 @@ class CaptionGenerator:
             return get_knowledge_context(self.db_path, pillar=pillar)
         except Exception:
             return ""
+
+    def _get_few_shot_examples(self, platform: str, pillar: str | None = None) -> list[dict]:
+        """Retrieve few-shot examples from the database."""
+        try:
+            return get_few_shot_examples(self.db_path, platform, pillar=pillar, limit=3)
+        except Exception:
+            return []
