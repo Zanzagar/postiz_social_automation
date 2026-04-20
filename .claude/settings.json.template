@@ -1,0 +1,63 @@
+{
+  "$schema": "https://claude.ai/schemas/claude-code-settings.json",
+  "_comment": "Copy to settings.json for team-shared settings, or settings.local.json for personal settings",
+  "_version": "2.0.0",
+
+  "permissions": {
+    "_comment": "Permission presets: 'safe' (ask most), 'balanced' (recommended), 'yolo' (auto-approve)",
+
+    "allow": [
+      "Read(**)",
+      "Glob(**)",
+      "Grep(**)",
+      "WebFetch",
+      "WebSearch",
+      "mcp__task-master-ai__*",
+      "mcp__context7__*"
+    ],
+
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git push --force*)",
+      "Bash(sudo *)",
+      "Edit(.env*)",
+      "Edit(**/secrets/**)",
+      "Edit(**/*.pem)",
+      "Edit(**/*.key)"
+    ]
+  },
+
+  "hooks": {
+    "_comment": "Hooks for automation. Copy relevant hooks from .claude/hooks/",
+
+    "PreToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [".claude/hooks/protect-sensitive-files.sh $FILE_PATH"]
+      }
+    ],
+
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [".claude/hooks/post-edit-format.sh $FILE_PATH"]
+      }
+    ],
+
+    "PreToolUse:Bash(git commit*)": [
+      ".claude/hooks/pre-commit-check.sh"
+    ]
+  },
+
+  "model": {
+    "_comment": "Model preferences (optional)",
+    "default": "claude-sonnet-4-20250514",
+    "thinking": "claude-opus-4-5-20251101"
+  },
+
+  "context": {
+    "_comment": "Context loading preferences",
+    "autoLoadRules": true,
+    "maxRulesFiles": 10
+  }
+}

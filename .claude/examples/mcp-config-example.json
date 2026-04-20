@@ -1,0 +1,12 @@
+{
+  "_comment": "Example .mcp.json for a Python backend project. Copy to project root as .mcp.json",
+  "mcpServers": {},
+  "disabledMcpServers": [
+    "paypal",
+    "wpcom-mcp",
+    "canva-dev",
+    "magic",
+    "figma",
+    "playwright"
+  ]
+}

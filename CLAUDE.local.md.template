@@ -1,0 +1,50 @@
+# CLAUDE.local.md Template
+
+Copy this file to `CLAUDE.local.md` in your project root (already in .gitignore).
+
+This file is for **private, machine-specific, or sensitive** instructions that should NOT be committed to version control.
+
+---
+
+# Local Project Instructions
+
+## My Development Environment
+
+<!-- Customize for your local setup -->
+- IDE: [VS Code / PyCharm / etc.]
+- Python path: [/usr/bin/python3 or virtual env path]
+- Local database: [localhost:5432 or Docker container name]
+
+## My Preferences
+
+<!-- Personal coding preferences not shared with team -->
+- I prefer [verbose / concise] explanations
+- Always ask before [making commits / running tests / etc.]
+- My timezone: [America/New_York]
+
+## Local API Keys & Endpoints
+
+<!-- NEVER commit these to version control -->
+- Dev API endpoint: http://localhost:8000
+- Test database: postgresql://user:pass@localhost/testdb
+
+## Private Notes
+
+<!-- Personal reminders, WIP notes, context for ongoing work -->
+- Currently working on: [feature/task description]
+- Blocked by: [blocker if any]
+- Next session: [what to pick up]
+
+## Machine-Specific Paths
+
+<!-- Paths that differ per developer machine -->
+- Data directory: /home/myuser/data/project
+- Model cache: /home/myuser/.cache/models
+- Log output: /tmp/project-logs
+
+## Team Member Overrides
+
+<!-- Override shared settings for personal preference -->
+- Skip pre-commit hooks: false (set true if needed locally)
+- Verbose logging: true
+- Auto-format on save: true
