@@ -315,63 +315,94 @@ Upload videos as private via API, then manually set to public/unlisted in YouTub
 ## 3. TikTok Production Review
 
 **Portal**: [developers.tiktok.com](https://developers.tiktok.com)
-**Timeline**: 5-10 business days
+**TikTok Handle**: [@gitavalley](https://www.tiktok.com/@gitavalley)
+**Account Email**: `socialmedia@gnecofarm.org`
+**Organization**: Gita Valley (created on developers.tiktok.com)
+**Account Type**: Business (confirmed 2026-04-25)
+**Timeline**: 5-10 business days after submission
 **What it unlocks**: Posting videos publicly via API. Without this, all uploads stay in sandbox (private, max 128MB file size).
 
-### Prerequisites (do before submitting)
+### Current Status (as of 2026-04-29)
 
-1. Register at [developers.tiktok.com](https://developers.tiktok.com) with a business email
-2. Create application:
-   - App Name: "Gita Valley Social"
-   - Platform: Web
-   - Privacy Policy URL: `https://gitavalley.org/privacy-policy/`
-   - Terms of Service URL: `https://gitavalley.org/privacy-policy/`
-3. Add APIs to app:
-   - Login Kit (add redirect URI: `https://postiz.sethpc.xyz/integrations/social/tiktok`)
-   - Content Posting API > enable "Direct Post"
-4. Request scopes:
-   - `user.info.basic`
-   - `user.info.profile`
-   - `video.create`
-   - `video.upload`
-   - `video.publish`
-5. Copy Client ID (16 chars) + Client Secret (32 chars)
-6. Connect TikTok account in Postiz (sandbox mode)
-7. Verify you can upload a private test video through Postiz
+- [x] TikTok account exists (@gitavalley)
+- [x] Account is Business type (confirmed)
+- [x] Logged into developers.tiktok.com as `socialmedia@gnecofarm.org`
+- [x] Organization "Gita Valley" created on developer portal
+- [x] Developer app "Gita Valley Social" created — Client Key + Client Secret generated
+- [ ] Fill in app details (icon, category, description, URLs)
+- [ ] Add products: Login Kit + Content Posting API
+- [ ] Add scopes
+- [ ] Add redirect URI for Postiz
+- [ ] Connect TikTok in Postiz (sandbox mode)
+- [ ] Record demo video of sandbox upload flow
+- [ ] Write review explanation
+- [ ] Submit for production review
 
-### Submission Steps
+### App Details (fill in on developer portal)
 
-1. In TikTok Developer Portal, go to your app > Manage > Submit for Review
-2. Provide:
+| Field | Value |
+|---|---|
+| App icon | Gita Valley logo (1024x1024, JPEG/PNG, <5MB) |
+| App name | Gita Valley Social |
+| Category | Select closest to "Social Media" or "Business" |
+| Description | `Self-hosted social media scheduling tool for Gita Valley, a 501(c)(3) nonprofit farm and cow sanctuary. Manages and publishes scheduled content to our organizational TikTok account.` |
+| Terms of Service URL | `https://gitavalley.org/privacy-policy/` |
+| Privacy Policy URL | `https://gitavalley.org/privacy-policy/` |
+| Platforms | **Web** (check only Web) |
 
-**App description:**
-> Self-hosted social media scheduling tool for Gita Valley, a 501(c)(3) nonprofit farm and sanctuary. Publishes scheduled video content to a single organizational TikTok account. The tool is used internally by our social media team, not offered as a service to external users.
+### Products to Add
 
-**Privacy Policy URL:** `https://gitavalley.org/privacy-policy/`
+Click "Add products" and enable:
 
-**Terms of Service URL:** `https://gitavalley.org/privacy-policy/`
+1. **Login Kit**
+   - Add redirect URI: `https://postiz.sethpc.xyz/integrations/social/tiktok`
+2. **Content Posting API**
+   - Enable "Direct Post"
 
-**How user data is handled:**
-> Only the authenticated organization account is used. No third-party user data is collected, shared, or stored. Video content is created by our team and uploaded to our own TikTok account.
+### Scopes to Add
 
-**Demo video** (2-3 minutes, critical piece):
-- Show: User opens Postiz or the content hub
-- Show: User creates a new post with a video file
-- Show: User selects TikTok as the target platform
-- Show: Post is submitted and appears in TikTok (private/sandbox is fine for the demo)
-- Narration is not required but helpful
-- Screen recording tools: OBS, Loom, or QuickTime
+Click "Add scopes" and request:
+- `user.info.basic`
+- `user.info.profile`
+- `video.create`
+- `video.upload`
+- `video.publish`
 
-3. Submit
+### App Review Explanation (paste into the review text field)
 
-### Sequencing
+> Gita Valley Social is a self-hosted social media scheduling tool for Gita Valley (ISKCON Gita Nagari), a 501(c)(3) nonprofit farm and cow sanctuary in Port Royal, PA. The app uses Login Kit to authenticate our organizational TikTok account, and Content Posting API to publish scheduled video content. Content is created by our social media team — educational videos about sustainable farming, cow protection, and community events. The tool is used internally by a single organization and is not offered as a service to external users. Only our own organizational account is accessed. No third-party user data is collected, shared, or stored.
 
-This review CANNOT be submitted on meeting day. The order is:
-1. **Meeting day**: Log in to TikTok (2FA) + convert to Business account
-2. **Day 1-2 after meeting**: Create TikTok developer app, add env vars to Postiz, connect in sandbox
-3. **Day 2-3**: Record demo video of working sandbox upload flow
-4. **Day 3-5**: Submit for production review
-5. **Day 8-15**: Receive approval (5-10 business days from submission)
+### Demo Video (required for submission)
+
+Record a 2-3 minute screen recording (OBS, Loom, or QuickTime) showing:
+1. Open Postiz (postiz.sethpc.xyz) or the Content Hub
+2. Create a new post with a video file
+3. Select TikTok as the target platform
+4. Submit the post
+5. Show the post appearing in TikTok (private/sandbox is fine)
+
+Tips:
+- MP4 or MOV format, max 50MB per file
+- Narration is helpful but not required
+- Sandbox mode is expected — the video does NOT need to be public
+- Domain shown in video must match redirect URI (postiz.sethpc.xyz)
+
+### Remaining Sequence
+
+1. Fill in app details + add products + add scopes (above)
+2. Save app details on developer portal
+3. Copy Client Key + Client Secret → add to Postiz `.env`:
+   ```
+   TIKTOK_CLIENT_ID=<Client Key>
+   TIKTOK_CLIENT_SECRET=<Client Secret>
+   ```
+4. Restart Postiz: `docker compose restart postiz`
+5. Connect TikTok in Postiz: Settings → Channels → Add Channel → TikTok
+6. Test a sandbox upload through Postiz
+7. Record demo video of the working flow
+8. Paste review explanation + upload demo video on developer portal
+9. Submit for production review
+10. Wait 5-10 business days
 
 ### Important TikTok Caveat
 
@@ -383,6 +414,7 @@ TikTok provides specific feedback on what to fix. Common rejection reasons:
 - Demo video doesn't clearly show the upload flow
 - Privacy policy is missing or inaccessible
 - App description is too vague
+- Scopes shown in video don't match requested scopes
 
 Fix the cited issues and resubmit. Re-review is typically faster.
 
@@ -392,6 +424,17 @@ Fix the cited issues and resubmit. Re-review is typically faster.
 - Video uploads become publicly visible
 - File size limit increases from 128MB to 10GB
 - No further action needed
+
+### Key IDs Reference
+
+| Asset | Value |
+|---|---|
+| TikTok Handle | @gitavalley |
+| Account Email | `socialmedia@gnecofarm.org` |
+| Developer Org | Gita Valley |
+| App Name | Gita Valley Social |
+| Client Key | Stored securely outside repo |
+| Client Secret | Stored securely outside repo |
 
 ---
 
