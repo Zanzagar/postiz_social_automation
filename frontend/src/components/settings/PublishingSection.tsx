@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { PlatformDot, SkeletonText, Toggle } from "@/components/pasture";
 import { PublishingAside } from "./PublishingAside";
 
+const DEFAULT_DELAY_HOURS = 2;
+
 const DELAY_OPTIONS: ReadonlyArray<{ hours: number; label: string }> = [
   { hours: 0, label: "Immediately on approval" },
   { hours: 1, label: "After 1 hour" },
@@ -136,7 +138,18 @@ export function PublishingSection() {
     },
   });
 
-  const configs = data?.platforms ?? [];
+  // When the backend has no rows yet, seed editable rows from the static
+  // platform catalog so staff can configure from scratch; the first change
+  // PUTs the full seeded set.
+  const configs: PlatformPublishConfig[] =
+    data?.platforms && data.platforms.length > 0
+      ? data.platforms
+      : PLATFORMS.map((p) => ({
+          platform: p.id,
+          enabled: false,
+          delay_hours: DEFAULT_DELAY_HOURS,
+          pillar_overrides: {},
+        }));
 
   function updatePlatform(platform: string, patch: Partial<PlatformPublishConfig>) {
     mutation.mutate(

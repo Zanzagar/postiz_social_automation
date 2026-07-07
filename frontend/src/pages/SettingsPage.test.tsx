@@ -257,6 +257,39 @@ describe("Publishing section", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("seeds default rows from the platform catalog when the backend returns none", async () => {
+    // Regression: {platforms: []} used to render the card header with an empty body.
+    mockGetConfig.mockResolvedValue({ platforms: [] });
+    const user = userEvent.setup();
+    renderSettings();
+
+    // All five catalog platforms render as editable rows, off by default
+    const instagram = await screen.findByRole("switch", {
+      name: "Auto-release on Instagram",
+    });
+    expect(instagram).not.toBeChecked();
+    for (const label of ["Facebook", "TikTok", "Threads", "LinkedIn"]) {
+      expect(
+        screen.getByRole("switch", { name: `Auto-release on ${label}` }),
+      ).not.toBeChecked();
+    }
+
+    // First change saves the full seeded set with defaults
+    await user.click(instagram);
+    await waitFor(() => expect(mockUpdateConfig).toHaveBeenCalledTimes(1));
+    const payload = mockUpdateConfig.mock.calls[0][0];
+    expect(payload).toHaveLength(5);
+    expect(payload.find((c) => c.platform === "instagram")).toMatchObject({
+      enabled: true,
+      delay_hours: 2,
+    });
+    expect(payload.find((c) => c.platform === "linkedin")).toMatchObject({
+      enabled: false,
+      delay_hours: 2,
+      pillar_overrides: {},
+    });
+  });
+
   it("shows the release explainer and per-post override demo", async () => {
     renderSettings();
     expect(await screen.findByText("How release works")).toBeInTheDocument();

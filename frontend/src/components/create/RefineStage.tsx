@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Loader2, PenLine, Save, Send, Sparkles, Undo2 } from "lucide-react";
 
@@ -37,6 +37,20 @@ export function RefineStage({
   const [active, setActive] = useState(platforms[0] ?? "instagram");
   const [instruction, setInstruction] = useState("");
   const queryClient = useQueryClient();
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  /** Roving tabindex — Arrow/Home/End move focus AND select (mirrors PastureTabs). */
+  function handleTabKeyDown(e: React.KeyboardEvent, index: number) {
+    let next: number | null = null;
+    if (e.key === "ArrowRight") next = (index + 1) % platforms.length;
+    else if (e.key === "ArrowLeft") next = (index - 1 + platforms.length) % platforms.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = platforms.length - 1;
+    if (next === null) return;
+    e.preventDefault();
+    tabRefs.current[next]?.focus();
+    setActive(platforms[next]);
+  }
 
   const rowId = draft.rowId;
   const cap = draft.captions[active] ?? "";
@@ -100,16 +114,21 @@ export function RefineStage({
             aria-label="Platform"
             className="bg-card border-hair flex items-center gap-1 rounded-xl p-1"
           >
-            {platforms.map((pid) => {
+            {platforms.map((pid, i) => {
               const p = platformBy(pid);
               const on = pid === active;
               return (
                 <button
                   key={pid}
+                  ref={(el) => {
+                    tabRefs.current[i] = el;
+                  }}
                   role="tab"
                   aria-selected={on}
+                  tabIndex={on ? 0 : -1}
                   type="button"
                   onClick={() => setActive(pid)}
+                  onKeyDown={(e) => handleTabKeyDown(e, i)}
                   className={cn(
                     "fr t-ui flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg font-medium transition",
                     on
@@ -309,7 +328,11 @@ export function RefineStage({
               )}
               Save to Drafts
             </Button>
-            {missingAlt && <Chip tone="cream">NO ALT</Chip>}
+            {missingAlt && (
+              <span role="status">
+                <Chip tone="cream">NO ALT</Chip>
+              </span>
+            )}
             <Button
               size="lg"
               className="flex-1"

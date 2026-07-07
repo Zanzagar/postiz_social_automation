@@ -60,4 +60,67 @@ describe("SessionExpiryOverlay", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Incorrect password.");
   });
+
+  // Regression: the overlay used to be a plain fixed div with role="dialog"
+  // but no real modality — no focus trap, no aria-hidden on the app beneath,
+  // and keyboard users could tab into the dimmed background.
+  describe("modality", () => {
+    it("moves initial focus to the password input", () => {
+      render(<SessionExpiryOverlay onResume={vi.fn()} />);
+
+      expect(screen.getByLabelText("Farm password")).toHaveFocus();
+    });
+
+    it("traps focus: Tab cycles within the dialog", async () => {
+      const user = userEvent.setup();
+      render(
+        <>
+          <button type="button">Background action</button>
+          <SessionExpiryOverlay onResume={vi.fn()} />
+        </>,
+      );
+
+      const input = screen.getByLabelText("Farm password");
+      // Type so the submit button is enabled (disabled buttons aren't tabbable)
+      await user.type(input, "meadow");
+      expect(input).toHaveFocus();
+
+      await user.tab();
+      expect(
+        screen.getByRole("button", { name: "Resume where I left off" }),
+      ).toHaveFocus();
+
+      // Tab from the last tabbable wraps back inside the dialog,
+      // never escaping to the background button.
+      await user.tab();
+      expect(input).toHaveFocus();
+    });
+
+    it("does not close on Escape", async () => {
+      const user = userEvent.setup();
+      render(<SessionExpiryOverlay onResume={vi.fn()} />);
+
+      await user.keyboard("{Escape}");
+
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByLabelText("Farm password")).toBeInTheDocument();
+    });
+
+    it("hides the app beneath from the accessibility tree while open", () => {
+      render(
+        <>
+          <button type="button">Background action</button>
+          <SessionExpiryOverlay onResume={vi.fn()} />
+        </>,
+      );
+
+      // Still in the DOM (routes stay mounted, drafts survive)...
+      const background = screen.getByText("Background action");
+      // ...but aria-hidden, so invisible to assistive tech / role queries.
+      expect(background.closest('[aria-hidden="true"]')).not.toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Background action" }),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

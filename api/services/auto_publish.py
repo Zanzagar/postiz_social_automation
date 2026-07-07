@@ -4,11 +4,22 @@ Single source of truth for the auto-publish semantics defined in
 POSTIZ_CONTRACT.md §7 (G6): on approve, a row gets an auto_publish_at
 timestamp if eligible; a background loop releases due rows as one Postiz
 post per platform.
+
+Datetime invariant
+------------------
+All datetimes written to ContentRow (auto_publish_at, held_at, posted_at)
+are produced from ``datetime.now(UTC)``. SQLite's DateTime column strips
+the tzinfo on write and returns naive values on read, so **naive datetimes
+loaded from the DB are always UTC wall-clock time**. Every reader must
+normalize with :func:`_as_utc` (attach UTC, never convert) and every
+writer must use aware-UTC "now" values so the stored wall time is UTC.
+Staff-entered ``row.date`` values follow the same convention.
 """
 
 import asyncio
 import json
 import logging
+from collections import deque
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
@@ -18,10 +29,31 @@ from api.models import ContentRow, PublishConfig
 
 logger = logging.getLogger(__name__)
 
-# Postiz rate limit is 30 req/hour — cap work per 30s cycle so a backlog
-# never bursts through the limit.
+# Cap rows examined per 30s cycle so one backlog burst can't starve others.
 MAX_ROWS_PER_CYCLE = 5
 LOOP_INTERVAL_SECONDS = 30.0
+
+# Postiz allows 30 requests/hour TOTAL. Budget publish requests (one per
+# platform publish) against a rolling one-hour window, keeping headroom for
+# list_integrations calls and interactive use of the API.
+#
+# NOTE: this module-level window only works for the current single-process
+# deploy. A multi-worker deploy needs a real distributed lock / row-claim
+# mechanism plus shared rate accounting (out of scope for Phase 1).
+REQUEST_BUDGET_PER_HOUR = 20
+_request_times: deque[datetime] = deque()
+
+
+def _budget_remaining(now: datetime, budget: int = REQUEST_BUDGET_PER_HOUR) -> int:
+    """Requests still available in the rolling one-hour window ending at now."""
+    cutoff = now - timedelta(hours=1)
+    while _request_times and _request_times[0] <= cutoff:
+        _request_times.popleft()
+    return budget - len(_request_times)
+
+
+def _record_request(now: datetime) -> None:
+    _request_times.append(now)
 
 
 def _parse_json_dict(value: str | None) -> dict:
@@ -71,6 +103,12 @@ def _pillar_allowed(config: PublishConfig, pillar: str | None) -> bool:
     return not (value is False or value == "hold")
 
 
+def _platform_auto_eligible(config: PublishConfig | None, pillar: str | None) -> bool:
+    """A platform may auto-release only if its config is enabled and the
+    row's pillar is not held by that config."""
+    return config is not None and bool(config.enabled) and _pillar_allowed(config, pillar)
+
+
 def compute_auto_publish_at(
     row: ContentRow,
     configs: list[PublishConfig],
@@ -101,9 +139,7 @@ def compute_auto_publish_at(
     delays = [
         by_platform[p].delay_hours
         for p in enabled_platforms
-        if p in by_platform
-        and by_platform[p].enabled
-        and _pillar_allowed(by_platform[p], row.pillar)
+        if _platform_auto_eligible(by_platform.get(p), row.pillar)
     ]
     if not delays:
         return None
@@ -111,7 +147,12 @@ def compute_auto_publish_at(
 
 
 def _as_utc(dt: datetime | None) -> datetime | None:
-    """Normalize a possibly-naive DB datetime to aware UTC."""
+    """Normalize a possibly-naive DB datetime to aware UTC.
+
+    Per the module-level datetime invariant, naive values loaded from the
+    DB are UTC wall-clock time (they were written from datetime.now(UTC)
+    and SQLite stripped the tzinfo), so we attach UTC without converting.
+    """
     if dt is None:
         return None
     if dt.tzinfo is None:
@@ -120,16 +161,24 @@ def _as_utc(dt: datetime | None) -> datetime | None:
 
 
 async def _release_row(
-    session: AsyncSession,
     row: ContentRow,
     now: datetime,
     postiz,
     platform_map: dict[str, str],
-) -> bool:
-    """Publish one Postiz post per enabled platform for a due row.
+    configs_by_platform: dict[str, PublishConfig],
+    request_budget: int,
+) -> str:
+    """Publish one Postiz post per auto-eligible pending platform of a due row.
 
-    Returns True if all platforms published; False if the row was held
-    due to a partial failure.
+    Only platforms whose PublishConfig is enabled AND whose pillar is not
+    held may auto-release; ineligible platforms are skipped silently and
+    stay pending for manual release (they are never a failure).
+
+    Returns an outcome string:
+    - "published": all auto-eligible platforms published (row posted/scheduled)
+    - "held": a real publish error on an eligible platform held the row
+    - "deferred": hourly request budget exhausted mid-row; retry next cycle
+    - "skipped": no auto-eligible platforms; row returned to manual release
     """
     platforms = _parse_json_dict(row.platforms)
     captions = _parse_json_dict(row.captions)
@@ -138,18 +187,44 @@ async def _release_row(
     enabled = [p for p, on in platforms.items() if on]
     pending = [p for p in enabled if p not in postiz_ids]
 
+    eligible = [
+        p for p in pending if _platform_auto_eligible(configs_by_platform.get(p), row.pillar)
+    ]
+    ineligible = [p for p in pending if p not in eligible]
+    if ineligible:
+        logger.info(
+            "Auto-publish row %d: platforms %s not auto-eligible; leaving for manual release",
+            row.id,
+            ineligible,
+        )
+
+    if not eligible:
+        # Nothing may auto-release: return the row to manual release so the
+        # loop does not re-select it every cycle.
+        row.auto_publish_at = None
+        note = (
+            f"[auto-publish {now.isoformat()}] no auto-eligible platforms; left for manual release"
+        )
+        row.feedback = f"{row.feedback}\n{note}" if row.feedback else note
+        return "skipped"
+
     # Schedule at the row's planned date when it is still in the future,
     # otherwise publish immediately.
     row_date = _as_utc(row.date)
     scheduled_at = row_date.isoformat() if row_date and row_date > now else None
 
     failure: str | None = None
-    for platform in pending:
+    deferred = False
+    for platform in eligible:
         caption = captions.get(platform)
         integration_id = platform_map.get(platform)
         if not caption or not integration_id:
             failure = f"{platform}: missing {'caption' if not caption else 'Postiz integration'}"
             break
+        if _budget_remaining(now, request_budget) <= 0:
+            deferred = True
+            break
+        _record_request(now)
         try:
             result = await asyncio.to_thread(
                 postiz.publish_post,
@@ -172,14 +247,23 @@ async def _release_row(
         note = f"[auto-publish {now.isoformat()}] failed for {failure}; row held"
         row.feedback = f"{row.feedback}\n{note}" if row.feedback else note
         logger.warning("Auto-publish partial failure on row %d: %s", row.id, failure)
-        return False
+        return "held"
+
+    if deferred:
+        # Budget exhausted: leave status/auto_publish_at untouched; published
+        # platforms are recorded in postiz_ids so the next cycle resumes.
+        logger.info(
+            "Auto-publish row %d: hourly request budget exhausted; deferring to next cycle",
+            row.id,
+        )
+        return "deferred"
 
     if scheduled_at:
         row.status = "scheduled"
     else:
         row.status = "posted"
         row.posted_at = now
-    return True
+    return "published"
 
 
 async def release_due_rows(
@@ -187,13 +271,20 @@ async def release_due_rows(
     now: datetime,
     postiz,
     max_rows: int = MAX_ROWS_PER_CYCLE,
+    request_budget: int = REQUEST_BUDGET_PER_HOUR,
 ) -> dict:
     """One release-loop cycle: publish rows whose auto_publish_at has passed.
 
     Selects rows with status=='approved', auto_publish_at <= now and
-    held_at IS NULL. Caps work at max_rows per cycle (Postiz 30 req/h).
+    held_at IS NULL. Work is bounded two ways: max_rows per cycle, and a
+    rolling one-hour request budget (Postiz allows 30 req/hour total).
 
-    Returns a summary dict: {"published": n, "held": n, "deferred": n}.
+    Each row is committed immediately after its outcome is recorded so a
+    crash mid-cycle can never lose a published row's postiz_ids/status
+    (which would double-post on the next cycle).
+
+    Returns a summary dict:
+    {"published": n, "held": n, "deferred": n, "skipped": n}.
     """
     result = await session.execute(
         select(ContentRow)
@@ -208,7 +299,7 @@ async def release_due_rows(
     due = list(result.scalars().all())
 
     deferred = max(0, len(due) - max_rows)
-    summary = {"published": 0, "held": 0, "deferred": deferred}
+    summary = {"published": 0, "held": 0, "deferred": deferred, "skipped": 0}
     if not due:
         return summary
     if deferred:
@@ -226,12 +317,38 @@ async def release_due_rows(
         return summary
     platform_map = {i.get("identifier", "").lower(): i["id"] for i in integrations}
 
-    for row in due[:max_rows]:
-        ok = await _release_row(session, row, now, postiz, platform_map)
-        summary["published" if ok else "held"] += 1
+    cfg_result = await session.execute(select(PublishConfig))
+    configs_by_platform = {c.platform: c for c in cfg_result.scalars().all()}
 
-    await session.commit()
+    batch = due[:max_rows]
+    for idx, row in enumerate(batch):
+        if _budget_remaining(now, request_budget) <= 0:
+            remaining = len(batch) - idx
+            summary["deferred"] += remaining
+            logger.info(
+                "Auto-publish: hourly request budget exhausted; deferring %d due rows",
+                remaining,
+            )
+            break
+        outcome = await _release_row(
+            row, now, postiz, platform_map, configs_by_platform, request_budget
+        )
+        summary[outcome] += 1
+        # Commit per row: a crash later in the batch must not lose this
+        # row's postiz_ids/status (re-publishing it would double-post).
+        await session.commit()
+
     return summary
+
+
+def _close_client(postiz) -> None:
+    """Best-effort close of a Postiz client's HTTP session."""
+    close = getattr(postiz, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception:
+            logger.debug("Auto-publish: error closing Postiz client", exc_info=True)
 
 
 async def auto_publish_worker(
@@ -239,16 +356,30 @@ async def auto_publish_worker(
     postiz_factory,
     interval: float = LOOP_INTERVAL_SECONDS,
 ) -> None:
-    """Thin asyncio wrapper: run release_due_rows forever every `interval`s."""
+    """Thin asyncio wrapper: run release_due_rows forever every `interval`s.
+
+    One PostizClient is reused across cycles (a client per cycle leaks HTTP
+    sessions); it is closed and recreated after any cycle error.
+    """
     logger.info("Auto-publish release loop started (interval %.0fs)", interval)
-    while True:
-        try:
-            async with session_factory() as session:
-                postiz = postiz_factory()
-                await release_due_rows(session, datetime.now(UTC), postiz)
-        except asyncio.CancelledError:
-            logger.info("Auto-publish release loop stopped")
-            raise
-        except Exception:
-            logger.exception("Auto-publish cycle failed")
-        await asyncio.sleep(interval)
+    postiz = None
+    try:
+        while True:
+            try:
+                if postiz is None:
+                    postiz = postiz_factory()
+                async with session_factory() as session:
+                    await release_due_rows(session, datetime.now(UTC), postiz)
+            except asyncio.CancelledError:
+                logger.info("Auto-publish release loop stopped")
+                raise
+            except Exception:
+                logger.exception("Auto-publish cycle failed")
+                # Recreate the client next cycle in case its session is bad.
+                if postiz is not None:
+                    _close_client(postiz)
+                    postiz = None
+            await asyncio.sleep(interval)
+    finally:
+        if postiz is not None:
+            _close_client(postiz)

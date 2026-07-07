@@ -249,6 +249,25 @@ describe("Command palette", () => {
     expect(screen.getByText("TEMPLATES MARKER")).toBeInTheDocument();
   });
 
+  it("shows no duplicate 'G <letter>' shortcut hints across Go-to items", async () => {
+    // Regression: Today/Templates, Compose/Calendar and Suggestions/Settings
+    // all rendered the same "G T"/"G C"/"G S" hint.
+    const user = userEvent.setup();
+    renderShell();
+    await user.keyboard("{Meta>}k{/Meta}");
+    const dialog = within(await screen.findByRole("dialog"));
+
+    const hints = dialog
+      .queryAllByText(/^G [A-Z]$/)
+      .map((el) => el.textContent);
+    expect(new Set(hints).size).toBe(hints.length);
+    // colliding first letters carry no hint at all
+    expect(dialog.queryByText("G T")).not.toBeInTheDocument();
+    expect(dialog.queryByText("G S")).not.toBeInTheDocument();
+    // unique first letters keep theirs
+    expect(dialog.getByText("G D")).toBeInTheDocument();
+  });
+
   it("navigates when a Go-to row is clicked", async () => {
     const user = userEvent.setup();
     renderShell();

@@ -75,11 +75,8 @@ export function ComposeStage({
   }
 
   return (
-    <div
-      className="mx-auto grid max-w-5xl gap-6 px-8 py-8"
-      style={{ gridTemplateColumns: "1fr 340px" }}
-    >
-      <div className="space-y-5">
+    <div className="mx-auto grid max-w-5xl gap-6 px-4 py-8 sm:px-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="min-w-0 space-y-5">
         {/* Seed */}
         <div>
           <div className="mb-2 flex items-baseline justify-between">
@@ -175,12 +172,12 @@ export function ComposeStage({
         </div>
 
         {/* Pillar + schedule */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <span className="t-label mb-2 block text-sage-700 dark:text-sage-300">
               Content pillar
             </span>
-            <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Content pillar">
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Content pillar">
               {pillars.map((p) => {
                 const on = draft.pillar === p.name;
                 return (
@@ -201,7 +198,7 @@ export function ComposeStage({
                       style={{ background: pillarColor(p) }}
                       aria-hidden="true"
                     />
-                    <span className="truncate">{p.name}</span>
+                    <span className="whitespace-nowrap">{p.name}</span>
                   </button>
                 );
               })}
@@ -314,7 +311,7 @@ export function ComposeStage({
       </div>
 
       {/* Aside */}
-      <aside className="space-y-4">
+      <aside className="min-w-0 space-y-4">
         <div className="rounded-xl border border-cream-300 bg-cream-100/60 px-5 py-4 dark:border-cream-400/40 dark:bg-cream-400/10">
           <div className="mb-2 flex items-center gap-2">
             <Lightbulb size={14} strokeWidth={1.75} className="text-cream-ink" aria-hidden="true" />

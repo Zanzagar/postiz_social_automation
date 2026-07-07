@@ -57,16 +57,16 @@ function TimelineRow({
         />
       </div>
       <div className="min-w-0 flex-1 pl-1">
-        <div className="flex items-center gap-2">
-          <span className="t-body ink truncate font-medium">{item.title}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="t-body ink min-w-0 truncate font-medium">{item.title}</span>
           {item.kind === "posted" && <Chip tone="sage">Live</Chip>}
           {item.kind === "review" && <Chip tone="cream">Review</Chip>}
           {item.kind === "upcoming" && <Chip tone="neutral">Queued</Chip>}
         </div>
-        <div className="mt-1 flex items-center gap-2">
+        <div className="mt-1 flex min-w-0 items-center gap-2">
           <PlatformDots ids={item.platforms} size={12} />
           {pillarObj && <PillarChip pillar={pillarObj} size="xs" />}
-          <span className="t-caption ink-muted truncate">· {item.caption}</span>
+          <span className="t-caption ink-muted min-w-0 truncate">· {item.caption}</span>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2 pt-0.5">

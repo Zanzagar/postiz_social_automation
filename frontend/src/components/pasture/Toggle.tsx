@@ -36,13 +36,15 @@ export function Toggle({
       className={cn(
         "fr relative rounded-full transition-colors disabled:pointer-events-none disabled:opacity-50",
         dims.track,
-        checked ? "bg-sage-500" : "bg-neutral-300 dark:bg-sage-700",
+        checked
+          ? "bg-sage-500"
+          : "bg-[color-mix(in_oklab,var(--ink)_25%,transparent)]",
         className,
       )}
     >
       <span
         className={cn(
-          "absolute top-0.5 rounded-full bg-white shadow transition-transform",
+          "absolute top-0.5 rounded-full bg-[var(--surface-card)] shadow transition-transform",
           dims.knob,
           checked ? dims.on : dims.off,
         )}

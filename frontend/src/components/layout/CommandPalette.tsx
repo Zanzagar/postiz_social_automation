@@ -16,6 +16,17 @@ interface CommandGroup {
   items: Command[];
 }
 
+/**
+ * First-letter counts across nav items — items whose first letter collides
+ * (e.g. Today/Templates, Compose/Calendar, Suggestions/Settings) get no
+ * shortcut hint rather than a duplicate, ambiguous one.
+ */
+const FIRST_LETTER_COUNTS = NAV_ITEMS.reduce((counts, n) => {
+  const key = n.label.charAt(0).toUpperCase();
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+  return counts;
+}, new Map<string, number>());
+
 const COMMAND_GROUPS: CommandGroup[] = [
   {
     group: "Create",
@@ -27,12 +38,15 @@ const COMMAND_GROUPS: CommandGroup[] = [
   },
   {
     group: "Go to",
-    items: NAV_ITEMS.map((n) => ({
-      label: n.label,
-      to: n.to,
-      icon: n.icon,
-      hint: `G ${n.label.charAt(0).toUpperCase()}`,
-    })),
+    items: NAV_ITEMS.map((n) => {
+      const key = n.label.charAt(0).toUpperCase();
+      return {
+        label: n.label,
+        to: n.to,
+        icon: n.icon,
+        hint: FIRST_LETTER_COUNTS.get(key) === 1 ? `G ${key}` : undefined,
+      };
+    }),
   },
 ];
 

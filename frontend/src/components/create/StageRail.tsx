@@ -27,7 +27,7 @@ export function StageRail({ stage, onStage }: StageRailProps) {
   const idx = STAGES.findIndex((s) => s.id === stage);
   return (
     <div
-      className="border-hair-b flex items-stretch gap-2 px-8 py-4"
+      className="border-hair-b flex items-stretch gap-1.5 px-4 py-4 sm:gap-2 sm:px-8"
       style={{
         background: "linear-gradient(to right, var(--surface-warm), var(--surface-card))",
       }}
@@ -43,7 +43,7 @@ export function StageRail({ stage, onStage }: StageRailProps) {
               onClick={() => onStage(s.id)}
               aria-current={active ? "step" : undefined}
               className={cn(
-                "fr flex h-14 flex-1 items-center gap-3 rounded-xl border px-4 text-left transition",
+                "fr flex h-14 min-w-0 flex-1 items-center gap-2 rounded-xl border px-2.5 text-left transition sm:gap-3 sm:px-4",
                 active
                   ? "bg-card shadow-card border-sage-300 dark:border-sage-600"
                   : done
@@ -53,7 +53,7 @@ export function StageRail({ stage, onStage }: StageRailProps) {
             >
               <div
                 className={cn(
-                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                  "hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg sm:flex",
                   active
                     ? "bg-sage-500 text-white"
                     : done
@@ -67,7 +67,7 @@ export function StageRail({ stage, onStage }: StageRailProps) {
                   <Ic size={17} strokeWidth={1.75} aria-hidden="true" />
                 )}
               </div>
-              <div>
+              <div className="min-w-0">
                 <div
                   className={cn(
                     "t-label",
@@ -80,12 +80,12 @@ export function StageRail({ stage, onStage }: StageRailProps) {
                   <span className="t-title-sm leading-none font-medium font-serif text-sage-800 dark:text-sage-100">
                     {s.label}
                   </span>
-                  <span className="t-caption ink-muted italic">{s.sub}</span>
+                  <span className="t-caption ink-muted hidden italic md:inline">{s.sub}</span>
                 </div>
               </div>
             </button>
             {i < STAGES.length - 1 && (
-              <div className="ink-muted self-center" aria-hidden="true">
+              <div className="ink-muted hidden self-center sm:block" aria-hidden="true">
                 <ChevronRight size={16} strokeWidth={1.75} />
               </div>
             )}

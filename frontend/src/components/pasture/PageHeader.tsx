@@ -31,15 +31,15 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "border-hair-b flex items-start justify-between px-8 pt-7 pb-4",
+        "border-hair-b flex flex-wrap items-start justify-between gap-x-4 gap-y-3 px-4 pt-7 pb-4 sm:px-8",
         className,
       )}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex min-w-0 items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sage-100 bg-sage-50 text-sage-700 dark:border-sage-700 dark:bg-sage-800 dark:text-sage-200">
           <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
         </div>
-        <div>
+        <div className="min-w-0">
           {greeting && (
             <div className="t-body-sm mb-0.5 font-medium tracking-wider text-sage-700/70 uppercase dark:text-sage-300/70">
               {greeting}
@@ -49,7 +49,7 @@ export function PageHeader({
           {subtitle && <p className="t-body ink-muted mt-0.5 max-w-2xl">{subtitle}</p>}
         </div>
       </div>
-      {right && <div className="flex items-center gap-2 pt-1">{right}</div>}
+      {right && <div className="flex flex-wrap items-center gap-2 pt-1">{right}</div>}
     </div>
   );
 }

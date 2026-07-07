@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Sprout } from "lucide-react";
 import { toast } from "sonner";
@@ -53,12 +53,23 @@ function fmtTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-function fmtRemaining(iso: string): string {
-  const ms = new Date(iso).getTime() - Date.now();
+function fmtRemaining(iso: string, now: Date): string {
+  const ms = new Date(iso).getTime() - now.getTime();
   if (ms <= 0) return "any moment";
   const mins = Math.round(ms / 60000);
   const h = Math.floor(mins / 60);
   return h > 0 ? `in ${h}h ${mins % 60}m` : `in ${mins}m`;
+}
+
+/** Re-render clock — ticks every `intervalMs` while `enabled` (same pattern as DraftRow). */
+function useNow(intervalMs: number, enabled: boolean): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    if (!enabled) return;
+    const timer = setInterval(() => setNow(new Date()), intervalMs);
+    return () => clearInterval(timer);
+  }, [intervalMs, enabled]);
+  return now;
 }
 
 function fmtScheduled(row: ContentRow): string {
@@ -70,6 +81,13 @@ function fmtScheduled(row: ContentRow): string {
   return hasTime
     ? `${day} · ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
     : day;
+}
+
+/** Fire an autosave for a snapshotted (rowId, captions) payload. */
+function fireDraftSave(id: number, snapshot: Record<string, string>) {
+  void api.editDraft(id, snapshot).catch(() => {
+    toast.error("Couldn't save the draft — your edits are still here.");
+  });
 }
 
 /** Seed "carry forward" chips from the source post's DNA. */
@@ -128,6 +146,10 @@ export function ContentEditorSheet({ rowId, mode, onClose, onSaved }: ContentEdi
     captionsRef.current = captions;
   }, [captions]);
 
+  // Clock for the release countdown — ticks every 30s while the sheet shows
+  // a scheduled auto-release, so "in Nm" doesn't freeze at open time.
+  const now = useNow(30_000, rowId != null && row?.auto_publish_at != null);
+
   // Sync local state when a (new) row arrives — render-time state adjustment
   // per React's "adjusting state when props change" pattern.
   const [syncedRow, setSyncedRow] = useState<number | null>(null);
@@ -148,25 +170,46 @@ export function ContentEditorSheet({ rowId, mode, onClose, onSaved }: ContentEdi
     setAltDraft("");
   }
 
-  // Debounced caption autosave
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    },
-    [],
-  );
+  // Debounced caption autosave.
+  //
+  // The sheet is rendered persistently (no key) by its parent pages, so refs
+  // survive row switches. To guarantee a pending save can never write another
+  // row's captions, the (rowId, captions) payload is snapshotted in the
+  // closure AT SCHEDULE TIME — the timer never reads live refs. When the row
+  // changes (or the sheet closes/unmounts), the pending save is cancelled and
+  // FLUSHED immediately so the last keystrokes on the previous row persist.
+  const pendingSave = useRef<{
+    id: number;
+    captions: Record<string, string>;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
+
+  const flushPendingSave = useCallback(() => {
+    const pending = pendingSave.current;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pendingSave.current = null;
+    fireDraftSave(pending.id, pending.captions);
+  }, []);
+
+  // On row switch or close/unmount, flush the previous row's pending save.
+  useEffect(() => {
+    return () => flushPendingSave();
+  }, [rowId, flushPendingSave]);
+
   function handleCaptionChange(platform: string, value: string) {
-    setCaptions((prev) => ({ ...prev, [platform]: value }));
-    if (saveTimer.current) clearTimeout(saveTimer.current);
+    if (rowId == null) return;
+    // Synchronous snapshot so rapid keystrokes accumulate before re-render.
+    const snapshot = { ...captionsRef.current, [platform]: value };
+    captionsRef.current = snapshot;
+    setCaptions(snapshot);
+    if (pendingSave.current) clearTimeout(pendingSave.current.timer);
     const id = rowId;
-    saveTimer.current = setTimeout(() => {
-      if (id != null) {
-        void api.editDraft(id, captionsRef.current).catch(() => {
-          toast.error("Couldn't save the draft — your edits are still here.");
-        });
-      }
+    const timer = setTimeout(() => {
+      pendingSave.current = null;
+      fireDraftSave(id, snapshot);
     }, 900);
+    pendingSave.current = { id, captions: snapshot, timer };
   }
 
   // --- mutations ---
@@ -428,7 +471,7 @@ export function ContentEditorSheet({ rowId, mode, onClose, onSaved }: ContentEdi
             {row.auto_publish_at && (
               <CountdownChip
                 label={`Releases ${fmtTime(row.auto_publish_at)}`}
-                remaining={fmtRemaining(row.auto_publish_at)}
+                remaining={fmtRemaining(row.auto_publish_at, now)}
                 paused={row.held_at != null}
                 onToggle={() => holdMutation.mutate(row.held_at != null)}
               />
@@ -461,9 +504,15 @@ export function ContentEditorSheet({ rowId, mode, onClose, onSaved }: ContentEdi
                   />
                 ))}
               </div>
-              <div className="t-micro ink-muted -mt-3">
-                Iterating rewrites only this platform — the other four captions hold still.
-              </div>
+              {enabled.length > 1 && (
+                <div className="t-micro ink-muted -mt-3">
+                  Iterating rewrites only this platform — the other{" "}
+                  {enabled.length === 2
+                    ? "caption holds"
+                    : `${enabled.length - 1} captions hold`}{" "}
+                  still.
+                </div>
+              )}
               {historyPlatform && (
                 <EditorHistory
                   iterations={iterations}

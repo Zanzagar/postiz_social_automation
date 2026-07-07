@@ -55,7 +55,16 @@ export function RitualStrip({ stats, isLoading }: RitualStripProps) {
       ) : (
         <div className="relative grid grid-cols-2 gap-4 sm:grid-cols-4">
           {tiles.map((tile, i) => (
-            <div key={tile.key} className={cn("pl-4", i > 0 && "border-hair border-t-0 border-r-0 border-b-0 border-l")}>
+            <div
+              key={tile.key}
+              className={cn(
+                "min-w-0 pl-4 border-sage-100 dark:border-sage-700",
+                // 2x2 on mobile: only the second column gets a divider;
+                // 4-up from sm: every tile after the first gets one.
+                i % 2 === 1 && "border-l",
+                i > 0 && "sm:border-l",
+              )}
+            >
               <div
                 data-testid={`stat-${tile.key}`}
                 className={cn(

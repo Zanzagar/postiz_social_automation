@@ -260,6 +260,11 @@ async def set_require_review(
     row.require_review = req.require_review
     if req.require_review:
         row.auto_publish_at = None
+    elif row.status == "approved":
+        # Turning review OFF must re-run the eligibility rule, otherwise an
+        # approved row stays stuck on manual release forever.
+        configs = await repo.get_publish_configs()
+        row.auto_publish_at = compute_auto_publish_at(row, configs, datetime.now(UTC))
     await repo.session.commit()
     return _row_to_response(row)
 
@@ -276,6 +281,11 @@ async def set_alt_text(
         raise HTTPException(status_code=404, detail=f"Row {row_id} not found.")
 
     row.alt_text = req.alt_text
+    if row.status == "approved":
+        # Fixing alt text clears the NO-ALT block, so re-run the eligibility
+        # rule; otherwise an approved row never regains auto_publish_at.
+        configs = await repo.get_publish_configs()
+        row.auto_publish_at = compute_auto_publish_at(row, configs, datetime.now(UTC))
     await repo.session.commit()
     return _row_to_response(row)
 

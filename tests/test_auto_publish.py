@@ -335,6 +335,54 @@ class TestRequireReviewEndpoint:
         )
         assert resp.json()["require_review"] is False
 
+    def test_turning_off_recomputes_auto_publish_for_approved(
+        self, client, repo, db_session, seeded_row_id
+    ):
+        """Regression: review OFF must re-run eligibility, or an approved row
+        stays stuck on manual release forever."""
+        seed_publish_config(repo)
+
+        async def approve_with_review():
+            row = await repo.get_content_row(seeded_row_id)
+            row.status = "approved"
+            row.require_review = True
+            row.auto_publish_at = None
+            await db_session.commit()
+
+        run(approve_with_review())
+        resp = client.put(
+            f"/api/content/{seeded_row_id}/require-review", json={"require_review": False}
+        )
+        assert resp.json()["auto_publish_at"] is not None
+
+    def test_turning_off_leaves_null_when_still_ineligible(
+        self, client, repo, db_session, seeded_row_id
+    ):
+        seed_publish_config(repo, enabled=False)
+
+        async def approve_with_review():
+            row = await repo.get_content_row(seeded_row_id)
+            row.status = "approved"
+            row.require_review = True
+            await db_session.commit()
+
+        run(approve_with_review())
+        resp = client.put(
+            f"/api/content/{seeded_row_id}/require-review", json={"require_review": False}
+        )
+        assert resp.json()["auto_publish_at"] is None
+
+    def test_turning_off_does_not_set_auto_publish_for_non_approved(
+        self, client, repo, seeded_row_id
+    ):
+        seed_publish_config(repo)
+        client.put(f"/api/content/{seeded_row_id}/require-review", json={"require_review": True})
+        resp = client.put(
+            f"/api/content/{seeded_row_id}/require-review", json={"require_review": False}
+        )
+        # Row is still pending_approval; approve computes it later.
+        assert resp.json()["auto_publish_at"] is None
+
     def test_404(self, client):
         resp = client.put("/api/content/999/require-review", json={"require_review": True})
         assert resp.status_code == 404
@@ -356,6 +404,48 @@ class TestAltTextEndpoint:
     def test_404(self, client):
         resp = client.put("/api/content/999/alt-text", json={"alt_text": "x"})
         assert resp.status_code == 404
+
+    def test_alt_text_recomputes_auto_publish_for_approved_row(
+        self, client, repo, db_session, seeded_row_id
+    ):
+        """Regression: fixing alt text must clear the NO-ALT block by
+        recomputing auto_publish_at, otherwise the approved row never
+        auto-releases."""
+        seed_publish_config(repo)
+
+        async def approve_with_media():
+            row = await repo.get_content_row(seeded_row_id)
+            row.status = "approved"
+            row.media_url = "https://x.com/a.jpg"
+            row.auto_publish_at = None  # blocked at approve time (no alt)
+            await db_session.commit()
+
+        run(approve_with_media())
+        resp = client.put(
+            f"/api/content/{seeded_row_id}/alt-text", json={"alt_text": "A brown cow"}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["auto_publish_at"] is not None
+
+    def test_alt_text_leaves_null_when_config_ineligible(
+        self, client, repo, db_session, seeded_row_id
+    ):
+        seed_publish_config(repo, enabled=False)
+
+        async def approve_with_media():
+            row = await repo.get_content_row(seeded_row_id)
+            row.status = "approved"
+            row.media_url = "https://x.com/a.jpg"
+            await db_session.commit()
+
+        run(approve_with_media())
+        resp = client.put(f"/api/content/{seeded_row_id}/alt-text", json={"alt_text": "A cow"})
+        assert resp.json()["auto_publish_at"] is None
+
+    def test_alt_text_does_not_touch_non_approved_rows(self, client, repo, seeded_row_id):
+        seed_publish_config(repo)
+        resp = client.put(f"/api/content/{seeded_row_id}/alt-text", json={"alt_text": "A cow"})
+        assert resp.json()["auto_publish_at"] is None
 
 
 # --- Approve wiring ---
@@ -453,6 +543,27 @@ class TestApproveAutoPublish:
 # --- Release loop ---
 
 
+@pytest.fixture(autouse=True)
+def _reset_request_budget():
+    """The rolling request window is module-level state; isolate tests."""
+    from api.services import auto_publish
+
+    auto_publish._request_times.clear()
+    yield
+    auto_publish._request_times.clear()
+
+
+@pytest_asyncio.fixture
+async def release_configs(repo):
+    """Enabled publish configs for both fake integrations (release-time
+    eligibility requires a config; without one a platform is skipped)."""
+    for platform in ("instagram", "facebook"):
+        await repo.upsert_publish_config(
+            platform=platform,
+            data={"enabled": True, "delay_hours": 2, "pillar_overrides": "{}"},
+        )
+
+
 class FakePostiz:
     """Fake Postiz client for release-loop tests."""
 
@@ -501,7 +612,7 @@ async def seed_due_row(repo, **overrides):
 
 @pytest.mark.asyncio
 class TestReleaseLoop:
-    async def test_publishes_due_row(self, db_session, repo):
+    async def test_publishes_due_row(self, db_session, repo, release_configs):
         row = await seed_due_row(repo)
         fake = FakePostiz()
 
@@ -514,7 +625,7 @@ class TestReleaseLoop:
         assert json.loads(updated.postiz_ids) == {"instagram": "pub-1"}
         assert len(fake.publish_calls) == 1
 
-    async def test_one_post_per_platform(self, db_session, repo):
+    async def test_one_post_per_platform(self, db_session, repo, release_configs):
         row = await seed_due_row(
             repo,
             platforms=json.dumps({"instagram": True, "facebook": True}),
@@ -529,7 +640,7 @@ class TestReleaseLoop:
         ids = json.loads(updated.postiz_ids)
         assert set(ids.keys()) == {"instagram", "facebook"}
 
-    async def test_future_dated_row_is_scheduled(self, db_session, repo):
+    async def test_future_dated_row_is_scheduled(self, db_session, repo, release_configs):
         future = NOW + timedelta(days=2)
         row = await seed_due_row(repo, date=future)
         fake = FakePostiz()
@@ -541,16 +652,16 @@ class TestReleaseLoop:
         assert updated.posted_at is None
         assert fake.publish_calls[0]["scheduled_at"] is not None
 
-    async def test_skips_held_rows(self, db_session, repo):
+    async def test_skips_held_rows(self, db_session, repo, release_configs):
         await seed_due_row(repo, held_at=NOW - timedelta(hours=1))
         fake = FakePostiz()
 
         summary = await release_due_rows(db_session, NOW, fake)
 
-        assert summary == {"published": 0, "held": 0, "deferred": 0}
+        assert summary == {"published": 0, "held": 0, "deferred": 0, "skipped": 0}
         assert fake.publish_calls == []
 
-    async def test_skips_not_yet_due_rows(self, db_session, repo):
+    async def test_skips_not_yet_due_rows(self, db_session, repo, release_configs):
         await seed_due_row(repo, auto_publish_at=NOW + timedelta(hours=1))
         fake = FakePostiz()
 
@@ -558,7 +669,7 @@ class TestReleaseLoop:
         assert summary["published"] == 0
         assert fake.publish_calls == []
 
-    async def test_skips_non_approved_rows(self, db_session, repo):
+    async def test_skips_non_approved_rows(self, db_session, repo, release_configs):
         await seed_due_row(repo, status="draft")
         await seed_due_row(repo, status="posted")
         fake = FakePostiz()
@@ -566,14 +677,14 @@ class TestReleaseLoop:
         summary = await release_due_rows(db_session, NOW, fake)
         assert summary["published"] == 0
 
-    async def test_skips_rows_without_auto_publish_at(self, db_session, repo):
+    async def test_skips_rows_without_auto_publish_at(self, db_session, repo, release_configs):
         await seed_due_row(repo, auto_publish_at=None)
         fake = FakePostiz()
 
         summary = await release_due_rows(db_session, NOW, fake)
         assert summary["published"] == 0
 
-    async def test_partial_failure_holds_row(self, db_session, repo):
+    async def test_partial_failure_holds_row(self, db_session, repo, release_configs):
         row = await seed_due_row(
             repo,
             platforms=json.dumps({"instagram": True, "facebook": True}),
@@ -592,7 +703,7 @@ class TestReleaseLoop:
         assert "instagram" in ids  # successful platform is recorded
         assert "facebook" not in ids
 
-    async def test_respects_per_cycle_cap(self, db_session, repo):
+    async def test_respects_per_cycle_cap(self, db_session, repo, release_configs):
         for _ in range(7):
             await seed_due_row(repo)
         fake = FakePostiz()
@@ -602,6 +713,228 @@ class TestReleaseLoop:
         assert summary["published"] == 5
         assert summary["deferred"] == 2
         assert len(fake.publish_calls) == 5
+
+
+# --- Release-time eligibility split (regression: bug #1) ---
+
+
+@pytest.mark.asyncio
+class TestReleaseEligibilitySplit:
+    async def seed_configs(self, repo, fb_enabled=True, fb_pillar_overrides=None):
+        await repo.upsert_publish_config(
+            platform="instagram",
+            data={"enabled": True, "delay_hours": 2, "pillar_overrides": "{}"},
+        )
+        await repo.upsert_publish_config(
+            platform="facebook",
+            data={
+                "enabled": fb_enabled,
+                "delay_hours": 2,
+                "pillar_overrides": json.dumps(fb_pillar_overrides or {}),
+            },
+        )
+
+    async def test_disabled_platform_is_skipped_not_force_published(self, db_session, repo):
+        """A disabled platform with caption+integration must NOT publish when
+        another platform's timer fires."""
+        await self.seed_configs(repo, fb_enabled=False)
+        row = await seed_due_row(
+            repo,
+            platforms=json.dumps({"instagram": True, "facebook": True}),
+            captions=json.dumps({"instagram": "IG cap", "facebook": "FB cap"}),
+        )
+        fake = FakePostiz()
+
+        summary = await release_due_rows(db_session, NOW, fake)
+
+        assert summary["published"] == 1
+        assert [c["platform_ids"] for c in fake.publish_calls] == [["ig-1"]]
+        updated = await repo.get_content_row(row.id)
+        assert updated.held_at is None
+        ids = json.loads(updated.postiz_ids)
+        assert "instagram" in ids
+        assert "facebook" not in ids  # stays pending for manual release
+
+    async def test_pillar_held_platform_is_skipped(self, db_session, repo):
+        await self.seed_configs(repo, fb_pillar_overrides={"cow_life": False})
+        row = await seed_due_row(
+            repo,
+            platforms=json.dumps({"instagram": True, "facebook": True}),
+            captions=json.dumps({"instagram": "IG cap", "facebook": "FB cap"}),
+        )
+        fake = FakePostiz()
+
+        await release_due_rows(db_session, NOW, fake)
+
+        updated = await repo.get_content_row(row.id)
+        ids = json.loads(updated.postiz_ids)
+        assert "facebook" not in ids
+        assert [c["platform_ids"] for c in fake.publish_calls] == [["ig-1"]]
+
+    async def test_ineligible_platform_without_caption_does_not_hold_row(self, db_session, repo):
+        """An ineligible platform missing caption/integration must not count
+        as a failure and must not block the eligible platform."""
+        await self.seed_configs(repo, fb_enabled=False)
+        row = await seed_due_row(
+            repo,
+            platforms=json.dumps({"facebook": True, "instagram": True}),
+            captions=json.dumps({"instagram": "IG cap"}),  # no facebook caption
+        )
+        fake = FakePostiz()
+
+        summary = await release_due_rows(db_session, NOW, fake)
+
+        assert summary["published"] == 1
+        assert summary["held"] == 0
+        updated = await repo.get_content_row(row.id)
+        assert updated.held_at is None
+        assert updated.status == "posted"
+        assert "instagram" in json.loads(updated.postiz_ids)
+
+    async def test_all_ineligible_row_returns_to_manual_release(self, db_session, repo):
+        await self.seed_configs(repo, fb_enabled=False)
+        row = await seed_due_row(
+            repo,
+            platforms=json.dumps({"facebook": True}),
+            captions=json.dumps({"facebook": "FB cap"}),
+        )
+        fake = FakePostiz()
+
+        summary = await release_due_rows(db_session, NOW, fake)
+
+        assert summary["skipped"] == 1
+        assert summary["published"] == 0
+        assert summary["held"] == 0
+        assert fake.publish_calls == []
+        updated = await repo.get_content_row(row.id)
+        assert updated.status == "approved"
+        assert updated.held_at is None
+        assert updated.auto_publish_at is None  # not re-selected every cycle
+        assert "manual release" in (updated.feedback or "")
+
+    async def test_eligible_platform_missing_caption_still_holds_row(self, db_session, repo):
+        """Real problems on ELIGIBLE platforms remain a partial-failure hold."""
+        await self.seed_configs(repo)
+        row = await seed_due_row(
+            repo,
+            platforms=json.dumps({"instagram": True}),
+            captions=json.dumps({}),
+        )
+        fake = FakePostiz()
+
+        summary = await release_due_rows(db_session, NOW, fake)
+
+        assert summary["held"] == 1
+        updated = await repo.get_content_row(row.id)
+        assert updated.held_at is not None
+
+
+# --- Per-row commit (regression: bug #2, crash between rows double-posts) ---
+
+
+class CrashError(BaseException):
+    """Simulates a process crash: not caught by `except Exception`."""
+
+
+class CrashingPostiz(FakePostiz):
+    """Publishes normally, then 'crashes the process' after N publishes."""
+
+    def __init__(self, crash_after: int):
+        super().__init__()
+        self.crash_after = crash_after
+
+    def publish_post(self, *args, **kwargs):
+        if len(self.publish_calls) >= self.crash_after:
+            raise CrashError("simulated crash")
+        return super().publish_post(*args, **kwargs)
+
+
+@pytest.mark.asyncio
+class TestPerRowCommit:
+    async def test_crash_between_rows_persists_first_row_state(
+        self, db_session, repo, release_configs
+    ):
+        row1 = await seed_due_row(repo, auto_publish_at=NOW - timedelta(minutes=10))
+        row2 = await seed_due_row(repo, auto_publish_at=NOW - timedelta(minutes=5))
+        fake = CrashingPostiz(crash_after=1)
+
+        with pytest.raises(CrashError):
+            await release_due_rows(db_session, NOW, fake)
+
+        # Discard anything not committed — the crash means it never persisted.
+        await db_session.rollback()
+
+        first = await repo.get_content_row(row1.id)
+        assert first.status == "posted"  # committed before the crash
+        assert json.loads(first.postiz_ids) == {"instagram": "pub-1"}
+        second = await repo.get_content_row(row2.id)
+        assert second.status == "approved"  # untouched, will retry next cycle
+
+
+# --- Request budget (regression: bug #3, 30 req/hour Postiz limit) ---
+
+
+@pytest.mark.asyncio
+class TestRequestBudget:
+    async def test_budget_defers_extra_rows(self, db_session, repo, release_configs):
+        row1 = await seed_due_row(repo, auto_publish_at=NOW - timedelta(minutes=10))
+        row2 = await seed_due_row(repo, auto_publish_at=NOW - timedelta(minutes=5))
+        fake = FakePostiz()
+
+        summary = await release_due_rows(db_session, NOW, fake, request_budget=1)
+
+        assert summary["published"] == 1
+        assert summary["deferred"] == 1
+        assert len(fake.publish_calls) == 1
+        first = await repo.get_content_row(row1.id)
+        assert first.status == "posted"
+        second = await repo.get_content_row(row2.id)
+        assert second.status == "approved"
+        assert second.auto_publish_at is not None  # retried next cycle
+
+    async def test_budget_exhausted_mid_row_defers_without_hold(
+        self, db_session, repo, release_configs
+    ):
+        row = await seed_due_row(
+            repo,
+            platforms=json.dumps({"instagram": True, "facebook": True}),
+            captions=json.dumps({"instagram": "IG cap", "facebook": "FB cap"}),
+        )
+        fake = FakePostiz()
+
+        summary = await release_due_rows(db_session, NOW, fake, request_budget=1)
+
+        assert summary["deferred"] == 1
+        assert summary["held"] == 0
+        assert len(fake.publish_calls) == 1
+        updated = await repo.get_content_row(row.id)
+        assert updated.status == "approved"  # not marked posted
+        assert updated.held_at is None
+        assert updated.auto_publish_at is not None
+        # The published platform is persisted so the next cycle won't repeat it.
+        assert "instagram" in json.loads(updated.postiz_ids)
+
+    async def test_publishes_across_cycles_resume_pending_platforms(
+        self, db_session, repo, release_configs
+    ):
+        row = await seed_due_row(
+            repo,
+            platforms=json.dumps({"instagram": True, "facebook": True}),
+            captions=json.dumps({"instagram": "IG cap", "facebook": "FB cap"}),
+        )
+        fake = FakePostiz()
+
+        await release_due_rows(db_session, NOW, fake, request_budget=1)
+        # Next cycle, one hour later: window rolled over, budget available.
+        later = NOW + timedelta(hours=1, minutes=1)
+        summary = await release_due_rows(db_session, later, fake, request_budget=1)
+
+        assert summary["published"] == 1
+        updated = await repo.get_content_row(row.id)
+        assert updated.status == "posted"
+        ids = json.loads(updated.postiz_ids)
+        assert set(ids.keys()) == {"instagram", "facebook"}
+        assert len(fake.publish_calls) == 2  # instagram was never re-published
 
 
 # --- Pillar response contract ---

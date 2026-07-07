@@ -77,10 +77,24 @@ export function DraftRow({
     }
   }
 
+  function handleRowKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    // Only activate for keys pressed on the row itself — inner buttons and
+    // checkboxes handle their own keyboard events (which bubble up here).
+    if (e.target !== e.currentTarget) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onOpen();
+    }
+  }
+
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={title}
       onClick={onOpen}
-      className="group bg-card border-hair flex cursor-pointer items-start gap-4 rounded-2xl px-5 py-4 transition hover:border-sage-300 hover:shadow-sm dark:hover:border-sage-600"
+      onKeyDown={handleRowKeyDown}
+      className="fr group bg-card border-hair flex cursor-pointer items-start gap-4 rounded-2xl px-5 py-4 transition hover:border-sage-300 hover:shadow-sm dark:hover:border-sage-600"
     >
       {selectable && (
         <span

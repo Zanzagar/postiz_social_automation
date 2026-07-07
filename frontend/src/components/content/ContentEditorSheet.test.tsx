@@ -1,7 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ContentRow, IterationRecord } from "@/lib/api";
 
@@ -289,6 +289,123 @@ describe("ContentEditorSheet — refine mode", () => {
   it("renders nothing when rowId is null", () => {
     renderSheet({ rowId: null });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("ContentEditorSheet — autosave, countdown, and copy", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("flushes a pending autosave to the PREVIOUS row when switching rows (regression: cross-draft corruption)", async () => {
+    const user = userEvent.setup();
+    const rowB: ContentRow = {
+      ...baseRow,
+      row_number: 8,
+      raw_text: "Evening bell\nSecond draft entirely.",
+      captions: { instagram: "B insta caption", facebook: "B fb caption" },
+    };
+    mockGetContentRow.mockImplementation((id) =>
+      Promise.resolve(id === 8 ? rowB : baseRow),
+    );
+    mockEditDraft.mockResolvedValue(baseRow);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(
+      <QueryClientProvider client={qc}>
+        <ContentEditorSheet rowId={7} mode="refine" onClose={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByText("Rain on the north pasture");
+    await user.type(screen.getByRole("textbox", { name: "Instagram caption" }), "!");
+
+    // Repoint the persistent sheet to row B BEFORE the 900ms debounce fires
+    view.rerender(
+      <QueryClientProvider client={qc}>
+        <ContentEditorSheet rowId={8} mode="refine" onClose={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    // Row A's keystrokes flushed immediately, addressed to row A with row A's captions
+    expect(mockEditDraft).toHaveBeenCalledTimes(1);
+    expect(mockEditDraft).toHaveBeenCalledWith(7, {
+      instagram: `${baseRow.captions.instagram}!`,
+      facebook: baseRow.captions.facebook,
+    });
+
+    // Row B loads; the stale timer must never fire a second (cross-row) save
+    await screen.findByText("Evening bell");
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    expect(mockEditDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("flushes a pending autosave when the sheet closes so last keystrokes are kept", async () => {
+    const user = userEvent.setup();
+    mockEditDraft.mockResolvedValue(baseRow);
+    const { unmount } = renderSheet();
+
+    await screen.findByText("Rain on the north pasture");
+    await user.type(screen.getByRole("textbox", { name: "Facebook caption" }), "?");
+
+    unmount();
+
+    expect(mockEditDraft).toHaveBeenCalledTimes(1);
+    expect(mockEditDraft).toHaveBeenCalledWith(7, {
+      instagram: baseRow.captions.instagram,
+      facebook: `${baseRow.captions.facebook}?`,
+    });
+  });
+
+  it("ticks the release countdown while the sheet is open (regression: frozen remaining)", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date("2026-07-10T12:00:00Z"));
+    mockGetContentRow.mockResolvedValue({
+      ...baseRow,
+      auto_publish_at: "2026-07-10T13:30:00Z",
+    });
+    renderSheet();
+
+    expect(await screen.findByText("in 1h 30m")).toBeInTheDocument();
+
+    // Two 30s ticks — the countdown re-renders with fresh Date.now()
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(screen.getByText("in 1h 29m")).toBeInTheDocument();
+  });
+
+  it("says 'the other caption holds still' with two platforms", async () => {
+    renderSheet();
+    await screen.findByText("Rain on the north pasture");
+    expect(screen.getByText(/the other caption holds still/)).toBeInTheDocument();
+  });
+
+  it("counts the other captions with five platforms", async () => {
+    mockGetContentRow.mockResolvedValue({
+      ...baseRow,
+      platforms: {
+        instagram: true,
+        facebook: true,
+        tiktok: true,
+        threads: true,
+        linkedin: true,
+      },
+    });
+    renderSheet();
+    await screen.findByText("Rain on the north pasture");
+    expect(screen.getByText(/the other 4 captions hold still/)).toBeInTheDocument();
+  });
+
+  it("hides the hold-still note when only one platform is enabled", async () => {
+    mockGetContentRow.mockResolvedValue({
+      ...baseRow,
+      platforms: { instagram: true },
+      captions: { instagram: "Solo caption" },
+    });
+    renderSheet();
+    await screen.findByText("Rain on the north pasture");
+    expect(screen.queryByText(/holds? still/)).not.toBeInTheDocument();
   });
 });
 

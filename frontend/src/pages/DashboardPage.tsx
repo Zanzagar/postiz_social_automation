@@ -121,9 +121,9 @@ export function DashboardPage() {
         }
       />
 
-      <div className="grid gap-6 px-8 py-7 xl:grid-cols-[1fr_340px]">
+      <div className="grid gap-6 px-4 py-7 sm:px-8 xl:grid-cols-[minmax(0,1fr)_340px]">
         {/* LEFT COLUMN */}
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <RitualStrip stats={stats} isLoading={isLoading} />
           <TodayTimeline
             items={timeline}
@@ -139,7 +139,7 @@ export function DashboardPage() {
         </div>
 
         {/* RIGHT COLUMN */}
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <BlessingCard pendingDrafts={pendingDrafts} />
           <PulseCard overview={overview} series={pulseSeries} isLoading={isLoading} />
           <KnowledgeCard knowledge={knowledge} />
