@@ -24,6 +24,9 @@ class ContentRowResponse(BaseModel):
     error_msg: str | None = None
     source: str = "staff"
     auto_publish_at: datetime | None = None
+    require_review: bool = False
+    held_at: datetime | None = None
+    alt_text: str | None = None
 
 
 class SuggestionResponse(BaseModel):
@@ -132,6 +135,14 @@ class EditCaptionsRequest(BaseModel):
     platforms: dict[str, bool] | None = None
 
 
+class RequireReviewRequest(BaseModel):
+    require_review: bool
+
+
+class AltTextRequest(BaseModel):
+    alt_text: str = Field(max_length=2000)
+
+
 # --- Pillars ---
 
 
@@ -143,6 +154,7 @@ class PillarResponse(BaseModel):
     is_active: bool = True
     sort_order: int = 0
     target_distribution: float | None = None
+    target: int | None = None  # percent, derived from target_distribution
 
 
 class PillarCreateRequest(BaseModel):

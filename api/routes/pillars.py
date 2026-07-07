@@ -13,6 +13,7 @@ router = APIRouter(prefix="/api", tags=["pillars"], dependencies=[Depends(get_cu
 
 
 def _pillar_response(p: Pillar) -> PillarResponse:
+    target = round(p.target_distribution * 100) if p.target_distribution is not None else None
     return PillarResponse(
         id=p.id,
         name=p.name,
@@ -21,6 +22,7 @@ def _pillar_response(p: Pillar) -> PillarResponse:
         is_active=p.is_active,
         sort_order=p.sort_order,
         target_distribution=p.target_distribution,
+        target=target,
     )
 
 

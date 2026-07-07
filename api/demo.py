@@ -170,6 +170,11 @@ class DemoPostizClient:
     def create_draft_post(self, content, platform_ids):
         return {"id": "demo-draft-001"}
 
+    def publish_post(self, content, platform_ids, media_url=None, scheduled_at=None):
+        """Fake publish — returns a deterministic id without any network call."""
+        suffix = platform_ids[0] if platform_ids else "unknown"
+        return {"id": f"demo-pub-{suffix}"}
+
 
 class DemoCaptionGenerator:
     """Mock CaptionGenerator returning realistic brand-voice captions."""

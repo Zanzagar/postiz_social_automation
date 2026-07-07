@@ -90,6 +90,17 @@ async def generate(
                 await asyncio.sleep(1.5)
 
             captions = await asyncio.to_thread(generator.generate_captions, row)
+            captions_map = {str(k): v for k, v in captions.items()}
+
+            # Per-platform progress events. Generation is a single Claude
+            # call covering all platforms (splitting it would multiply
+            # calls and change output quality), so these are emitted as
+            # each caption becomes available post-parse — the frontend
+            # contract sees zero+ platform_done events before done.
+            for platform, caption in captions_map.items():
+                yield json.dumps(
+                    {"status": "platform_done", "platform": platform, "caption": caption}
+                )
 
             row_id = await _persist_generated(req, captions, repo)
 
@@ -97,7 +108,7 @@ async def generate(
                 {
                     "status": "done",
                     "row_id": row_id,
-                    "captions": {str(k): v for k, v in captions.items()},
+                    "captions": captions_map,
                 }
             )
         except Exception as e:

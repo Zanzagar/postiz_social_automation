@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import { CalendarPage } from "./CalendarPage";
 
 import userEvent from "@testing-library/user-event";
@@ -59,7 +59,18 @@ function renderCalendar() {
 }
 
 describe("CalendarPage", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Fixtures use fixed March 2026 dates; freeze Date (only) so the
+    // calendar's "current" window still contains them. Timers stay real
+    // so waitFor/userEvent keep working.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-03-17T09:00:00"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("shows loading state", () => {
     mockGetCalendar.mockReturnValue(new Promise(() => {}));

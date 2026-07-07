@@ -42,6 +42,9 @@ class ContentRow(Base):
     media_catalog_ids: Mapped[str | None] = mapped_column(Text, nullable=True)  # Phase 3
     audience_segment_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Phase 4
     auto_publish_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    require_review: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    held_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    alt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     sheet_row_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sheet_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))

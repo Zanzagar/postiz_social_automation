@@ -22,14 +22,20 @@ def get_settings() -> Settings:
     return Settings()
 
 
-async def get_db() -> AsyncGenerator[AsyncSession]:
-    """Yield an async database session."""
+def get_session_factory() -> async_sessionmaker:
+    """Return the shared async session factory, creating it on first use."""
     global _engine, _session_factory
     if _engine is None:
         settings = get_settings()
         _engine = create_async_engine(f"sqlite+aiosqlite:///{settings.database_path}")
         _session_factory = async_sessionmaker(_engine, expire_on_commit=False)
-    async with _session_factory() as session:
+    return _session_factory
+
+
+async def get_db() -> AsyncGenerator[AsyncSession]:
+    """Yield an async database session."""
+    factory = get_session_factory()
+    async with factory() as session:
         yield session
 
 

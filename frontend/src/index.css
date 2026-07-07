@@ -2,22 +2,24 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
+@import "@fontsource-variable/fraunces";
+@import "@fontsource-variable/jetbrains-mono";
 
 @custom-variant dark (&:is(.dark *));
 
-@theme {
-  /* Gita Valley brand color scales */
-  --color-terracotta-50: #fdf6f0;
-  --color-terracotta-100: #f9e8d8;
-  --color-terracotta-200: #f2d0b0;
-  --color-terracotta-300: #e8b080;
-  --color-terracotta-400: #c4a484;
-  --color-terracotta-500: #b08968;
-  --color-terracotta-600: #96704e;
-  --color-terracotta-700: #7a5a3e;
-  --color-terracotta-800: #5e4530;
-  --color-terracotta-900: #3d2d1f;
+/* ============================================================
+   Gita Valley — "Pasture" Design Tokens
+   Ported from design_handoff_pasture/prototype/tokens.css.
+   Edit tokens.css + tokens.json first, then sync here.
+   ============================================================ */
 
+@theme {
+  /* ---- Fonts ---- */
+  --font-sans: 'Inter Variable', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Fraunces Variable', Georgia, serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+  /* ---- Brand color scales (canonical: tokens.css) ---- */
   --color-sage-50: #f0f7f2;
   --color-sage-100: #d4ead9;
   --color-sage-200: #a8d5b3;
@@ -29,6 +31,16 @@
   --color-sage-800: #1e3224;
   --color-sage-900: #101a13;
 
+  --color-terra-50: #fdf6f0;
+  --color-terra-100: #f9e8d8;
+  --color-terra-200: #f2d0b0;
+  --color-terra-300: #e8b080;
+  --color-terra-400: #c4a484;
+  --color-terra-500: #b08968;
+  --color-terra-600: #96704e;
+  --color-terra-700: #7a5a3e;
+  --color-terra-800: #5e4530;
+
   --color-cream-50: #fffdf7;
   --color-cream-100: #fff8e7;
   --color-cream-200: #fff0c9;
@@ -36,84 +48,155 @@
   --color-cream-400: #ffd97a;
   --color-cream-500: #e6c46e;
   --color-cream-600: #b39a56;
-  --color-cream-700: #807040;
-  --color-cream-800: #4d432a;
-  --color-cream-900: #1a1710;
+
+  /* ---- Legacy aliases (old pages still reference terracotta-*) ---- */
+  --color-terracotta-50: var(--color-terra-50);
+  --color-terracotta-100: var(--color-terra-100);
+  --color-terracotta-200: var(--color-terra-200);
+  --color-terracotta-300: var(--color-terra-300);
+  --color-terracotta-400: var(--color-terra-400);
+  --color-terracotta-500: var(--color-terra-500);
+  --color-terracotta-600: var(--color-terra-600);
+  --color-terracotta-700: var(--color-terra-700);
+  --color-terracotta-800: var(--color-terra-800);
 }
 
 :root {
-  --background: #ffffff;
-  --foreground: #1a1a1a;
-  --card: #ffffff;
-  --card-foreground: #1a1a1a;
-  --popover: #ffffff;
-  --popover-foreground: #1a1a1a;
+  /* ---- Semantic surfaces / ink ---- */
+  --surface-page: #fbf8f0;    /* app canvas */
+  --surface-warm: #f5f1e7;    /* sidebars, inspector panels, deep-warm rail */
+  --surface-warm-2: #efe9d8;  /* sidebar gradient foot */
+  --surface-card: #ffffff;
+  --ink: #1a1a1a;
+  --ink-muted: #737373;
+  --cream-ink: #7a6428;       /* readable text on cream */
+  --cream-ink-deep: #5a4820;
+  --forest-ink: #5e4530;      /* terra-deep text */
+
+  /* ---- Type scale (replaces all ad-hoc text-[NNpx]) ---- */
+  --t-micro: 10px;     /* timestamps, meta dots            */
+  --t-label: 10.5px;   /* uppercase section labels         */
+  --t-caption: 11.5px; /* secondary/sub text               */
+  --t-body-sm: 12.5px; /* dense body, table cells          */
+  --t-body: 13.5px;    /* default body                     */
+  --t-ui: 13px;        /* nav, buttons, inputs             */
+  --t-title-sm: 16px;  /* card titles                      */
+  --t-title: 18px;     /* section titles (serif)           */
+  --t-h2: 22px;        /* page sub-headers (serif)         */
+  --t-h1: 28px;        /* page titles (serif)              */
+  --t-display: 34px;   /* hero numerals / display (serif)  */
+
+  /* ---- Radii ---- */
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 16px;
+  --r-2xl: 20px;
+  --r-pill: 9999px;
+
+  /* ---- Spacing rhythm (4pt base) ---- */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+
+  /* ---- Elevation ---- */
+  --shadow-sm: 0 1px 2px rgba(45, 74, 53, 0.06), 0 1px 3px rgba(45, 74, 53, 0.04);
+  --shadow-md: 0 2px 6px rgba(45, 74, 53, 0.08), 0 4px 12px rgba(45, 74, 53, 0.05);
+  --shadow-lg: 0 8px 24px rgba(45, 74, 53, 0.12), 0 2px 6px rgba(45, 74, 53, 0.06);
+
+  /* ---- Motion ---- */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur: 200ms;
+  --dur-slow: 400ms;
+
+  /* ---- Focus ring (two-layer shadow; --ring stays a color for shadcn) ---- */
+  --ring-shadow: 0 0 0 2px var(--surface-page), 0 0 0 4px #4a7c59;
+
+  /* ---- shadcn semantic vars → Pasture tokens ---- */
+  --background: var(--surface-page);
+  --foreground: var(--ink);
+  --card: var(--surface-card);
+  --card-foreground: var(--ink);
+  --popover: var(--surface-card);
+  --popover-foreground: var(--ink);
   --primary: #4a7c59;              /* sage-500 */
   --primary-foreground: #ffffff;
-  --secondary: #c4a484;            /* terracotta-400 */
+  --secondary: #b08968;            /* terra-500 */
   --secondary-foreground: #ffffff;
-  --muted: #f5f5f4;
-  --muted-foreground: #737373;
+  --muted: var(--surface-warm);
+  --muted-foreground: var(--ink-muted);
   --accent: #fff8e7;               /* cream-100 */
   --accent-foreground: #1e3224;    /* sage-800 */
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #e5e5e5;
-  --input: #e5e5e5;
+  --border: color-mix(in oklab, var(--ink) 12%, transparent);
+  --input: color-mix(in oklab, var(--ink) 12%, transparent);
   --ring: #4a7c59;                 /* sage-500 */
-  --chart-1: #4a7c59;             /* sage-500 */
-  --chart-2: #b08968;             /* terracotta-500 */
-  --chart-3: #e6c46e;             /* cream-500 */
-  --chart-4: #5da06e;             /* sage-400 */
-  --chart-5: #c4a484;             /* terracotta-400 */
-  --radius: 0.625rem;
-  --sidebar: #f0f7f2;             /* sage-50 */
-  --sidebar-foreground: #1a1a1a;
-  --sidebar-primary: #4a7c59;     /* sage-500 */
+  --chart-1: #4a7c59;              /* sage-500 */
+  --chart-2: #b08968;              /* terra-500 */
+  --chart-3: #e6c46e;              /* cream-500 */
+  --chart-4: #5da06e;              /* sage-400 */
+  --chart-5: #c4a484;              /* terra-400 */
+  --radius: 0.875rem;              /* 14px = --r-lg */
+  --sidebar: var(--surface-warm);            /* warm rail */
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: #4a7c59;                /* sage-500 */
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #d4ead9;      /* sage-100 */
-  --sidebar-accent-foreground: #1e3224;
-  --sidebar-border: #e5e5e5;
-  --sidebar-ring: #4a7c59;        /* sage-500 */
+  --sidebar-accent: rgba(255, 255, 255, 0.6); /* white/60 on warm rail */
+  --sidebar-accent-foreground: #2d4a35;       /* sage-700 */
+  --sidebar-border: color-mix(in oklab, var(--ink) 12%, transparent);
+  --sidebar-ring: #4a7c59;                    /* sage-500 */
 }
 
+/* ============================================================
+   DARK MODE — sage-900 ground, parchment ink (per tokens.css).
+   shadcn vars referencing semantic vars (--background, --card,
+   --muted, --border/--input color-mix, sidebar surfaces) flip
+   automatically; only hex-valued vars are overridden here.
+   ============================================================ */
 .dark {
-  --background: #101a13;          /* sage-900 */
-  --foreground: #f0f7f2;          /* sage-50 */
-  --card: #1e3224;                /* sage-800 */
-  --card-foreground: #f0f7f2;
-  --popover: #1e3224;
-  --popover-foreground: #f0f7f2;
-  --primary: #7cbf8d;             /* sage-300 */
+  --surface-page: #101a13;
+  --surface-warm: #18241b;
+  --surface-warm-2: #1e3224;
+  --surface-card: #1e3224;
+  --ink: #f0f7f2;
+  --ink-muted: #a8d5b3;
+  --cream-ink: #ffd97a;
+  --cream-ink-deep: #ffe8ab;
+  --forest-ink: #e8b080;
+
+  /* Focus ring follows the dark canvas */
+  --ring-shadow: 0 0 0 2px var(--surface-page), 0 0 0 4px #7cbf8d;
+
+  /* shadcn hex-valued overrides */
+  --primary: #7cbf8d;              /* sage-300 */
   --primary-foreground: #101a13;
-  --secondary: #e8b080;           /* terracotta-300 */
-  --secondary-foreground: #3d2d1f;
-  --muted: #2d4a35;               /* sage-700 */
-  --muted-foreground: #a8d5b3;    /* sage-200 */
-  --accent: #2d4a35;
-  --accent-foreground: #d4ead9;
+  --secondary: #e8b080;            /* terra-300 */
+  --secondary-foreground: #5e4530; /* terra-800 */
+  --accent: #2d4a35;               /* sage-700 */
+  --accent-foreground: #d4ead9;    /* sage-100 */
   --destructive: #f87171;
   --destructive-foreground: #ffffff;
-  --border: rgba(255, 255, 255, 0.1);
-  --input: rgba(255, 255, 255, 0.15);
-  --ring: #7cbf8d;                /* sage-300 */
+  --ring: #7cbf8d;                 /* sage-300 */
   --chart-1: #7cbf8d;
   --chart-2: #e8b080;
   --chart-3: #ffd97a;
   --chart-4: #a8d5b3;
   --chart-5: #f2d0b0;
-  --sidebar: #1e3224;
-  --sidebar-foreground: #f0f7f2;
   --sidebar-primary: #7cbf8d;
   --sidebar-primary-foreground: #101a13;
-  --sidebar-accent: #2d4a35;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
   --sidebar-accent-foreground: #d4ead9;
-  --sidebar-border: rgba(255, 255, 255, 0.1);
   --sidebar-ring: #7cbf8d;
 }
 
 @theme inline {
-  --font-sans: 'Inter Variable', system-ui, -apple-system, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -182,5 +265,101 @@
     select {
       font-size: 14px;
     }
+  }
+}
+
+/* ============================================================
+   Pasture utility classes (ported from tokens.css + prototype)
+   ============================================================ */
+@layer utilities {
+  /* ---- Named type utilities (use instead of text-[NNpx]) ---- */
+  .t-micro    { font-size: var(--t-micro);    line-height: 1.3; }
+  .t-label    { font-size: var(--t-label);    line-height: 1.2; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+  .t-caption  { font-size: var(--t-caption);  line-height: 1.45; }
+  .t-body-sm  { font-size: var(--t-body-sm);  line-height: 1.5; }
+  .t-ui       { font-size: var(--t-ui);       line-height: 1.4; }
+  .t-body     { font-size: var(--t-body);     line-height: 1.55; }
+  .t-title-sm { font-size: var(--t-title-sm); line-height: 1.3; }
+  .t-title    { font-size: var(--t-title);    line-height: 1.25; font-family: var(--font-serif); }
+  .t-h2       { font-size: var(--t-h2);       line-height: 1.2;  font-family: var(--font-serif); }
+  .t-h1       { font-size: var(--t-h1);       line-height: 1.12; font-family: var(--font-serif); }
+  .t-display  { font-size: var(--t-display);  line-height: 1;    font-family: var(--font-serif); }
+
+  /* ---- Named surfaces ---- */
+  .surface-page { background: var(--surface-page); }
+  .surface-warm { background: var(--surface-warm); }
+  .surface-card { background: var(--surface-card); }
+  .text-cream-ink { color: var(--cream-ink); }
+  .text-cream-ink-deep { color: var(--cream-ink-deep); }
+
+  /* ---- Var-based helpers (flip automatically under .dark) ---- */
+  .ink           { color: var(--ink); }
+  .ink-muted     { color: var(--ink-muted); }
+  .bg-card       { background: var(--surface-card); }
+  .bg-warm       { background: var(--surface-warm); }
+  .border-hair   { border: 1px solid color-mix(in oklab, var(--ink) 12%, transparent); }
+  .border-hair-b { border-bottom: 1px solid color-mix(in oklab, var(--ink) 12%, transparent); }
+  .shadow-card   { box-shadow: var(--shadow-sm); }
+
+  /* ---- Universal focus-visible ring (a11y) ---- */
+  .fr:focus-visible { outline: none; box-shadow: var(--ring-shadow); }
+
+  /* ---- Loading skeleton ---- */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: color-mix(in oklab, var(--ink) 8%, var(--surface-warm));
+    border-radius: var(--r-sm);
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--surface-card) 60%, transparent), transparent);
+    transform: translateX(-100%);
+    animation: skeletonSheen 1.4s ease-in-out infinite;
+  }
+
+  /* ---- Subtle paper texture for cream surfaces ---- */
+  .paper {
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(180, 150, 100, 0.04) 0, transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(100, 130, 100, 0.04) 0, transparent 40%);
+  }
+
+  /* ---- Animation helpers ---- */
+  .anim-in { animation: fadeSlideUp 0.4s ease-out both; }
+  .pulse-dot { animation: pulseDot 1.6s ease-in-out infinite; }
+
+  /* ---- Typing caret ---- */
+  .caret::after {
+    content: '▍';
+    margin-left: 1px;
+    animation: blink 1s steps(1) infinite;
+    color: var(--color-sage-500);
+  }
+}
+
+@keyframes skeletonSheen {
+  100% { transform: translateX(100%); }
+}
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pulseDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.5; }
+}
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after,
+  .anim-in,
+  .pulse-dot,
+  .caret::after {
+    animation: none;
   }
 }

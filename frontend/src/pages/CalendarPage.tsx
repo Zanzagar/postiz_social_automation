@@ -78,6 +78,9 @@ function entryToContentRow(entry: CalendarEntry): ContentRow {
     error_msg: null,
     source: entry.source ?? "manual",
     auto_publish_at: null,
+    require_review: false,
+    held_at: null,
+    alt_text: null,
   };
 }
 

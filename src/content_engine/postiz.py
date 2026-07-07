@@ -163,6 +163,39 @@ class PostizClient:
 
         return self._request("POST", "/posts", json=payload)
 
+    def publish_post(
+        self,
+        content: str,
+        platform_ids: list[str],
+        media_url: str | None = None,
+        scheduled_at: str | None = None,
+    ) -> dict:
+        """Create a queued/published post in Postiz (not a draft).
+
+        Sanctioned by POSTIZ_CONTRACT.md §7 (G6): the auto-publish release
+        loop sends one post per platform with status "schedule" (when a
+        future scheduled_at is given) or "now" (immediate publish).
+
+        Args:
+            content: The post caption/text.
+            platform_ids: List of Postiz integration IDs to post to.
+            media_url: Optional URL to media (will be uploaded).
+            scheduled_at: Optional ISO datetime; when set the post is
+                queued for that time, otherwise it publishes immediately.
+        """
+        payload: dict = {
+            "content": content,
+            "integrations": platform_ids,
+            "status": "schedule" if scheduled_at else "now",
+        }
+        if scheduled_at:
+            payload["scheduledAt"] = scheduled_at
+        if media_url:
+            media_id = self.upload_media(media_url)
+            payload["media"] = [media_id]
+
+        return self._request("POST", "/posts", json=payload)
+
     def validate_media(self, content_type: str, file_size: int) -> None:
         """Validate media format and size.
 
