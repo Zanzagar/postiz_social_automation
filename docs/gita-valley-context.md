@@ -13,7 +13,7 @@
 | **n8n** | https://n8n.sethpc.xyz | Workflow automation |
 | **Repo** | https://github.com/Zanzagar/postiz_social_automation | Public |
 
-- Postiz API Key: `REDACTED_ROTATED_KEY`
+- Postiz API Key: stored in `.env` as `POSTIZ_API_KEY` (never commit it — see `.env.example`)
 - Postiz host in n8n credential: `https://postiz.sethpc.xyz`
 - n8n community node: `n8n-nodes-postiz` v0.2.17 (installed, credential tested ✅)
 - Both services on Seth's server behind reverse proxies — must communicate via public URLs
