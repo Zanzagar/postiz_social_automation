@@ -98,7 +98,13 @@ async def login(
         if count >= MAX_ATTEMPTS:
             entry["lockout_until"] = now + LOCKOUT_SECONDS
         _failed_attempts[ip] = entry
-        raise HTTPException(status_code=401, detail="Incorrect password.")
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "message": "invalid_password",
+                "attempts_remaining": max(MAX_ATTEMPTS - count, 0),
+            },
+        )
 
     # Success — clear failed attempts
     _failed_attempts.pop(ip, None)

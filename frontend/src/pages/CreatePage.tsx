@@ -1,876 +1,263 @@
-import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FileText, Save, Sprout } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
+import { GVSheet, PageHeader } from "@/components/pasture";
+import { ComposeStage } from "@/components/create/ComposeStage";
+import { GenerateStage } from "@/components/create/GenerateStage";
+import { RefineStage } from "@/components/create/RefineStage";
+import { StageRail } from "@/components/create/StageRail";
+import { useLocalDraft, type CreateStage } from "@/hooks/useLocalDraft";
 import {
   api,
   request,
   type GenerateRequest,
   type Template,
 } from "@/lib/api";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Upload,
-  Loader2,
-  X,
-  FileText,
-  RotateCcw,
-  Send,
-  Save,
-  Sparkles,
-} from "lucide-react";
-import { format } from "date-fns";
 
-const PLATFORMS = [
-  { id: "instagram", label: "Instagram" },
-  { id: "facebook", label: "Facebook" },
-  { id: "tiktok", label: "TikTok" },
-  { id: "threads", label: "Threads" },
-  { id: "linkedin", label: "LinkedIn" },
-];
-
-function SendToPostizButton({
-  captions,
-  formData,
-}: {
-  captions: Record<string, string>;
-  formData: GenerateRequest;
-}) {
-  const [isSending, setIsSending] = useState(false);
-  const [sendResult, setSendResult] = useState<string | null>(null);
-
-  async function handleSend() {
-    setIsSending(true);
-    setSendResult(null);
-    try {
-      const result = await api.sendToPostiz({
-        captions,
-        media_url: formData.media_url,
-        scheduled_at: formData.scheduled_date,
-      });
-      setSendResult(
-        `Sent to Postiz: ${result.draft_ids.length} draft(s) created`,
-      );
-    } catch (err) {
-      setSendResult(
-        `Error: ${err instanceof Error ? err.message : "Failed to send"}`,
-      );
-    } finally {
-      setIsSending(false);
-    }
-  }
-
-  return (
-    <>
-      <Button onClick={handleSend} disabled={isSending} className="flex-1">
-        {isSending ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        ) : (
-          <Send className="mr-2 h-4 w-4" />
-        )}
-        Send to Postiz
-      </Button>
-      {sendResult && (
-        <p
-          className={`text-sm ${sendResult.startsWith("Error") ? "text-destructive" : "text-sage-600"}`}
-        >
-          {sendResult}
-        </p>
-      )}
-    </>
-  );
-}
-
-type CreateMode = "template" | "freeform";
-
+/**
+ * Create flow — three rooms: Compose → Generate (live SSE) → Refine.
+ * Compose state persists to localStorage (useLocalDraft) so an
+ * in-progress post survives session expiry; cleared on save/send.
+ */
 export function CreatePage() {
-  const [mode, setMode] = useState<CreateMode>("freeform");
+  const { draft, update, clear } = useLocalDraft();
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [templateSheetOpen, setTemplateSheetOpen] = useState(false);
 
-  // Pillars
   const { data: pillars = [] } = useQuery({
     queryKey: ["pillars", "active"],
     queryFn: () => api.getPillars(true),
   });
-  const [selectedPillar, setSelectedPillar] = useState<string>("");
-
-  // Template state
   const { data: templates = [] } = useQuery({
     queryKey: ["templates"],
     queryFn: () => api.getTemplates(),
   });
-  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(
-    null,
-  );
-  const [variableValues, setVariableValues] = useState<Record<string, string>>(
-    {},
-  );
+  const { data: festivals = [] } = useQuery({
+    queryKey: ["festivals", draft.scheduledDate],
+    queryFn: () => api.getFestivals(draft.scheduledDate, draft.scheduledDate),
+    enabled: !!draft.scheduledDate,
+  });
 
-  // Form state
-  const [rawText, setRawText] = useState("");
-  const [mediaUrl, setMediaUrl] = useState("");
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
-  const [scheduledDate, setScheduledDate] = useState(
-    format(new Date(), "yyyy-MM-dd"),
-  );
-  const [scheduledTime, setScheduledTime] = useState("09:00");
+  const generateRequest: GenerateRequest = {
+    raw_text: draft.seed,
+    media_url: draft.mediaUrl || null,
+    platforms: draft.platforms,
+    scheduled_date: draft.scheduledDate,
+    content_pillar: draft.pillar || null,
+  };
 
-  // Generation state
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [statusMessage, setStatusMessage] = useState("");
-  const [captions, setCaptions] = useState<Record<string, string> | null>(
-    null,
-  );
-  const [error, setError] = useState("");
+  const canGenerate = draft.seed.trim().length > 0 && draft.platforms.length > 0;
 
-  // Inline iteration state (per-platform instructions)
-  const [platformInstructions, setPlatformInstructions] = useState<Record<string, string>>({});
-  const [iteratePlatform, setIteratePlatform] = useState("");
-  const [isIterating, setIsIterating] = useState(false);
-  const [contentRowId, setContentRowId] = useState<number | null>(null);
-
-  const [savedMessage, setSavedMessage] = useState("");
-
-  // Batch generation state
-  const [batchWeeks, setBatchWeeks] = useState(4);
-  const [isBatchGenerating, setIsBatchGenerating] = useState(false);
-  const [batchResult, setBatchResult] = useState<{ created: number } | null>(null);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // --- Template handling ---
-
-  function handleTemplateSelect(template: Template) {
-    setSelectedTemplate(template);
-    setRawText(template.raw_text_template ?? "");
-    if (template.schedule_time) setScheduledTime(template.schedule_time);
-    const defaults: Record<string, string> = {};
-    for (const v of template.variables ?? []) {
-      defaults[v.name] = "";
-    }
-    setVariableValues(defaults);
+  function startGenerate() {
+    if (!canGenerate) return;
+    setNotice(null);
+    setError(null);
+    update({ stage: "generate" });
   }
 
-  function resetForm() {
-    setSelectedTemplate(null);
-    setVariableValues({});
-    setRawText("");
-    setCaptions(null);
-    setContentRowId(null);
-    setError("");
-    setSavedMessage("");
-    setBatchResult(null);
-    setPlatformInstructions({});
-    setIteratePlatform("");
+  function handleGenerated(rowId: number | null, captions: Record<string, string>) {
+    update({ rowId, captions, stage: "refine" });
   }
 
-  function handleClearTemplate() {
-    setSelectedTemplate(null);
-    setVariableValues({});
-    setRawText("");
+  function handleStageNav(next: CreateStage) {
+    if (next === draft.stage) return;
+    // Can't jump into a live generation stream, or into refine with nothing to refine.
+    if (next === "generate") return;
+    if (next === "refine" && Object.keys(draft.captions).length === 0) return;
+    update({ stage: next });
   }
 
-  // --- Platform toggle ---
-
-  function togglePlatform(platform: string) {
-    setSelectedPlatforms((prev) =>
-      prev.includes(platform)
-        ? prev.filter((p) => p !== platform)
-        : [...prev, platform],
-    );
-  }
-
-  // --- File upload ---
-
-  const handleFileChange = useCallback(async (file: File) => {
-    setUploadedFile(file);
+  async function saveWithoutGenerating() {
+    if (!canGenerate) return;
+    setIsSaving(true);
+    setError(null);
     try {
-      const result = await api.uploadFile(file);
-      setMediaUrl(result.url);
-    } catch {
-      setError("Failed to upload file");
-      setUploadedFile(null);
-    }
-  }, []);
-
-  // --- Generate ---
-
-  async function handleGenerate() {
-    if (!rawText.trim() || selectedPlatforms.length === 0) {
-      setError("Please enter text and select at least one platform.");
-      return;
-    }
-
-    setError("");
-    setIsGenerating(true);
-    setStatusMessage("Starting generation...");
-    setCaptions(null);
-    setContentRowId(null);
-
-    try {
-      if (selectedTemplate) {
-        // Generate from template
-        setStatusMessage("Generating from template...");
-        const result = await api.generateFromTemplate(selectedTemplate.id, {
-          variable_values: variableValues,
-          platforms: selectedPlatforms,
-          scheduled_date: scheduledDate,
-          scheduled_time: scheduledTime,
-        });
-        // Extract captions from the returned content row
-        const resultCaptions: Record<string, string> = {};
-        for (const [k, v] of Object.entries(result.captions)) {
-          if (v !== null) resultCaptions[k] = v;
-        }
-        setCaptions(resultCaptions);
-        setContentRowId(result.row_number);
-      } else {
-        // Direct generation
-        setStatusMessage("Generating captions...");
-        const data: GenerateRequest = {
-          raw_text: rawText,
-          media_url: mediaUrl || null,
-          platforms: selectedPlatforms,
-          scheduled_date: scheduledDate,
-          content_pillar: selectedPillar || null,
-        };
-        const result = await request<{
-          captions: Record<string, string>;
-          row_id?: number;
-        }>("/api/generate-sync", {
-          method: "POST",
-          body: JSON.stringify(data),
-        });
-        setCaptions(result.captions);
-        if (result.row_id) setContentRowId(result.row_id);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Generation failed");
-    } finally {
-      setIsGenerating(false);
-      setStatusMessage("");
-    }
-  }
-
-  // --- Inline iteration ---
-
-  async function handleIterate(platform: string) {
-    const instruction = platformInstructions[platform]?.trim();
-    if (!instruction || !contentRowId) return;
-
-    setIsIterating(true);
-    setIteratePlatform(platform);
-    try {
-      const result = await api.iterate({
-        content_row_id: contentRowId,
-        platform,
-        instruction,
-        mode: "refine",
-      });
-      setCaptions((prev) =>
-        prev ? { ...prev, [platform]: result.caption } : prev,
-      );
-      setPlatformInstructions((prev) => ({ ...prev, [platform]: "" }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Iteration failed");
-    } finally {
-      setIsIterating(false);
-      setIteratePlatform("");
-    }
-  }
-
-  async function handleSaveAsIs() {
-    if (!rawText.trim() || selectedPlatforms.length === 0) {
-      setError("Please enter text and select at least one platform.");
-      return;
-    }
-    setError("");
-    setIsGenerating(true);
-    setCaptions(null);
-    setContentRowId(null);
-    try {
-      const data: GenerateRequest = {
-        raw_text: rawText,
-        media_url: mediaUrl || null,
-        platforms: selectedPlatforms,
-        scheduled_date: scheduledDate,
-        content_pillar: selectedPillar || null,
-      };
       const result = await request<{
         captions: Record<string, string>;
         row_id?: number;
       }>("/api/generate-sync?skip_ai=true", {
         method: "POST",
-        body: JSON.stringify(data),
+        body: JSON.stringify(generateRequest),
       });
-      setCaptions(result.captions);
-      if (result.row_id) setContentRowId(result.row_id);
+      if (result.row_id && draft.mediaUrl && draft.altText.trim()) {
+        await api.setAltText(result.row_id, draft.altText.trim());
+      }
+      clear();
+      setNotice("Saved to Drafts — find it under Review Drafts.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
-      setIsGenerating(false);
+      setIsSaving(false);
     }
   }
 
-  async function handleBatchSchedule() {
-    if (!selectedTemplate || selectedPlatforms.length === 0) return;
-    setIsBatchGenerating(true);
-    setError("");
-    setBatchResult(null);
+  async function saveRefinedToDrafts() {
+    if (!draft.rowId) return;
+    setIsSaving(true);
+    setError(null);
     try {
-      const result = await api.batchGenerateFromTemplate(selectedTemplate.id, {
-        variable_values: {},
-        platforms: selectedPlatforms,
-        weeks: batchWeeks,
-        scheduled_time: scheduledTime,
-      });
-      setBatchResult({ created: result.created });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Scheduling failed");
-    } finally {
-      setIsBatchGenerating(false);
-    }
-  }
-
-  async function handleSaveDraft() {
-    if (!contentRowId || !captions) return;
-    try {
-      await api.editDraft(contentRowId, captions);
-      setSavedMessage("Saved to Drafts — find it under Review Drafts.");
+      await api.editDraft(draft.rowId, draft.captions);
+      if (draft.mediaUrl && draft.altText.trim()) {
+        await api.setAltText(draft.rowId, draft.altText.trim());
+      }
+      clear();
+      setNotice("Saved to Drafts — find it under Review Drafts.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setIsSaving(false);
     }
   }
 
-  // Unsaved content detection
-  const isDirty = useMemo(
-    () => !!(rawText.trim() || captions),
-    [rawText, captions],
-  );
-
-  // Warn on browser tab close / refresh when dirty
-  useEffect(() => {
-    if (!isDirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [isDirty]);
-
-  // Tab switch confirmation
-  const [pendingMode, setPendingMode] = useState<CreateMode | null>(null);
-  const showDiscardDialog = pendingMode !== null;
-
-  function handleTabSwitch(newMode: string) {
-    const target = newMode as CreateMode;
-    if (target === mode) return;
-    if (isDirty) {
-      setPendingMode(target);
-    } else {
-      resetForm();
-      setMode(target);
+  async function sendToPostiz() {
+    setIsSending(true);
+    setError(null);
+    try {
+      const result = await api.sendToPostiz({
+        captions: draft.captions,
+        media_url: draft.mediaUrl || null,
+        scheduled_at: draft.scheduledDate,
+      });
+      clear();
+      setNotice(`Sent to Postiz: ${result.draft_ids.length} draft(s) created`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send");
+    } finally {
+      setIsSending(false);
     }
   }
 
-  function confirmDiscard() {
-    if (pendingMode) {
-      resetForm();
-      setMode(pendingMode);
-      setPendingMode(null);
-    }
+  function applyTemplate(t: Template) {
+    update({
+      seed: t.raw_text_template ?? "",
+      pillar: t.pillar ?? draft.pillar,
+      scheduledTime: t.schedule_time ?? draft.scheduledTime,
+      stage: "compose",
+    });
+    setTemplateSheetOpen(false);
   }
 
-  function cancelDiscard() {
-    setPendingMode(null);
-  }
-
-  const formData: GenerateRequest = {
-    raw_text: rawText,
-    media_url: mediaUrl || null,
-    platforms: selectedPlatforms,
-    content_pillar: selectedPillar || null,
-    scheduled_date: scheduledDate,
-  };
+  const headerSave = draft.stage === "refine" && draft.rowId ? saveRefinedToDrafts : saveWithoutGenerating;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-6">
-      <h1 className="text-2xl font-bold text-sage-800">Create & Generate</h1>
+    <div className="flex min-h-full flex-1 flex-col">
+      <PageHeader
+        greeting="Compose"
+        title="A new post begins with a single line."
+        subtitle="Describe what you want to share. Claude shapes it for every platform. You refine."
+        icon={Sprout}
+        right={
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={headerSave}
+              disabled={isSaving || (draft.stage === "refine" ? !draft.rowId : !canGenerate)}
+            >
+              <Save size={12} strokeWidth={1.75} aria-hidden="true" />
+              Save draft
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setTemplateSheetOpen(true)}>
+              Use a template
+            </Button>
+          </>
+        }
+      />
+      <StageRail stage={draft.stage} onStage={handleStageNav} />
 
-      {/* Workflow toggle */}
-      {templates.length > 0 && (
-        <Tabs value={mode} onValueChange={handleTabSwitch}>
-          <TabsList className="w-full">
-            <TabsTrigger value="freeform" className="flex-1">
-              Write from Scratch
-            </TabsTrigger>
-            <TabsTrigger value="template" className="flex-1">
-              Use a Template
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+      {notice && (
+        <div
+          role="status"
+          className="t-body-sm mx-8 mt-4 rounded-lg border border-sage-200 bg-sage-50 px-3 py-2 text-sage-700 dark:border-sage-700 dark:bg-sage-800/60 dark:text-sage-200"
+        >
+          {notice}
+        </div>
       )}
-
-      {/* MODE: Template */}
-      {mode === "template" && (
-        <Card>
-          <CardContent className="space-y-3 pt-4">
-            {selectedTemplate ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Badge variant="secondary">{selectedTemplate.name}</Badge>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleClearTemplate}
-                  >
-                    <X className="mr-1 h-3 w-3" />
-                    Change
-                  </Button>
-                </div>
-
-                {/* Variable inputs */}
-                {(selectedTemplate.variables ?? []).length > 0 && (
-                  <div className="space-y-2">
-                    {selectedTemplate.variables.map((v) => (
-                      <div key={v.name}>
-                        <Label htmlFor={`var-${v.name}`} className="text-xs capitalize">
-                          {v.name}
-                        </Label>
-                        <Input
-                          id={`var-${v.name}`}
-                          aria-label={v.name}
-                          value={variableValues[v.name] ?? ""}
-                          onChange={(e) =>
-                            setVariableValues((prev) => ({
-                              ...prev,
-                              [v.name]: e.target.value,
-                            }))
-                          }
-                          placeholder={`Enter ${v.name}...`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Template preview */}
-                <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm leading-relaxed">
-                  {rawText.split(/(\{\{.+?\}\})/).map((part, i) =>
-                    part.match(/^\{\{(.+?)\}\}$/) ? (
-                      <span
-                        key={i}
-                        className="mx-0.5 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800"
-                      >
-                        {variableValues[part.match(/^\{\{(.+?)\}\}$/)![1]] ||
-                          part.match(/^\{\{(.+?)\}\}$/)![1]}
-                      </span>
-                    ) : (
-                      <span key={i}>{part}</span>
-                    ),
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Fill in the fields above to complete the template.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  Pick a template to get started:
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {templates.map((t) => (
-                    <Button
-                      key={t.id}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleTemplateSelect(t)}
-                    >
-                      <FileText className="mr-1.5 h-3.5 w-3.5" />
-                      {t.name}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* MODE: Freeform */}
-      {mode === "freeform" && (
-        <div className="space-y-2">
-          <Label htmlFor="raw-text">What do you want to post about?</Label>
-          <Textarea
-            id="raw-text"
-            value={rawText}
-            onChange={(e) => setRawText(e.target.value)}
-            placeholder="Describe what you want to post — the AI will write platform-specific captions from this..."
-            rows={4}
-            maxLength={2000}
-          />
-          <p className="text-right text-xs text-muted-foreground">
-            {rawText.length}/2000
-          </p>
+      {error && (
+        <div
+          role="alert"
+          className="t-body-sm mx-8 mt-4 rounded-lg border border-terra-200 bg-terra-50 px-3 py-2 text-terra-700 dark:border-terra-600 dark:bg-terra-700/20 dark:text-terra-200"
+        >
+          {error}
         </div>
       )}
 
-      {/* Upload zone */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Media</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              const file = e.dataTransfer.files[0];
-              if (file) handleFileChange(file);
-            }}
-            className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-sage-200 p-6 text-muted-foreground transition-colors hover:border-sage-400 hover:bg-sage-50"
-          >
-            <Upload className="h-6 w-6" />
-            <span className="text-sm">
-              {uploadedFile
-                ? uploadedFile.name
-                : "Drop image/video or click to browse"}
-            </span>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,video/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleFileChange(file);
-            }}
-          />
-
-          {uploadedFile && (
-            <div className="flex items-center justify-between rounded-md bg-muted px-3 py-1.5 text-sm">
-              <span className="truncate">{uploadedFile.name}</span>
-              <button
-                onClick={() => {
-                  setUploadedFile(null);
-                  setMediaUrl("");
-                }}
-                className="ml-2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-
-          <div>
-            <Label
-              htmlFor="media-url"
-              className="text-xs text-muted-foreground"
-            >
-              Or paste Google Drive URL
-            </Label>
-            <Input
-              id="media-url"
-              value={mediaUrl}
-              onChange={(e) => setMediaUrl(e.target.value)}
-              placeholder="https://drive.google.com/..."
-              disabled={!!uploadedFile}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {draft.stage === "compose" && (
+          <div className="flex-1 overflow-y-auto">
+            <ComposeStage
+              draft={draft}
+              update={update}
+              pillars={pillars}
+              festivals={festivals}
+              canGenerate={canGenerate}
+              onGenerate={startGenerate}
+              onSaveWithoutGenerating={saveWithoutGenerating}
+              isSaving={isSaving}
             />
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Platforms */}
-      <fieldset>
-        <legend className="mb-2 text-sm font-medium">Platforms</legend>
-        <div className="flex flex-wrap gap-4">
-          {PLATFORMS.map(({ id, label }) => (
-            <label key={id} className="flex items-center gap-2 text-sm">
-              <Checkbox
-                id={id}
-                checked={selectedPlatforms.includes(id)}
-                onCheckedChange={() => togglePlatform(id)}
-                aria-label={label}
-              />
-              {label}
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      {/* Content pillar */}
-      {pillars.length > 0 && (
-        <div className="space-y-2">
-          <Label htmlFor="content-pillar">Content Pillar (optional)</Label>
-          <Select value={selectedPillar} onValueChange={setSelectedPillar}>
-            <SelectTrigger id="content-pillar">
-              <SelectValue placeholder="Let AI decide..." />
-            </SelectTrigger>
-            <SelectContent>
-              {pillars.map((p) => (
-                <SelectItem key={p.id} value={p.name}>
-                  <span className="flex items-center gap-2">
-                    {p.color && (
-                      <span
-                        className="inline-block h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: p.color }}
-                      />
-                    )}
-                    {p.name}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {/* Schedule date & time */}
-      <div className="flex gap-3 max-w-sm">
-        <div className="space-y-2">
-          <Label htmlFor="schedule-date">Date</Label>
-          <Input
-            id="schedule-date"
-            type="date"
-            value={scheduledDate}
-            onChange={(e) => setScheduledDate(e.target.value)}
+        )}
+        {draft.stage === "generate" && (
+          <div className="flex-1 overflow-y-auto">
+            <GenerateStage
+              generateRequest={generateRequest}
+              pillar={draft.pillar}
+              onDone={handleGenerated}
+            />
+          </div>
+        )}
+        {draft.stage === "refine" && (
+          <RefineStage
+            draft={draft}
+            update={update}
+            onSaveDraft={saveRefinedToDrafts}
+            onSend={sendToPostiz}
+            isSaving={isSaving}
+            isSending={isSending}
           />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="schedule-time">Time</Label>
-          <Input
-            id="schedule-time"
-            type="time"
-            value={scheduledTime}
-            onChange={(e) => setScheduledTime(e.target.value)}
-          />
-        </div>
+        )}
       </div>
 
-      {/* Error */}
-      {error && (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      )}
-
-      {/* Action buttons — hidden after captions are generated */}
-      {!captions && (
-        isGenerating ? (
-          <Button disabled className="w-full">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Working...
-          </Button>
-        ) : (
-          <div className="flex gap-2">
-            <Button
-              onClick={handleSaveAsIs}
-              disabled={selectedPlatforms.length === 0}
-              variant="outline"
-              className="flex-1"
-            >
-              <Save className="mr-2 h-4 w-4" />
-              Save as Draft
-            </Button>
-            <Button
-              onClick={handleGenerate}
-              disabled={selectedPlatforms.length === 0}
-              className="flex-1"
-            >
-              <Sparkles className="mr-2 h-4 w-4" />
-              Generate AI Captions
-            </Button>
-          </div>
-        )
-      )}
-
-      {/* Batch schedule — for templates with schedule pattern, always visible */}
-      {selectedTemplate?.schedule_pattern && !captions && (
-        <Card>
-          <CardContent className="space-y-3 pt-4">
-            <div className="flex gap-2">
-              <Button
-                onClick={handleBatchSchedule}
-                disabled={isBatchGenerating || selectedPlatforms.length === 0}
-                variant="outline"
-                className="flex-1"
-              >
-                {isBatchGenerating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Scheduling...
-                  </>
-                ) : (
-                  `Schedule ${batchWeeks} Upcoming Slots`
-                )}
-              </Button>
-              <Input
-                id="batch-weeks"
-                type="number"
-                min={1}
-                max={12}
-                value={batchWeeks}
-                onChange={(e) => setBatchWeeks(parseInt(e.target.value) || 1)}
-                className="w-16"
-                aria-label="Number of weeks"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Creates {batchWeeks} draft slots{" "}
-              ({selectedTemplate.schedule_pattern.replace(":", " every ")}).
-              Fill in details for each individually in Drafts.
+      {templateSheetOpen && (
+        <GVSheet title="Use a template" onClose={() => setTemplateSheetOpen(false)}>
+          {templates.length === 0 ? (
+            <p className="t-body ink-muted">
+              No templates yet — create one under Templates to reuse a post structure.
             </p>
-            {batchResult && (
-              <p className="text-sm text-sage-600 rounded-md bg-sage-50 px-3 py-2">
-                {batchResult.created} draft slots created! Open each in Drafts to fill in details and generate captions.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Progress */}
-      {isGenerating && (
-        <div className="space-y-2">
-          <Progress value={undefined} className="h-2" />
-          <p className="text-center text-sm text-muted-foreground">
-            {statusMessage}
-          </p>
-          <p className="text-center text-xs text-muted-foreground animate-pulse">
-            Claude is writing platform-specific captions — this usually takes 30-90 seconds.
-          </p>
-        </div>
-      )}
-
-      {/* Results — per-platform cards with inline iteration */}
-      {captions && (
-        <div className="space-y-4">
-          {Object.entries(captions).map(([platform, caption]) => (
-            <Card key={platform}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium capitalize">
-                  {platform}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Textarea
-                  value={caption}
-                  onChange={(e) =>
-                    setCaptions((prev) =>
-                      prev ? { ...prev, [platform]: e.target.value } : prev,
-                    )
-                  }
-                  rows={4}
-                  className="resize-y font-mono text-sm"
-                />
-
-                {/* Inline iteration */}
-                {contentRowId && (
-                  <div className="flex gap-2">
-                    <Input
-                      value={platformInstructions[platform] ?? ""}
-                      onChange={(e) =>
-                        setPlatformInstructions((prev) => ({
-                          ...prev,
-                          [platform]: e.target.value,
-                        }))
-                      }
-                      placeholder="Iteration instruction (e.g. 'Make shorter')"
-                      disabled={isIterating}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          handleIterate(platform);
-                        }
-                      }}
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleIterate(platform)}
-                      disabled={
-                        isIterating || !(platformInstructions[platform]?.trim())
-                      }
-                      aria-label={`Iterate ${platform}`}
-                    >
-                      {isIterating && iteratePlatform === platform ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <RotateCcw className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-
-          {/* Actions: Save Draft + Send to Postiz */}
-          <div className="space-y-2">
-            {savedMessage && (
-              <p className="text-sm text-sage-600 rounded-md bg-sage-50 px-3 py-2">
-                {savedMessage}
-              </p>
-            )}
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={handleSaveDraft}
-                disabled={!contentRowId}
-              >
-                <Save className="mr-2 h-4 w-4" />
-                Save as Draft
-              </Button>
-              <SendToPostizButton captions={captions} formData={formData} />
+          ) : (
+            <div className="space-y-2">
+              {templates.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => applyTemplate(t)}
+                  className="fr bg-card border-hair flex w-full items-start gap-3 rounded-xl px-4 py-3 text-left transition hover:border-sage-300"
+                >
+                  <FileText
+                    size={16}
+                    strokeWidth={1.75}
+                    className="mt-0.5 shrink-0 text-sage-600 dark:text-sage-300"
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0">
+                    <span className="t-ui ink block font-medium">{t.name}</span>
+                    {t.raw_text_template && (
+                      <span className="t-caption ink-muted block truncate">
+                        {t.raw_text_template}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              ))}
             </div>
-          </div>
-        </div>
+          )}
+        </GVSheet>
       )}
-
-      {/* Unsaved changes dialog */}
-      <Dialog open={showDiscardDialog} onOpenChange={(open) => !open && cancelDiscard()}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Unsaved Content</DialogTitle>
-            <DialogDescription>
-              You have content that hasn&apos;t been saved. What would you like to do?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={cancelDiscard} className="flex-1">
-              Keep Editing
-            </Button>
-            <Button variant="destructive" onClick={confirmDiscard} className="flex-1">
-              Discard
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

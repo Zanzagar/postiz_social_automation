@@ -1,5 +1,8 @@
 """FastAPI application entry point."""
 
+import asyncio
+import contextlib
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -29,13 +32,35 @@ from api.routes.templates import router as templates_router
 from api.routes.upload import router as upload_router
 
 
+def _auto_publish_enabled() -> bool:
+    """The release loop must not spawn during tests or when disabled."""
+    if os.environ.get("TESTING") or os.environ.get("PYTEST_CURRENT_TEST"):
+        return False
+    return os.environ.get("AUTO_PUBLISH_LOOP", "1") != "0"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load settings and configure app on startup."""
+    """Load settings, start the auto-publish release loop, configure app."""
     settings = get_settings()
     if settings.demo_mode:
         print("\n  ** DEMO MODE ACTIVE — using sample Gita Valley data **\n")
+
+    release_task = None
+    if _auto_publish_enabled():
+        from api.dependencies import get_postiz_client, get_session_factory
+        from api.services.auto_publish import auto_publish_worker
+
+        release_task = asyncio.create_task(
+            auto_publish_worker(get_session_factory(), get_postiz_client)
+        )
+
     yield
+
+    if release_task is not None:
+        release_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await release_task
 
 
 app = FastAPI(

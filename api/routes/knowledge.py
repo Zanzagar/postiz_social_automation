@@ -103,7 +103,8 @@ async def get_stats(db_path: str = Depends(get_db_path)):
 
     # By fact_type
     by_type = conn.execute(
-        "SELECT fact_type, COUNT(*) as count FROM web_knowledge GROUP BY fact_type ORDER BY count DESC"
+        "SELECT fact_type, COUNT(*) as count FROM web_knowledge"
+        " GROUP BY fact_type ORDER BY count DESC"
     ).fetchall()
 
     # By pillar
@@ -501,7 +502,10 @@ async def _run_web_crawl():
             num_classified,
         )
         _crawl_progress.update(
-            phase=f"complete — {processed} updated, {skipped} unchanged, {num_classified} topics fixed",
+            phase=(
+                f"complete — {processed} updated, {skipped} unchanged,"
+                f" {num_classified} topics fixed"
+            ),
             running=False,
         )
     except Exception:

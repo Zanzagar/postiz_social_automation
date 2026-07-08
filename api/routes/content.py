@@ -2,6 +2,7 @@
 
 import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,13 +14,16 @@ from api.models import MediaAdapted, MediaCatalog
 from api.repositories.content import ContentRepository
 from api.routes.media import PLATFORM_DIMENSIONS, _smart_crop
 from api.schemas import (
+    AltTextRequest,
     ApproveResponse,
     CalendarEntry,
     CalendarResponse,
     ContentRowResponse,
     EditCaptionsRequest,
+    RequireReviewRequest,
     SuggestionResponse,
 )
+from api.services.auto_publish import compute_auto_publish_at, no_alt_block
 from content_engine.postiz import PostizAPIError
 
 logger = logging.getLogger(__name__)
@@ -57,6 +61,9 @@ def _row_to_response(row) -> ContentRowResponse:
         error_msg=None,
         source=row.source or "manual",
         auto_publish_at=row.auto_publish_at,
+        require_review=bool(row.require_review),
+        held_at=row.held_at,
+        alt_text=row.alt_text,
     )
 
 
@@ -150,13 +157,22 @@ async def edit_draft(
 @router.post("/drafts/{row_id}/approve", response_model=ApproveResponse)
 async def approve_draft(
     row_id: int,
+    schedule: bool = False,
     repo: ContentRepository = Depends(get_content_repo),
     postiz=Depends(get_postiz_client),
 ):
-    """Approve a draft and create Postiz posts for all enabled platforms."""
+    """Approve a draft and create Postiz posts for all enabled platforms.
+
+    Computes auto_publish_at from the publish config (null if ineligible).
+    With schedule=true the caller explicitly requests scheduling/release,
+    which is blocked with 422 when the row has media but no alt text.
+    """
     row = await repo.get_content_row(row_id)
     if not row:
         raise HTTPException(status_code=404, detail=f"Row {row_id} not found.")
+
+    if schedule and no_alt_block(row):
+        raise HTTPException(status_code=422, detail="alt_text_required")
 
     await repo.update_status(row_id, "approved")
 
@@ -185,7 +201,93 @@ async def approve_draft(
         except PostizAPIError:
             pass
 
+    # Auto-publish eligibility (single source of truth in services/auto_publish)
+    now = datetime.now(UTC)
+    configs = await repo.get_publish_configs()
+    auto_at = compute_auto_publish_at(row, configs, now)
+    if schedule and auto_at is None and not row.require_review:
+        # Explicit release request for a config-ineligible row: release on
+        # the next loop cycle.
+        auto_at = now
+    row.auto_publish_at = auto_at
+    await repo.session.commit()
+
     return ApproveResponse(success=True, postiz_ids=draft_ids)
+
+
+# --- Auto-publish workflow actions ---
+
+
+@router.post("/content/{row_id}/hold", response_model=ContentRowResponse)
+async def hold_content(row_id: int, repo: ContentRepository = Depends(get_content_repo)):
+    """Hold a row: a held row NEVER auto-releases. Idempotent."""
+    row = await repo.get_content_row(row_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Row {row_id} not found.")
+
+    if row.held_at is None:
+        row.held_at = datetime.now(UTC)
+        await repo.session.commit()
+    return _row_to_response(row)
+
+
+@router.post("/content/{row_id}/resume", response_model=ContentRowResponse)
+async def resume_content(row_id: int, repo: ContentRepository = Depends(get_content_repo)):
+    """Clear a hold; recompute auto_publish_at for approved rows if eligible."""
+    row = await repo.get_content_row(row_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Row {row_id} not found.")
+
+    row.held_at = None
+    if row.status == "approved":
+        configs = await repo.get_publish_configs()
+        row.auto_publish_at = compute_auto_publish_at(row, configs, datetime.now(UTC))
+    await repo.session.commit()
+    return _row_to_response(row)
+
+
+@router.put("/content/{row_id}/require-review", response_model=ContentRowResponse)
+async def set_require_review(
+    row_id: int,
+    req: RequireReviewRequest,
+    repo: ContentRepository = Depends(get_content_repo),
+):
+    """Set the require-review flag; a require-review post never auto-releases."""
+    row = await repo.get_content_row(row_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Row {row_id} not found.")
+
+    row.require_review = req.require_review
+    if req.require_review:
+        row.auto_publish_at = None
+    elif row.status == "approved":
+        # Turning review OFF must re-run the eligibility rule, otherwise an
+        # approved row stays stuck on manual release forever.
+        configs = await repo.get_publish_configs()
+        row.auto_publish_at = compute_auto_publish_at(row, configs, datetime.now(UTC))
+    await repo.session.commit()
+    return _row_to_response(row)
+
+
+@router.put("/content/{row_id}/alt-text", response_model=ContentRowResponse)
+async def set_alt_text(
+    row_id: int,
+    req: AltTextRequest,
+    repo: ContentRepository = Depends(get_content_repo),
+):
+    """Set alt text for a row's media (clears the NO-ALT publish block)."""
+    row = await repo.get_content_row(row_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Row {row_id} not found.")
+
+    row.alt_text = req.alt_text
+    if row.status == "approved":
+        # Fixing alt text clears the NO-ALT block, so re-run the eligibility
+        # rule; otherwise an approved row never regains auto_publish_at.
+        configs = await repo.get_publish_configs()
+        row.auto_publish_at = compute_auto_publish_at(row, configs, datetime.now(UTC))
+    await repo.session.commit()
+    return _row_to_response(row)
 
 
 @router.put("/content/{row_id}/attach-media")

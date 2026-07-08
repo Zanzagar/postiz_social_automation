@@ -1,243 +1,317 @@
-import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type ContentRow } from "@/lib/api";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import {
+  CheckCircle2,
+  ClipboardCheck,
+  Filter,
+  Loader2,
+  Plus,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import { api, type ContentRow, type Pillar } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { EmptyState, PageHeader, SkeletonText } from "@/components/pasture";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ContentEditor } from "@/components/content/ContentEditor";
-import { AutoPublishCountdown } from "@/components/content/AutoPublishCountdown";
-import { CheckCircle, Loader2 } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { ContentEditorSheet } from "@/components/content/ContentEditorSheet";
+import { DraftRow } from "@/components/content/DraftRow";
+import { draftTitle } from "@/components/content/draft-utils";
+
+const FILTERS = [
+  { id: "all", label: "All", statuses: null },
+  { id: "needs-review", label: "Needs review", statuses: ["pending_approval"] },
+  { id: "draft", label: "In progress", statuses: ["draft"] },
+  { id: "scheduled", label: "Scheduled", statuses: ["approved", "scheduled"] },
+  { id: "posted", label: "Posted", statuses: ["posted"] },
+] as const;
+
+type FilterId = (typeof FILTERS)[number]["id"];
 
 export function DraftsPage() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+
   const { data: allDrafts, isLoading } = useQuery({
     queryKey: ["drafts"],
     queryFn: () => api.getDrafts(),
   });
 
-  const drafts = [...(allDrafts ?? [])].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+  const { data: pillars } = useQuery({
+    queryKey: ["pillars"],
+    queryFn: () => api.getPillars(),
+    staleTime: 60_000,
+  });
+
+  const pillarByName = useMemo(() => {
+    const map = new Map<string, Pillar>();
+    for (const p of pillars ?? []) map.set(p.name, p);
+    return map;
+  }, [pillars]);
+
+  const drafts = useMemo(
+    () =>
+      [...(allDrafts ?? [])].sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+      ),
+    [allDrafts],
   );
 
+  const [filter, setFilter] = useState<FilterId>("all");
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [editedCaptions, setEditedCaptions] = useState<
-    Record<number, Record<string, string>>
-  >({});
   const [isApproving, setIsApproving] = useState(false);
-  const [selectedDraft, setSelectedDraft] = useState<ContentRow | null>(null);
+  const [openId, setOpenId] = useState<number | null>(null);
 
-  function toggleSelect(rowNumber: number) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(rowNumber)) next.delete(rowNumber);
-      else next.add(rowNumber);
-      return next;
-    });
-  }
-
-  function toggleSelectAll() {
-    if (selected.size === drafts.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(drafts.map((d) => d.row_number)));
-    }
-  }
-
-  const [approveError, setApproveError] = useState("");
-
-  async function handleBatchApprove() {
-    setIsApproving(true);
-    setApproveError("");
-    const failed: number[] = [];
-    for (const rowNumber of selected) {
-      try {
-        const edits = editedCaptions[rowNumber];
-        if (edits) {
-          await api.editDraft(rowNumber, edits);
+  const counts = useMemo(() => {
+    const c: Record<FilterId, number> = {
+      all: drafts.length,
+      "needs-review": 0,
+      draft: 0,
+      scheduled: 0,
+      posted: 0,
+    };
+    for (const d of drafts) {
+      for (const f of FILTERS) {
+        if (f.statuses && (f.statuses as readonly string[]).includes(d.status)) {
+          c[f.id] += 1;
         }
-        await api.approveDraft(rowNumber);
-      } catch {
-        failed.push(rowNumber);
       }
     }
-    const succeeded = new Set([...selected].filter((r) => !failed.includes(r)));
+    return c;
+  }, [drafts]);
+
+  const filtered = useMemo(() => {
+    const def = FILTERS.find((f) => f.id === filter);
+    if (!def?.statuses) return drafts;
+    return drafts.filter((d) =>
+      (def.statuses as readonly string[]).includes(d.status),
+    );
+  }, [drafts, filter]);
+
+  // --- Auto-publish hold / resume (optimistic) ---
+
+  const holdMutation = useMutation({
+    mutationFn: (id: number) => api.holdContent(id),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["drafts"] });
+      const prev = queryClient.getQueryData<ContentRow[]>(["drafts"]);
+      queryClient.setQueryData<ContentRow[]>(["drafts"], (rows) =>
+        rows?.map((r) =>
+          r.row_number === id ? { ...r, held_at: new Date().toISOString() } : r,
+        ),
+      );
+      return { prev };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(["drafts"], ctx.prev);
+      toast.error("Couldn't hold this post");
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["drafts"] }),
+  });
+
+  const resumeMutation = useMutation({
+    mutationFn: (id: number) => api.resumeContent(id),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["drafts"] });
+      const prev = queryClient.getQueryData<ContentRow[]>(["drafts"]);
+      queryClient.setQueryData<ContentRow[]>(["drafts"], (rows) =>
+        rows?.map((r) => (r.row_number === id ? { ...r, held_at: null } : r)),
+      );
+      return { prev };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(["drafts"], ctx.prev);
+      toast.error("Couldn't resume auto-release");
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["drafts"] }),
+  });
+
+  // --- Batch approve ---
+
+  function toggleSelect(id: number) {
     setSelected((prev) => {
       const next = new Set(prev);
-      for (const r of succeeded) next.delete(r);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
-    setEditedCaptions({});
-    queryClient.invalidateQueries({ queryKey: ["drafts"] });
-    if (failed.length > 0) {
-      setApproveError(`${succeeded.size} approved, ${failed.length} failed`);
+  }
+
+  async function handleBatchApprove() {
+    const ids = [...selected];
+    setIsApproving(true);
+    const results = await Promise.allSettled(
+      ids.map((id) => api.approveDraft(id)),
+    );
+    const failedIds: number[] = [];
+    results.forEach((res, i) => {
+      if (res.status === "rejected") {
+        failedIds.push(ids[i]);
+        const row = drafts.find((d) => d.row_number === ids[i]);
+        toast.error(
+          `Couldn't approve "${row ? draftTitle(row.raw_text) : `draft ${ids[i]}`}"`,
+        );
+      }
+    });
+    const okCount = ids.length - failedIds.length;
+    if (okCount > 0) {
+      toast.success(
+        okCount === 1 ? "1 draft approved" : `${okCount} drafts approved`,
+      );
     }
+    setSelected(new Set(failedIds));
     setIsApproving(false);
-  }
-
-  if (isLoading) {
-    return (
-      <div className="space-y-4 p-6">
-        <h1 className="text-2xl font-bold text-sage-800">Review Drafts</h1>
-        <p className="text-muted-foreground">Loading...</p>
-        <Skeleton className="h-32 rounded-xl" />
-        <Skeleton className="h-32 rounded-xl" />
-      </div>
-    );
-  }
-
-  if (drafts.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12">
-        <CheckCircle className="mb-4 h-12 w-12 text-sage-400" />
-        <h2 className="text-xl font-semibold text-sage-700">All caught up!</h2>
-        <p className="mt-1 text-muted-foreground">No pending drafts to review.</p>
-      </div>
-    );
+    queryClient.invalidateQueries({ queryKey: ["drafts"] });
   }
 
   return (
-    <div className="space-y-4 p-6 pb-24">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-sage-800">Review Drafts</h1>
-        <label className="flex items-center gap-2 text-sm">
-          <Checkbox
-            checked={selected.size === drafts.length}
-            onCheckedChange={toggleSelectAll}
-            aria-label="Select all"
-          />
-          Select all
-        </label>
+    <div className="flex flex-1 flex-col">
+      <PageHeader
+        greeting="Drafts"
+        title="The workbench"
+        subtitle="Everything in motion. Review, refine, and send on."
+        icon={ClipboardCheck}
+        right={
+          <>
+            <Button variant="outline" size="sm" className="fr">
+              <Filter size={12} strokeWidth={1.75} aria-hidden="true" />
+              Filter
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              className="fr"
+              onClick={() => navigate("/create")}
+            >
+              <Plus size={12} strokeWidth={1.75} aria-hidden="true" />
+              New draft
+            </Button>
+          </>
+        }
+      />
+
+      <div className="border-hair-b flex flex-wrap items-center gap-1.5 px-8 pt-4 pb-2">
+        {FILTERS.map((f) => {
+          const active = filter === f.id;
+          return (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setFilter(f.id)}
+              aria-pressed={active}
+              className={cn(
+                "fr t-body-sm flex h-8 items-center gap-1.5 rounded-full px-3 font-medium transition",
+                active
+                  ? "bg-sage-500 text-white"
+                  : "bg-card border-hair ink hover:bg-sage-50 dark:hover:bg-sage-800",
+              )}
+            >
+              {f.label}
+              <span
+                className={cn(
+                  "t-micro rounded-full px-1.5 py-px",
+                  active ? "bg-white/20" : "bg-warm ink-muted",
+                )}
+              >
+                {counts[f.id]}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Draft cards */}
-      {drafts.map((draft) => (
-        <DraftCard
-          key={draft.row_number}
-          draft={draft}
-          isSelected={selected.has(draft.row_number)}
-          onToggleSelect={() => toggleSelect(draft.row_number)}
-          onClick={() => setSelectedDraft(draft)}
-        />
-      ))}
+      <div className="flex-1 px-8 py-5 pb-24">
+        {isLoading ? (
+          <div
+            role="status"
+            aria-label="Loading drafts"
+            className="space-y-2.5"
+          >
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="bg-card border-hair rounded-2xl px-5 py-4">
+                <SkeletonText lines={2} />
+              </div>
+            ))}
+          </div>
+        ) : drafts.length === 0 ? (
+          <EmptyState
+            title="Nothing on the workbench yet…"
+            action={
+              <Button
+                variant="default"
+                size="sm"
+                className="fr"
+                onClick={() => navigate("/create")}
+              >
+                Start a post
+              </Button>
+            }
+          />
+        ) : filtered.length === 0 ? (
+          <p className="t-body-sm ink-muted py-10 text-center">
+            Nothing in this view.
+          </p>
+        ) : (
+          <div className="space-y-2.5">
+            {filtered.map((d) => (
+              <DraftRow
+                key={d.row_number}
+                draft={d}
+                pillar={
+                  d.content_pillar
+                    ? (pillarByName.get(d.content_pillar) ?? d.content_pillar)
+                    : null
+                }
+                selectable={d.status === "pending_approval"}
+                selected={selected.has(d.row_number)}
+                onToggleSelect={() => toggleSelect(d.row_number)}
+                onOpen={() => setOpenId(d.row_number)}
+                onHold={() => holdMutation.mutate(d.row_number)}
+                onResume={() => resumeMutation.mutate(d.row_number)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
-      {/* ContentEditor modal */}
-      <ContentEditor
-        contentRow={selectedDraft}
+      <ContentEditorSheet
+        rowId={openId}
         mode="refine"
-        isOpen={!!selectedDraft}
-        onClose={() => setSelectedDraft(null)}
-        onSave={() => {
+        onClose={() => setOpenId(null)}
+        onSaved={() => {
           queryClient.invalidateQueries({ queryKey: ["drafts"] });
-          setSelectedDraft(null);
+          setOpenId(null);
         }}
       />
 
-      {/* Approve error */}
-      {approveError && (
-        <p className="text-sm text-destructive" role="alert">{approveError}</p>
-      )}
-
-      {/* Batch actions bar */}
       {selected.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-lg md:bottom-0 md:left-60 md:pb-3">
-          <div className="mx-auto flex max-w-2xl items-center justify-between">
-            <span className="text-sm font-medium">
+        <div className="bg-card border-hair fixed inset-x-0 bottom-0 z-40 px-8 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-lg md:left-60 md:pb-3">
+          <div className="flex items-center justify-between">
+            <span className="t-body-sm ink font-medium">
               {selected.size} selected
             </span>
-            <Button onClick={handleBatchApprove} disabled={isApproving}>
+            <Button
+              variant="default"
+              size="sm"
+              className="fr"
+              onClick={handleBatchApprove}
+              disabled={isApproving}
+            >
               {isApproving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2
+                  size={14}
+                  strokeWidth={1.75}
+                  className="animate-spin"
+                  aria-hidden="true"
+                />
               ) : (
-                <CheckCircle className="mr-2 h-4 w-4" />
+                <CheckCircle2 size={14} strokeWidth={1.75} aria-hidden="true" />
               )}
-              Approve & Send to Postiz
+              Approve {selected.size}
             </Button>
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-const platformLabels: Record<string, string> = {
-  instagram: "IG",
-  facebook: "FB",
-  tiktok: "TT",
-  threads: "TH",
-  linkedin: "LI",
-};
-
-function DraftCard({
-  draft,
-  isSelected,
-  onToggleSelect,
-  onClick,
-}: {
-  draft: ContentRow;
-  isSelected: boolean;
-  onToggleSelect: () => void;
-  onClick: () => void;
-}) {
-  const platforms = Object.entries(draft.platforms)
-    .filter(([, v]) => v)
-    .map(([k]) => k);
-
-  return (
-    <Card className={`cursor-pointer transition-colors hover:bg-muted/30 ${isSelected ? "ring-2 ring-sage-400" : ""}`}>
-      <CardHeader className="flex flex-row items-start gap-3 pb-2">
-        <Checkbox
-          checked={isSelected}
-          onCheckedChange={onToggleSelect}
-          className="mt-1"
-        />
-        <div
-          className="flex-1 space-y-1"
-          onClick={onClick}
-          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onClick()}
-          role="button"
-          tabIndex={0}
-        >
-          <p className="text-sm font-medium leading-tight">
-            {draft.raw_text.length > 100
-              ? draft.raw_text.slice(0, 100) + "..."
-              : draft.raw_text}
-          </p>
-          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <span>{format(parseISO(draft.date), "MMM d, h:mm a")}</span>
-            <Badge
-              variant={draft.status === "approved" ? "default" : draft.status === "pending_approval" ? "secondary" : "outline"}
-              className="text-xs px-1.5 py-0"
-            >
-              {draft.status.replace("_", " ")}
-            </Badge>
-            {draft.content_pillar && (
-              <Badge variant="secondary" className="text-xs px-1.5 py-0">
-                {draft.content_pillar}
-              </Badge>
-            )}
-            {draft.source === "template" && (
-              <Badge variant="outline" className="text-xs px-1.5 py-0">
-                Template
-              </Badge>
-            )}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent onClick={onClick}>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {platforms.map((p) => (
-            <Badge key={p} variant="secondary" className="text-xs">
-              {platformLabels[p] ?? p}
-            </Badge>
-          ))}
-          {draft.auto_publish_at && (
-            <AutoPublishCountdown publishAt={draft.auto_publish_at} />
-          )}
-        </div>
-      </CardContent>
-    </Card>
   );
 }

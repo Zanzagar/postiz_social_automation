@@ -1,31 +1,16 @@
 import { NavLink } from "react-router-dom";
-import {
-  LayoutDashboard,
-  PenSquare,
-  FileCheck,
-  CalendarDays,
-  MoreHorizontal,
-} from "lucide-react";
-import { useState, useRef, useEffect } from "react";
-import { Lightbulb, FileText, Settings, Activity, ExternalLink } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ExternalLink, MoreHorizontal } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { NAV_ITEMS, useDraftsBadgeCount } from "./nav-items";
 
-const mainItems = [
-  { to: "/", label: "Home", icon: LayoutDashboard },
-  { to: "/create", label: "Create", icon: PenSquare },
-  { to: "/drafts", label: "Drafts", icon: FileCheck },
-  { to: "/calendar", label: "Calendar", icon: CalendarDays },
-];
-
-const moreItems = [
-  { to: "/suggestions", label: "Suggestions", icon: Lightbulb },
-  { to: "/templates", label: "Templates", icon: FileText },
-  { to: "/settings", label: "Settings", icon: Settings },
-  { to: "/health", label: "Health", icon: Activity },
-];
+const mainItems = NAV_ITEMS.slice(0, 4);
+const moreItems = NAV_ITEMS.slice(4);
 
 export function BottomNav() {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+  const draftsCount = useDraftsBadgeCount();
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -42,24 +27,32 @@ export function BottomNav() {
   return (
     <nav
       data-testid="bottom-nav"
-      className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="bg-warm fixed right-0 bottom-0 left-0 z-50 pb-[env(safe-area-inset-bottom)] md:hidden"
+      style={{
+        borderTop: "1px solid color-mix(in oklab, var(--ink) 12%, transparent)",
+      }}
     >
       <div className="flex items-center justify-around">
-        {mainItems.map(({ to, label, icon: Icon }) => (
+        {mainItems.map(({ to, label, icon: Icon, badge }) => (
           <NavLink
             key={to}
             to={to}
             end={to === "/"}
             className={({ isActive }) =>
-              [
-                "flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 px-2 py-1.5 text-[10px] transition-colors",
-                isActive
-                  ? "text-sage-600 font-medium"
-                  : "text-muted-foreground",
-              ].join(" ")
+              cn(
+                "fr t-micro relative flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 px-2 py-1.5 transition-colors",
+                isActive ? "font-medium text-sage-600" : "ink-muted",
+              )
             }
           >
-            <Icon className="h-5 w-5" />
+            <span className="relative">
+              <Icon size={20} strokeWidth={1.75} aria-hidden="true" />
+              {badge === "drafts" && draftsCount > 0 && (
+                <span className="t-micro absolute -top-1.5 -right-2.5 rounded-full bg-cream-300 px-1 py-px font-semibold text-cream-ink">
+                  {draftsCount}
+                </span>
+              )}
+            </span>
             {label}
           </NavLink>
         ))}
@@ -67,23 +60,24 @@ export function BottomNav() {
         {/* More dropdown */}
         <div ref={moreRef} className="relative">
           <button
+            type="button"
             onClick={() => setMoreOpen(!moreOpen)}
-            className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 px-2 py-1.5 text-[10px] text-muted-foreground transition-colors"
+            className="fr t-micro ink-muted flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 px-2 py-1.5 transition-colors"
           >
-            <MoreHorizontal className="h-5 w-5" />
+            <MoreHorizontal size={20} strokeWidth={1.75} aria-hidden="true" />
             More
           </button>
 
           {moreOpen && (
-            <div className="absolute bottom-full right-0 mb-2 w-40 rounded-lg border border-border bg-background shadow-lg">
+            <div className="bg-card border-hair absolute right-0 bottom-full mb-2 w-40 rounded-lg shadow-lg">
               <a
                 href="https://postiz.sethpc.xyz"
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setMoreOpen(false)}
-                className="flex items-center gap-2 px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-muted"
+                className="fr t-ui ink flex items-center gap-2 px-3 py-2.5 transition-colors hover:bg-sage-500/10"
               >
-                <ExternalLink className="h-4 w-4" />
+                <ExternalLink size={16} strokeWidth={1.75} aria-hidden="true" />
                 Postiz Admin
               </a>
               {moreItems.map(({ to, label, icon: Icon }) => (
@@ -92,15 +86,15 @@ export function BottomNav() {
                   to={to}
                   onClick={() => setMoreOpen(false)}
                   className={({ isActive }) =>
-                    [
-                      "flex items-center gap-2 px-3 py-2.5 text-sm transition-colors",
+                    cn(
+                      "fr t-ui flex items-center gap-2 px-3 py-2.5 transition-colors",
                       isActive
-                        ? "text-sage-600 font-medium"
-                        : "text-foreground hover:bg-muted",
-                    ].join(" ")
+                        ? "font-medium text-sage-600"
+                        : "ink hover:bg-sage-500/10",
+                    )
                   }
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
                   {label}
                 </NavLink>
               ))}

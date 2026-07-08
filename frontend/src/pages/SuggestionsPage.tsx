@@ -30,6 +30,9 @@ function suggestionToContentRow(s: Suggestion): ContentRow {
     error_msg: null,
     source: "suggestion",
     auto_publish_at: null,
+    require_review: false,
+    held_at: null,
+    alt_text: null,
   };
 }
 

@@ -1,185 +1,149 @@
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { useDashboardData } from "@/hooks/useDashboardData";
-import { api } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { PillarChart } from "@/components/analytics/PillarChart";
-import { TopPostsTable } from "@/components/analytics/TopPostsTable";
-import { KnowledgeStatus } from "@/components/analytics/KnowledgeStatus";
-import { KnowledgeSearch } from "@/components/analytics/KnowledgeSearch";
-import {
-  FileCheck,
-  CalendarDays,
-  CheckCircle,
-  PenSquare,
-  TrendingUp,
-  Eye,
-} from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Moon, Plus, Search, Sparkles, Sunrise, type LucideIcon } from "lucide-react";
 
-const statusColor: Record<string, string> = {
-  healthy: "bg-green-500",
-  degraded: "bg-yellow-500",
-  unhealthy: "bg-red-500",
-};
+import { api, type ContentRow } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/pasture";
+import { useDashboardData, type TimelineItem } from "@/hooks/useDashboardData";
+import { RitualStrip } from "@/components/dashboard/RitualStrip";
+import { TodayTimeline } from "@/components/dashboard/TodayTimeline";
+import { PillarBalanceCard } from "@/components/dashboard/PillarBalanceCard";
+import { HorizonCard } from "@/components/dashboard/HorizonCard";
+import { BlessingCard } from "@/components/dashboard/BlessingCard";
+import { PulseCard } from "@/components/dashboard/PulseCard";
+import { KnowledgeCard } from "@/components/dashboard/KnowledgeCard";
+
+interface Greeting {
+  kicker: string;
+  title: string;
+  icon: LucideIcon;
+}
+
+function greetingFor(now: Date): Greeting {
+  const hour = now.getHours();
+  if (hour < 12) return { kicker: "Morning Review", title: "Good morning.", icon: Sunrise };
+  if (hour < 17)
+    return { kicker: "Afternoon Check-in", title: "Good afternoon.", icon: Sparkles };
+  return { kicker: "Evening Publish", title: "Good evening.", icon: Moon };
+}
+
+function plural(n: number, singular: string, pluralForm: string): string {
+  return n === 1 ? singular : pluralForm;
+}
 
 export function DashboardPage() {
   const {
-    pendingCount,
-    scheduledThisWeek,
-    postedCount,
-    services,
     isLoading,
+    stats,
+    timeline,
+    pendingDrafts,
+    pillars,
+    pillarBalance,
+    festivals,
+    overview,
+    pulseSeries,
+    knowledge,
   } = useDashboardData();
 
-  const analytics = useQuery({
-    queryKey: ["analytics", "overview"],
-    queryFn: () => api.getAnalyticsOverview(),
+  const now = new Date();
+  const greeting = greetingFor(now);
+  const dateStr = now.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
   });
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6 p-6">
-        <h1 className="text-2xl font-bold text-sage-800">Dashboard</h1>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} data-testid="skeleton-card" className="h-28 rounded-xl" />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const qc = useQueryClient();
+  const holdMutation = useMutation({
+    mutationFn: ({ id, held }: { id: number; held: boolean }) =>
+      held ? api.resumeContent(id) : api.holdContent(id),
+    onMutate: async ({ id, held }) => {
+      await qc.cancelQueries({ queryKey: ["drafts"] });
+      const prev = qc.getQueryData<ContentRow[]>(["drafts"]);
+      qc.setQueryData<ContentRow[]>(["drafts"], (rows) =>
+        rows?.map((r) =>
+          r.row_number === id
+            ? { ...r, held_at: held ? null : new Date().toISOString() }
+            : r,
+        ),
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["drafts"], ctx.prev);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ["drafts"] });
+    },
+  });
+
+  const handleToggleHold = (item: TimelineItem) => {
+    holdMutation.mutate({ id: item.id, held: item.held });
+  };
+
+  const subtitle = isLoading
+    ? undefined
+    : `${stats.postedToday} ${plural(stats.postedToday, "post has", "posts have")} gone out, ` +
+      `${stats.awaitingReview} ${plural(stats.awaitingReview, "is", "are")} ready for your blessing, ` +
+      `and ${stats.scheduledToday} ${plural(stats.scheduledToday, "is", "are")} scheduled for today.`;
 
   return (
-    <div className="space-y-6 p-6">
-      <h1 className="text-2xl font-bold text-sage-800">Dashboard</h1>
-
-      {/* Stats cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Pending Drafts
-            </CardTitle>
-            <FileCheck className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{pendingCount}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Scheduled This Week
-            </CardTitle>
-            <CalendarDays className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{scheduledThisWeek}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Posts Published
-            </CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{postedCount}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Quick create */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Quick Create</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Link
-              to="/create"
-              className="flex items-center gap-3 rounded-lg border-2 border-dashed border-sage-200 p-4 text-sage-600 transition-colors hover:border-sage-400 hover:bg-sage-50"
+    <div>
+      <PageHeader
+        greeting={`${greeting.kicker} · ${dateStr}`}
+        title={greeting.title}
+        subtitle={subtitle}
+        icon={greeting.icon}
+        right={
+          <>
+            <Button
+              variant="soft"
+              size="sm"
+              className="fr"
+              onClick={() =>
+                window.dispatchEvent(new CustomEvent("gv:open-command-palette"))
+              }
             >
-              <PenSquare className="h-5 w-5" />
-              <span className="font-medium">Create Content</span>
-            </Link>
-          </CardContent>
-        </Card>
+              <Search size={13} strokeWidth={1.75} aria-hidden="true" />
+              Search…
+              <span className="t-micro bg-card ml-1 rounded border border-sage-100 px-1 py-0.5 font-mono dark:border-sage-700">
+                ⌘K
+              </span>
+            </Button>
+            <Button size="sm" asChild className="fr">
+              <Link to="/create">
+                <Plus size={13} strokeWidth={1.75} aria-hidden="true" />
+                Compose
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
-        {/* Health status */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">System Health</CardTitle>
-          </CardHeader>
-          <CardContent data-testid="health-status">
-            <div className="space-y-3">
-              {services.map((svc) => (
-                <div key={svc.name} className="flex items-center justify-between">
-                  <span className="text-sm">{svc.name}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      {svc.message}
-                    </span>
-                    <span
-                      data-status={svc.status}
-                      className={`h-2.5 w-2.5 rounded-full ${statusColor[svc.status] ?? "bg-gray-400"}`}
-                    />
-                  </div>
-                </div>
-              ))}
-              {services.length === 0 && (
-                <p className="text-sm text-muted-foreground">No services configured</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Analytics overview cards */}
-      {analytics.data && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Engagement
-              </CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">{analytics.data.total_engagement.toLocaleString()}</p>
-              <p className="text-xs text-muted-foreground">avg {analytics.data.avg_engagement} per post</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Reach
-              </CardTitle>
-              <Eye className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">{analytics.data.total_reach.toLocaleString()}</p>
-              <p className="text-xs text-muted-foreground">{analytics.data.total_impressions.toLocaleString()} impressions</p>
-            </CardContent>
-          </Card>
+      <div className="grid gap-6 px-4 py-7 sm:px-8 xl:grid-cols-[minmax(0,1fr)_340px]">
+        {/* LEFT COLUMN */}
+        <div className="min-w-0 space-y-6">
+          <RitualStrip stats={stats} isLoading={isLoading} />
+          <TodayTimeline
+            items={timeline}
+            pillars={pillars}
+            now={now}
+            isLoading={isLoading}
+            onToggleHold={handleToggleHold}
+          />
+          <div className="grid gap-5 md:grid-cols-2">
+            <PillarBalanceCard rows={pillarBalance} isLoading={isLoading} />
+            <HorizonCard festivals={festivals} isLoading={isLoading} />
+          </div>
         </div>
-      )}
 
-      {/* Analytics charts and widgets */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <PillarChart />
-        <TopPostsTable />
-      </div>
-
-      {/* Knowledge base */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <KnowledgeStatus />
-        <KnowledgeSearch />
+        {/* RIGHT COLUMN */}
+        <div className="min-w-0 space-y-6">
+          <BlessingCard pendingDrafts={pendingDrafts} />
+          <PulseCard overview={overview} series={pulseSeries} isLoading={isLoading} />
+          <KnowledgeCard knowledge={knowledge} />
+        </div>
       </div>
     </div>
   );

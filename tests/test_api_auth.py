@@ -49,7 +49,29 @@ class TestLogin:
     def test_login_wrong_password(self, client):
         response = client.post("/api/auth/login", json={"password": "wrong"})
         assert response.status_code == 401
-        assert "incorrect" in response.json()["detail"].lower()
+        detail = response.json()["detail"]
+        assert detail["message"] == "invalid_password"
+        assert detail["attempts_remaining"] == 4
+
+    def test_attempts_remaining_decrements_then_locks(self, client):
+        """Each failed login reports remaining tries; 6th request is locked out."""
+        for expected in (4, 3, 2, 1, 0):
+            response = client.post("/api/auth/login", json={"password": "wrong"})
+            assert response.status_code == 401
+            assert response.json()["detail"]["attempts_remaining"] == expected
+
+        response = client.post("/api/auth/login", json={"password": "wrong"})
+        assert response.status_code == 429
+        assert "second" in response.json()["detail"]
+
+    def test_attempts_reset_after_successful_login(self, client):
+        """A successful login clears the failure counter."""
+        client.post("/api/auth/login", json={"password": "wrong"})
+        client.post("/api/auth/login", json={"password": "correctpassword"})
+
+        response = client.post("/api/auth/login", json={"password": "wrong"})
+        assert response.status_code == 401
+        assert response.json()["detail"]["attempts_remaining"] == 4
 
     def test_login_missing_password(self, client):
         response = client.post("/api/auth/login", json={})

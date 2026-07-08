@@ -38,6 +38,9 @@ const sampleRow: ContentRow = {
   error_msg: null,
   source: "manual",
   auto_publish_at: null,
+  require_review: false,
+  held_at: null,
+  alt_text: null,
 };
 
 function renderEditor(

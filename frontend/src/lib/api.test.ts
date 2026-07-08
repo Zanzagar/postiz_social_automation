@@ -110,21 +110,11 @@ describe("authenticated requests", () => {
     expect(opts.headers["Authorization"]).toBeUndefined();
   });
 
-  it("clears token and redirects on 401 response", async () => {
+  it("dispatches gv:session-expired and keeps the token on 401 response", async () => {
     setToken("expired-jwt");
 
-    // The 401 handler tries to set window.location.href
-    // We use a writable mock
-    const hrefSetter = vi.fn();
-    locationHrefSpy.mockReturnValue({
-      ...window.location,
-      set href(v: string) {
-        hrefSetter(v);
-      },
-      get href() {
-        return "http://localhost:3000";
-      },
-    } as unknown as Location);
+    const expiredListener = vi.fn();
+    window.addEventListener("gv:session-expired", expiredListener);
 
     mockFetch.mockResolvedValueOnce({
       ok: false,
@@ -134,7 +124,12 @@ describe("authenticated requests", () => {
     });
 
     await expect(api.getDrafts()).rejects.toThrow(ApiError);
-    expect(getToken()).toBeNull();
+
+    // Token is preserved so in-progress drafts survive re-auth
+    expect(getToken()).toBe("expired-jwt");
+    expect(expiredListener).toHaveBeenCalledTimes(1);
+
+    window.removeEventListener("gv:session-expired", expiredListener);
   });
 });
 
@@ -177,6 +172,34 @@ describe("api endpoints use correct paths", () => {
   it("approveDraft POSTs to /api/drafts/{row}/approve", async () => {
     await api.approveDraft(3);
     expect(mockFetch.mock.calls[0][0]).toBe("/api/drafts/3/approve");
+  });
+
+  it("holdContent POSTs to /api/content/{id}/hold", async () => {
+    await api.holdContent(7);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/content/7/hold");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+  });
+
+  it("resumeContent POSTs to /api/content/{id}/resume", async () => {
+    await api.resumeContent(7);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/content/7/resume");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+  });
+
+  it("setRequireReview PUTs to /api/content/{id}/require-review", async () => {
+    await api.setRequireReview(7, true);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/content/7/require-review");
+    expect(mockFetch.mock.calls[0][1].method).toBe("PUT");
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ require_review: true });
+  });
+
+  it("setAltText PUTs to /api/content/{id}/alt-text", async () => {
+    await api.setAltText(7, "A cow grazing at dawn");
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/content/7/alt-text");
+    expect(mockFetch.mock.calls[0][1].method).toBe("PUT");
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+      alt_text: "A cow grazing at dawn",
+    });
   });
 
   it("getHealth calls /api/health", async () => {

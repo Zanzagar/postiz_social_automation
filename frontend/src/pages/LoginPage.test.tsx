@@ -1,10 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BrowserRouter } from "react-router-dom";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LoginPage } from "./LoginPage";
 import { AuthContext, type AuthContextValue } from "@/contexts/AuthContext";
-import { ApiError } from "@/lib/api";
+import { LoginError } from "@/contexts/login-error";
 
 const mockNavigate = vi.fn();
 vi.mock("react-router-dom", async () => {
@@ -16,6 +16,7 @@ function renderLogin(overrides: Partial<AuthContextValue> = {}) {
   const auth: AuthContextValue = {
     isAuthenticated: false,
     isLoading: false,
+    sessionExpired: false,
     login: vi.fn(),
     logout: vi.fn(),
     ...overrides,
@@ -37,18 +38,34 @@ describe("LoginPage", () => {
     mockNavigate.mockReset();
   });
 
-  it("renders branding and form", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("renders the gate: branding, form, and divider notes", () => {
     renderLogin();
     expect(screen.getByText("Gita Valley")).toBeInTheDocument();
     expect(screen.getByText("Cultivating Soil and Soul")).toBeInTheDocument();
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Welcome back to the pasture" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Farm password")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open the gate" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Port Royal, Pennsylvania")).toBeInTheDocument();
+    expect(
+      screen.getByText(/named accounts arrive with Phase 4/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Unsaved drafts stay safe on this device/i),
+    ).toBeInTheDocument();
   });
 
   it("requires password before submitting", async () => {
     const user = userEvent.setup();
     const { auth } = renderLogin();
-    await user.click(screen.getByRole("button", { name: /sign in/i }));
+    await user.click(screen.getByRole("button", { name: "Open the gate" }));
     expect(auth.login).not.toHaveBeenCalled();
   });
 
@@ -57,8 +74,8 @@ describe("LoginPage", () => {
     const login = vi.fn().mockResolvedValue(undefined);
     renderLogin({ login });
 
-    await user.type(screen.getByLabelText(/password/i), "correct-pass");
-    await user.click(screen.getByRole("button", { name: /sign in/i }));
+    await user.type(screen.getByLabelText("Farm password"), "correct-pass");
+    await user.click(screen.getByRole("button", { name: "Open the gate" }));
 
     await waitFor(() => {
       expect(login).toHaveBeenCalledWith("correct-pass");
@@ -66,45 +83,93 @@ describe("LoginPage", () => {
     });
   });
 
-  it("shows error on incorrect password (401)", async () => {
-    const user = userEvent.setup();
-    const login = vi.fn().mockRejectedValue(new ApiError(401, "Incorrect password."));
-    renderLogin({ login });
-
-    await user.type(screen.getByLabelText(/password/i), "wrong");
-    await user.click(screen.getByRole("button", { name: /sign in/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText("Incorrect password.")).toBeInTheDocument();
-    });
-  });
-
-  it("shows lockout message on rate limit (429)", async () => {
+  it("shows attempts remaining on wrong password", async () => {
     const user = userEvent.setup();
     const login = vi.fn().mockRejectedValue(
-      new ApiError(429, "Too many failed attempts. Try again in 120 seconds."),
+      new LoginError(401, "Incorrect password.", { attemptsRemaining: 4 }),
     );
     renderLogin({ login });
 
-    await user.type(screen.getByLabelText(/password/i), "wrong");
-    await user.click(screen.getByRole("button", { name: /sign in/i }));
+    await user.type(screen.getByLabelText("Farm password"), "molasses");
+    await user.click(screen.getByRole("button", { name: "Open the gate" }));
 
-    await waitFor(() => {
-      expect(screen.getByText(/too many failed attempts/i)).toBeInTheDocument();
-    });
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "That's not it — 4 tries remaining before the gate rests.",
+    );
+    expect(screen.getByLabelText("Farm password")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
   });
 
-  it("disables form during submission", async () => {
+  it("does not crash when the 401 carries no attempts count", async () => {
+    const user = userEvent.setup();
+    const login = vi
+      .fn()
+      .mockRejectedValue(new LoginError(401, "Incorrect password."));
+    renderLogin({ login });
+
+    await user.type(screen.getByLabelText("Farm password"), "wrong");
+    await user.click(screen.getByRole("button", { name: "Open the gate" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("That's not it — try again.");
+  });
+
+  it("shows the resting-gate lockout card with a live countdown", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date("2026-07-06T10:00:00Z"));
+
+    const user = userEvent.setup();
+    const login = vi.fn().mockRejectedValue(
+      new LoginError(429, "Too many failed attempts. Try again in 277 seconds.", {
+        retrySeconds: 277,
+      }),
+    );
+    renderLogin({ login });
+
+    await user.type(screen.getByLabelText("Farm password"), "wrong");
+    await user.click(screen.getByRole("button", { name: "Open the gate" }));
+
+    expect(
+      await screen.findByText("Too many tries — the gate is resting."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("4:37")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open the gate" }),
+    ).toBeDisabled();
+    expect(screen.getByLabelText("Farm password")).toBeDisabled();
+
+    // One minute later the countdown has ticked down
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(screen.getByText("3:37")).toBeInTheDocument();
+
+    // After the full lockout window the gate reopens
+    act(() => {
+      vi.advanceTimersByTime(4 * 60_000);
+    });
+    expect(
+      screen.queryByText("Too many tries — the gate is resting."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Farm password")).not.toBeDisabled();
+  });
+
+  it("disables the submit button during submission", async () => {
     const user = userEvent.setup();
     // Login that never resolves to keep loading state
     const login = vi.fn().mockReturnValue(new Promise(() => {}));
     renderLogin({ login });
 
-    await user.type(screen.getByLabelText(/password/i), "test");
-    await user.click(screen.getByRole("button", { name: /sign in/i }));
+    await user.type(screen.getByLabelText("Farm password"), "test");
+    await user.click(screen.getByRole("button", { name: "Open the gate" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /signing in/i })).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: "Open the gate" }),
+      ).toBeDisabled();
     });
   });
 

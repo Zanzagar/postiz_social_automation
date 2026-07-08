@@ -51,8 +51,9 @@ export async function request<T>(
   const res = await fetch(path, { ...options, headers });
 
   if (res.status === 401) {
-    clearToken();
-    window.location.href = "/login";
+    // Do NOT clear the token or redirect — in-progress drafts must survive
+    // re-auth. The app listens for this event and shows an inline re-auth UI.
+    window.dispatchEvent(new CustomEvent("gv:session-expired"));
     throw new ApiError(401, "Unauthorized");
   }
 
@@ -94,6 +95,9 @@ export interface ContentRow {
   error_msg: string | null;
   source: string;
   auto_publish_at: string | null;
+  require_review: boolean;
+  held_at: string | null;
+  alt_text: string | null;
 }
 
 export interface CalendarEntry {
@@ -205,7 +209,8 @@ export interface Pillar {
   id: number;
   name: string;
   description: string | null;
-  color: string | null;
+  color?: string | null;
+  target?: number | null;
   is_active: boolean;
   sort_order: number;
 }
@@ -493,6 +498,29 @@ export const api = {
   approveDraft(rowNumber: number) {
     return request<ApproveResponse>(`/api/drafts/${rowNumber}/approve`, {
       method: "POST",
+    });
+  },
+
+  // Auto-publish hold / release controls
+  holdContent(id: number) {
+    return request<ContentRow>(`/api/content/${id}/hold`, { method: "POST" });
+  },
+
+  resumeContent(id: number) {
+    return request<ContentRow>(`/api/content/${id}/resume`, { method: "POST" });
+  },
+
+  setRequireReview(id: number, value: boolean) {
+    return request<ContentRow>(`/api/content/${id}/require-review`, {
+      method: "PUT",
+      body: JSON.stringify({ require_review: value }),
+    });
+  },
+
+  setAltText(id: number, altText: string) {
+    return request<ContentRow>(`/api/content/${id}/alt-text`, {
+      method: "PUT",
+      body: JSON.stringify({ alt_text: altText }),
     });
   },
 
@@ -863,12 +891,23 @@ export const api = {
  */
 
 /**
+ * Parsed SSE event union for POST /api/generate.
+ * Sequence: validating -> generating -> zero+ platform_done -> done | error.
+ */
+export type GenerateStreamEvent =
+  | { status: "validating" }
+  | { status: "generating" }
+  | { status: "platform_done"; platform: string; caption: string }
+  | { status: "done"; row_id: number; captions: Record<string, string> }
+  | { status: "error"; message: string };
+
+/**
  * Stream caption generation via fetch + ReadableStream.
  * Yields parsed SSE data objects.
  */
 export async function* fetchGenerateStream(
   data: GenerateRequest,
-): AsyncGenerator<{ status: string; captions?: Record<string, string>; message?: string }> {
+): AsyncGenerator<GenerateStreamEvent> {
   const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
