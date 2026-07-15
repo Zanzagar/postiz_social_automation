@@ -126,30 +126,157 @@ class TestRateLimitRetry:
 
 
 class TestGetPostAnalytics:
+    """Converged on canonical GET /analytics/post/{postId} (I2 resolved)."""
+
     @patch("content_engine.postiz.requests.Session.request")
-    def test_returns_post_performance(self, mock_request, client) -> None:
+    def test_calls_canonical_analytics_endpoint(self, mock_request, client) -> None:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
-            "id": "post_123",
+            "likes": 150,
+            "comments": 23,
+            "shares": 8,
+            "reach": 900,
+            "impressions": 2000,
+        }
+        mock_request.return_value = mock_resp
+
+        client.get_post_analytics(post_id="post_123", pillar="Cow Life")
+
+        mock_request.assert_called_once_with(
+            "GET",
+            "https://postiz.example.com/api/public/v1/analytics/post/post_123",
+        )
+
+    @patch("content_engine.postiz.requests.Session.request")
+    def test_returns_post_performance_with_unified_fields(self, mock_request, client) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "likes": 150,
+            "comments": 23,
+            "shares": 8,
+            "reach": 900,
+            "impressions": 2000,
             "integration": {"providerIdentifier": "instagram"},
-            "statistics": {
-                "likes": 150,
-                "comments": 23,
-                "shares": 8,
-            },
             "publishedAt": "2026-02-20T14:00:00Z",
         }
         mock_request.return_value = mock_resp
 
-        perf = client.get_post_analytics(
-            post_id="post_123",
-            pillar="Cow Life",
-        )
+        perf = client.get_post_analytics(post_id="post_123", pillar="Cow Life")
 
         assert perf.post_id == "post_123"
         assert perf.likes == 150
         assert perf.comments == 23
+        assert perf.shares == 8
+        assert perf.reach == 900
+        assert perf.impressions == 2000
+
+    @patch("content_engine.postiz.requests.Session.request")
+    def test_engagement_rate_computed_our_side(self, mock_request, client) -> None:
+        """engagement_rate = (likes+comments+shares)/reach, never read from Postiz."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "likes": 60,
+            "comments": 30,
+            "shares": 10,
+            "reach": 1000,
+            "impressions": 1500,
+            "engagement_rate": 99.9,  # must be ignored — computed our side
+        }
+        mock_request.return_value = mock_resp
+
+        perf = client.get_post_analytics(post_id="p1", pillar="Cow Life")
+
+        assert perf.engagement_rate == pytest.approx(0.1)  # (60+30+10)/1000
+
+    @patch("content_engine.postiz.requests.Session.request")
+    def test_engagement_rate_zero_when_no_reach(self, mock_request, client) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"likes": 5, "comments": 1, "shares": 0, "reach": 0}
+        mock_request.return_value = mock_resp
+
+        perf = client.get_post_analytics(post_id="p1", pillar="Cow Life")
+
+        assert perf.engagement_rate == 0.0
+
+    @patch("content_engine.postiz.requests.Session.request")
+    def test_missing_metrics_default_to_zero(self, mock_request, client) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {}
+        mock_request.return_value = mock_resp
+
+        perf = client.get_post_analytics(post_id="p1", pillar="Cow Life")
+
+        assert perf.likes == 0
+        assert perf.reach == 0
+        assert perf.impressions == 0
+        assert perf.engagement_rate == 0.0
+
+
+class TestFetchPostAnalytics:
+    """Raw canonical fetch shared by PostizAnalyticsSync."""
+
+    @patch("content_engine.postiz.requests.Session.request")
+    def test_returns_normalized_field_set(self, mock_request, client) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "likes": 45,
+            "comments": 8,
+            "shares": 12,
+            "reach": 500,
+            "impressions": 1200,
+        }
+        mock_request.return_value = mock_resp
+
+        metrics = client.fetch_post_analytics("post_9")
+
+        assert metrics["likes"] == 45
+        assert metrics["comments"] == 8
+        assert metrics["shares"] == 12
+        assert metrics["reach"] == 500
+        assert metrics["impressions"] == 1200
+
+    @patch("content_engine.postiz.requests.Session.request")
+    def test_tolerates_nested_statistics_payload(self, mock_request, client) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"statistics": {"likes": 7, "reach": 100}}
+        mock_request.return_value = mock_resp
+
+        metrics = client.fetch_post_analytics("post_9")
+
+        assert metrics["likes"] == 7
+        assert metrics["reach"] == 100
+        assert metrics["shares"] == 0
+
+
+class TestGetIntegrationAnalytics:
+    @patch("content_engine.postiz.requests.Session.request")
+    def test_calls_platform_level_endpoint(self, mock_request, client) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "likes": 500,
+            "comments": 80,
+            "shares": 40,
+            "reach": 9000,
+            "impressions": 15000,
+        }
+        mock_request.return_value = mock_resp
+
+        metrics = client.get_integration_analytics("int_42")
+
+        mock_request.assert_called_once_with(
+            "GET",
+            "https://postiz.example.com/api/public/v1/analytics/int_42",
+        )
+        assert metrics["likes"] == 500
+        assert metrics["impressions"] == 15000
 
 
 class TestErrorHandling:

@@ -71,6 +71,44 @@ def parse_google_drive_url(url: str) -> str:
     raise ValueError(f"Cannot extract file ID from Google Drive URL: {url}")
 
 
+# Canonical unified analytics field set (POSTIZ_CONTRACT.md §7, I2 resolved).
+ANALYTICS_FIELDS = ("likes", "comments", "shares", "reach", "impressions")
+
+
+def _normalize_analytics_payload(data: dict) -> dict:
+    """Normalize a Postiz analytics payload to the canonical field set.
+
+    Accepts the metrics either flat on the payload or nested under a
+    ``statistics``/``analytics`` key (defensive — the live instance can't
+    be verified while POSTIZ_API_KEY is a placeholder). Missing metrics
+    default to 0. Provider and publish-date metadata are passed through
+    when present so callers can attribute the metrics.
+    """
+    stats = data
+    for nested_key in ("statistics", "analytics"):
+        nested = data.get(nested_key)
+        if isinstance(nested, dict):
+            stats = nested
+            break
+
+    def _as_int(value: object) -> int:
+        try:
+            return int(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 0
+
+    normalized = {field: _as_int(stats.get(field, 0)) for field in ANALYTICS_FIELDS}
+
+    integration = data.get("integration")
+    if isinstance(integration, dict):
+        normalized["provider"] = integration.get("providerIdentifier", "")
+    else:
+        normalized["provider"] = data.get("providerIdentifier", "")
+
+    normalized["published_at"] = data.get("publishedAt", "") or ""
+    return normalized
+
+
 class PostizAPIError(Exception):
     """Raised when the Postiz API returns an unrecoverable error."""
 
@@ -247,28 +285,70 @@ class PostizClient:
             if tmp_path and tmp_path.exists():
                 tmp_path.unlink()
 
+    def fetch_post_analytics(self, post_id: str) -> dict:
+        """Fetch raw analytics for a post from the canonical endpoint.
+
+        Canonical per POSTIZ_CONTRACT.md §7 (I2 resolved):
+        ``GET /analytics/post/{postId}`` returning the unified field set
+        {likes, comments, shares, reach, impressions}. ``engagement_rate``
+        is NOT read from Postiz — it is computed our side.
+
+        Returns the normalized metrics dict plus any provider/date
+        metadata found in the payload (under ``integration`` /
+        ``publishedAt`` keys when present).
+        """
+        data = self._request("GET", f"/analytics/post/{post_id}")
+        if not isinstance(data, dict):
+            data = {}
+        return _normalize_analytics_payload(data)
+
+    def get_integration_analytics(self, integration_id: str) -> dict:
+        """Fetch platform-level analytics for a connected channel.
+
+        Canonical per POSTIZ_CONTRACT.md §7 (I2 resolved):
+        ``GET /analytics/{integrationId}``. Returns the normalized
+        unified field set {likes, comments, shares, reach, impressions}.
+        """
+        data = self._request("GET", f"/analytics/{integration_id}")
+        if not isinstance(data, dict):
+            data = {}
+        return _normalize_analytics_payload(data)
+
     def get_post_analytics(
         self,
         post_id: str,
         pillar: str,
     ) -> PostPerformance:
-        """Get engagement metrics for a published post."""
-        data = self._request("GET", f"/posts/{post_id}")
+        """Get engagement metrics for a published post.
 
-        provider = data.get("integration", {}).get("providerIdentifier", "")
+        Uses the canonical ``GET /analytics/post/{postId}`` endpoint and
+        computes engagement_rate our side: (likes+comments+shares)/reach
+        when reach > 0, else 0.0.
+        """
+        metrics = self.fetch_post_analytics(post_id)
+
+        provider = metrics.get("provider", "")
         platform = _PROVIDER_TO_PLATFORM.get(provider, Platform.INSTAGRAM)
 
-        stats = data.get("statistics", {})
-        published_at = data.get("publishedAt", "")
+        published_at = metrics.get("published_at", "")
+        posted_at = (
+            datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+            if published_at
+            else datetime.now()
+        )
+
+        engagement = metrics["likes"] + metrics["comments"] + metrics["shares"]
+        rate = engagement / metrics["reach"] if metrics["reach"] > 0 else 0.0
 
         return PostPerformance(
             post_id=post_id,
             platform=platform,
             pillar=pillar,
-            posted_at=datetime.fromisoformat(published_at) if published_at else datetime.now(),
-            likes=stats.get("likes", 0),
-            comments=stats.get("comments", 0),
-            shares=stats.get("shares", 0),
-            reach=stats.get("reach", 0),
-            engagement_rate=stats.get("engagement_rate", 0.0),
+            posted_at=posted_at,
+            likes=metrics["likes"],
+            comments=metrics["comments"],
+            shares=metrics["shares"],
+            reach=metrics["reach"],
+            impressions=metrics["impressions"],
+            engagement_rate=rate,
         )

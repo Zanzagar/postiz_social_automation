@@ -40,11 +40,14 @@ def hashtag_db(tmp_path):
             imported_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(platform, external_id)
         );
-        INSERT INTO social_history (platform, external_id, post_text, hashtags, likes, comments, shares)
+        INSERT INTO social_history (platform, external_id, post_text, hashtags,
+                                    likes, comments, shares)
         VALUES ('instagram', 'ig_1', 'Farm life', '["GitaValley","FarmLife"]', 60, 5, 2);
-        INSERT INTO social_history (platform, external_id, post_text, hashtags, likes, comments, shares)
+        INSERT INTO social_history (platform, external_id, post_text, hashtags,
+                                    likes, comments, shares)
         VALUES ('instagram', 'ig_2', 'Cows!', '["GitaValley","CowProtection"]', 80, 10, 5);
-        INSERT INTO social_history (platform, external_id, post_text, hashtags, likes, comments, shares)
+        INSERT INTO social_history (platform, external_id, post_text, hashtags,
+                                    likes, comments, shares)
         VALUES ('facebook', 'fb_1', 'Sunday', '["GitaValley"]', 30, 3, 8);
     """)
     conn.commit()
@@ -77,7 +80,8 @@ class TestUpdatePerformance:
         conn = sqlite3.connect(str(hashtag_db))
         conn.row_factory = sqlite3.Row
         row = conn.execute(
-            "SELECT * FROM hashtag_performance WHERE hashtag = 'GitaValley' AND platform = 'instagram'"
+            "SELECT * FROM hashtag_performance "
+            "WHERE hashtag = 'GitaValley' AND platform = 'instagram'"
         ).fetchone()
         conn.close()
         # ig_1: 60+5+2=67, ig_2: 80+10+5=95 -> total=162, avg=81
@@ -99,6 +103,57 @@ class TestGetTopHashtags:
         top = tracker.get_top_hashtags(platform="facebook")
         platforms = {t["platform"] for t in top}
         assert platforms == {"facebook"}
+
+
+class TestLiveSchemaCompatibility:
+    def test_update_performance_with_not_null_trend_column(self, tmp_path):
+        """Live gvsa.db has trend NOT NULL without default — insert must supply it."""
+        db_path = tmp_path / "live.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript("""
+            CREATE TABLE hashtag_performance (
+                id INTEGER NOT NULL,
+                hashtag VARCHAR(255) NOT NULL,
+                platform VARCHAR(50) NOT NULL,
+                times_used INTEGER NOT NULL,
+                total_engagement INTEGER NOT NULL,
+                avg_engagement FLOAT NOT NULL,
+                trend VARCHAR(20) NOT NULL,
+                updated_at DATETIME NOT NULL,
+                PRIMARY KEY (id),
+                CONSTRAINT uq_hashtag_platform UNIQUE (hashtag, platform)
+            );
+            CREATE TABLE social_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                platform TEXT NOT NULL,
+                external_id TEXT NOT NULL,
+                post_text TEXT,
+                hashtags TEXT,
+                posted_at DATETIME,
+                likes INTEGER DEFAULT 0,
+                comments INTEGER DEFAULT 0,
+                shares INTEGER DEFAULT 0,
+                reach INTEGER DEFAULT 0,
+                pillar TEXT,
+                imported_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(platform, external_id)
+            );
+            INSERT INTO social_history (platform, external_id, post_text, hashtags,
+                                    likes, comments, shares)
+            VALUES ('facebook', 'fb_1', 'Cows', '["GitaValley"]', 10, 2, 1);
+        """)
+        conn.commit()
+        conn.close()
+
+        tracker = HashtagTracker(str(db_path))
+        tracker.update_performance()  # must not raise IntegrityError
+
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute(
+            "SELECT trend FROM hashtag_performance WHERE hashtag = 'GitaValley'"
+        ).fetchone()
+        conn.close()
+        assert row[0] == "stable"
 
 
 class TestSuggestHashtags:
