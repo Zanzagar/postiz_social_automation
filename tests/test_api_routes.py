@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.models import Base
-from content_engine.models import Platform, Suggestion
+from content_engine.models import Platform
 
 
 @pytest.fixture(autouse=True)
@@ -32,17 +32,6 @@ def _env_vars(monkeypatch):
     monkeypatch.setenv("SPREADSHEET_ID", "test-spreadsheet-id")
     monkeypatch.setenv("GOOGLE_SHEETS_CREDENTIALS", "/tmp/test-creds.json")
     monkeypatch.setenv("DATABASE_PATH", ":memory:")
-
-
-def _make_suggestion() -> Suggestion:
-    return Suggestion(
-        suggested_date=datetime(2026, 3, 20),
-        content_idea="Post about spring calves",
-        suggested_pillar="Cow Life",
-        rationale="No cow content in 5 days",
-        media_suggestion="Photo of new calves in pasture",
-        status="suggested",
-    )
 
 
 @pytest_asyncio.fixture
@@ -66,7 +55,6 @@ def repo(db_session):
 @pytest.fixture
 def mock_sheets():
     mock = MagicMock()
-    mock.get_suggestions.return_value = [_make_suggestion()]
     mock.get_recent_errors.return_value = []
     return mock
 
@@ -189,21 +177,6 @@ class TestCalendarEndpoint:
         assert "entries" in data
         assert "total" in data
         assert data["total"] == 2  # pending_approval + approved
-
-
-class TestSuggestionsEndpoint:
-    def test_get_suggestions(self, client, mock_sheets):
-        headers = _auth_header(client)
-        response = client.get("/api/suggestions", headers=headers)
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data) == 1
-        assert data[0]["content_idea"] == "Post about spring calves"
-
-    def test_get_suggestions_with_filter(self, client, mock_sheets):
-        headers = _auth_header(client)
-        client.get("/api/suggestions?status=suggested", headers=headers)
-        mock_sheets.get_suggestions.assert_called_with(status="suggested")
 
 
 class TestContentRowEndpoint:

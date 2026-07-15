@@ -1,13 +1,16 @@
-"""Knowledge base API endpoints — crawl triggers, status, search."""
+"""Knowledge base API endpoints — crawl triggers, status, search, grounded Q&A."""
 
 import json
 import logging
 import sqlite3
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from pydantic import BaseModel
 
 from api.auth import get_current_user
+from api.services.knowledge_ask import ask_question
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +133,19 @@ async def get_stats(db_path: str = Depends(get_db_path)):
            LIMIT 10"""
     ).fetchall()
 
+    # True total of gap pages (same predicate) — the list above is capped
+    # at 10, so the frontend must not use its length as the total.
+    coverage_gap_count = conn.execute(
+        """SELECT COUNT(*) FROM (
+               SELECT wp.id
+               FROM web_pages wp
+               LEFT JOIN web_knowledge wk ON wk.web_page_id = wp.id
+               WHERE length(wp.body_text) > 200
+               GROUP BY wp.id
+               HAVING COUNT(wk.id) = 0
+           )"""
+    ).fetchone()[0]
+
     conn.close()
 
     return {
@@ -145,6 +161,7 @@ async def get_stats(db_path: str = Depends(get_db_path)):
             for r in coverage
             if r["fact_count"] == 0
         ],
+        "coverage_gap_count": coverage_gap_count,
     }
 
 
@@ -367,6 +384,48 @@ async def search_knowledge(
         )
 
     return {"results": results, "count": len(results)}
+
+
+# ------------------------------------------------------------------
+# POST /ask — grounded Q&A over the knowledge base ("Ask the farm")
+# ------------------------------------------------------------------
+
+
+class AskRequest(BaseModel):
+    """Request body for POST /api/knowledge/ask."""
+
+    question: str
+
+
+class AskSource(BaseModel):
+    """A knowledge snippet grounding an answer."""
+
+    content: str
+    fact_type: str | None = None
+    topic: str | None = None
+    pillar: str | None = None
+    site: str | None = None
+    page_title: str | None = None
+    score: float | None = None
+
+
+class AskResponse(BaseModel):
+    """Response for POST /api/knowledge/ask."""
+
+    answer: str | None
+    sources: list[AskSource]
+    answered_by: Literal["claude", "search_only"]
+
+
+@router.post("/ask", response_model=AskResponse)
+async def ask_knowledge(payload: AskRequest, db_path: str = Depends(get_db_path)):
+    """Answer a question grounded in knowledge base snippets.
+
+    Uses hybrid search (FTS5 + vector, RRF-fused) to fetch relevant
+    entries, then synthesizes a grounded answer via the Claude CLI.
+    Degrades to search-only results on any CLI failure or timeout.
+    """
+    return await ask_question(db_path, payload.question)
 
 
 # ------------------------------------------------------------------

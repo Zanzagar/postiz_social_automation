@@ -54,7 +54,12 @@ class Suggestion(BaseModel):
 
 
 class PostPerformance(BaseModel):
-    """Engagement metrics for a published post."""
+    """Engagement metrics for a published post.
+
+    Canonical field set per POSTIZ_CONTRACT.md §7 (I2): likes, comments,
+    shares, reach, impressions. engagement_rate is computed our side as
+    (likes + comments + shares) / reach when reach > 0.
+    """
 
     post_id: str
     platform: Platform
@@ -64,6 +69,7 @@ class PostPerformance(BaseModel):
     comments: int = 0
     shares: int = 0
     reach: int = 0
+    impressions: int = 0
     engagement_rate: float = 0.0
 
 

@@ -290,6 +290,84 @@ describe("ContentEditorSheet — refine mode", () => {
     renderSheet({ rowId: null });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+
+  it("shows a calm 'No captions yet' hint for suggestion drafts (raw_text only, no platforms/captions)", async () => {
+    mockGetContentRow.mockResolvedValue({
+      ...baseRow,
+      raw_text: "Rama Navami — feast day, plan two posts.",
+      platforms: {},
+      captions: {},
+      source: "suggestion",
+      status: "draft",
+    });
+    mockGetIterations.mockResolvedValue([]);
+    renderSheet();
+
+    await screen.findByText("Rama Navami — feast day, plan two posts.");
+    expect(screen.getByText("No captions yet")).toBeInTheDocument();
+    expect(
+      screen.getByText(/compose can grow captions from this idea/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open compose/i })).toHaveAttribute(
+      "href",
+      "/create",
+    );
+    // No caption cards for a captionless draft — the hint replaces them
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("blocks Approve for a captionless draft and explains why (regression: zero-platform approve)", async () => {
+    mockGetContentRow.mockResolvedValue({
+      ...baseRow,
+      raw_text: "Rama Navami — feast day, plan two posts.",
+      platforms: {},
+      captions: {},
+      source: "suggestion",
+      status: "draft",
+    });
+    mockGetIterations.mockResolvedValue([]);
+    renderSheet();
+
+    await screen.findByText("Rama Navami — feast day, plan two posts.");
+    const approve = screen.getByRole("button", { name: /approve & schedule/i });
+    expect(approve).toBeDisabled();
+    expect(approve).toHaveAttribute("aria-describedby", "no-captions-note");
+    const note = screen.getByText("Add captions before approving.");
+    expect(note).toHaveAttribute("id", "no-captions-note");
+  });
+
+  it("seeds the Create local draft when Open Compose is clicked (regression: blank composer)", async () => {
+    const user = userEvent.setup();
+    mockGetContentRow.mockResolvedValue({
+      ...baseRow,
+      raw_text: "Rama Navami — feast day, plan two posts.",
+      date: "2026-07-16",
+      content_pillar: "Spiritual",
+      platforms: {},
+      captions: {},
+      source: "suggestion",
+      status: "draft",
+    });
+    mockGetIterations.mockResolvedValue([]);
+    localStorage.removeItem("gv-draft-create");
+    renderSheet();
+
+    await screen.findByText("Rama Navami — feast day, plan two posts.");
+    await user.click(screen.getByRole("link", { name: /open compose/i }));
+
+    const raw = localStorage.getItem("gv-draft-create");
+    expect(raw).not.toBeNull();
+    const seeded = JSON.parse(raw as string);
+    expect(seeded).toMatchObject({
+      seed: "Rama Navami — feast day, plan two posts.",
+      pillar: "Spiritual",
+      stage: "compose",
+      scheduledDate: "2026-07-16",
+    });
+    // The generate flow always creates a NEW row — never write this row's id.
+    expect(seeded.rowId).toBeUndefined();
+    localStorage.removeItem("gv-draft-create");
+  });
 });
 
 describe("ContentEditorSheet — autosave, countdown, and copy", () => {

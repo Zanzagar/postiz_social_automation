@@ -3,7 +3,7 @@
 import json
 import logging
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,8 @@ class HashtagTracker:
 
         # Get all posts with hashtags
         rows = conn.execute(
-            "SELECT platform, hashtags, likes, comments, shares FROM social_history WHERE hashtags IS NOT NULL"
+            "SELECT platform, hashtags, likes, comments, shares "
+            "FROM social_history WHERE hashtags IS NOT NULL"
         ).fetchall()
 
         # Aggregate per (hashtag, platform)
@@ -47,20 +48,25 @@ class HashtagTracker:
                 stats[key]["total_engagement"] += engagement
 
         # Upsert into hashtag_performance
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         for (hashtag, platform), data in stats.items():
             avg = data["total_engagement"] / data["times_used"] if data["times_used"] > 0 else 0
+            # trend is NOT NULL without default in the live schema — always insert it.
             conn.execute(
-                """INSERT INTO hashtag_performance (hashtag, platform, times_used, total_engagement, avg_engagement, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?)
+                """INSERT INTO hashtag_performance
+                   (hashtag, platform, times_used, total_engagement,
+                    avg_engagement, trend, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(hashtag, platform)
-                   DO UPDATE SET times_used = ?, total_engagement = ?, avg_engagement = ?, updated_at = ?""",
+                   DO UPDATE SET times_used = ?, total_engagement = ?,
+                                 avg_engagement = ?, updated_at = ?""",
                 (
                     hashtag,
                     platform,
                     data["times_used"],
                     data["total_engagement"],
                     avg,
+                    "stable",
                     now,
                     data["times_used"],
                     data["total_engagement"],

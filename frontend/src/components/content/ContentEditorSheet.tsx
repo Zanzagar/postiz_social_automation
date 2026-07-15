@@ -6,15 +6,18 @@ import { toast } from "sonner";
 import {
   Chip,
   CountdownChip,
+  EmptyState,
   GVSheet,
   PillarChip,
   PlatformDots,
   SkeletonText,
   StatusPill,
+  TextLink,
   Toggle,
 } from "@/components/pasture";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DRAFT_STORAGE_KEY, type CreateDraft } from "@/hooks/useLocalDraft";
 import { api, request, type ContentRow } from "@/lib/api";
 import { platformBy } from "@/lib/platforms";
 
@@ -88,6 +91,25 @@ function fireDraftSave(id: number, snapshot: Record<string, string>) {
   void api.editDraft(id, snapshot).catch(() => {
     toast.error("Couldn't save the draft — your edits are still here.");
   });
+}
+
+/**
+ * Seed the Create flow's local draft from a captionless row so "Open Compose"
+ * lands with the idea pre-filled. rowId is intentionally omitted — generation
+ * always creates a NEW row, it never writes back to this one.
+ */
+function seedComposeDraft(row: ContentRow) {
+  const partial: Partial<CreateDraft> = {
+    seed: row.raw_text,
+    pillar: row.content_pillar ?? "",
+    stage: "compose",
+  };
+  if (row.date) partial.scheduledDate = row.date.split("T")[0];
+  try {
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(partial));
+  } catch {
+    // Storage full or unavailable — seeding is best-effort.
+  }
 }
 
 /** Seed "carry forward" chips from the source post's DNA. */
@@ -388,6 +410,10 @@ export function ContentEditorSheet({ rowId, mode, onClose, onSaved }: ContentEdi
     Object.values(row.captions ?? {}).every((v) => v == null || v === "");
 
   const noAlt = !!row && !!row.media_url && !(row.alt_text ?? "").trim();
+  // Suggestion drafts arrive captionless — approving them would schedule a
+  // row with zero enabled platforms, so Approve stays blocked until captions
+  // exist (same pattern as the NO-ALT blocker).
+  const noCaptions = !!row && !repurpose && !isTemplateShell && enabled.length === 0;
   const pillarObj = pillars.find((p) => p.name === row?.content_pillar);
 
   if (rowId === null) return null;
@@ -400,8 +426,10 @@ export function ContentEditorSheet({ rowId, mode, onClose, onSaved }: ContentEdi
     <div className="flex items-center gap-2.5">
       <Button
         onClick={() => approveMutation.mutate()}
-        disabled={noAlt || approveMutation.isPending || isTemplateShell}
-        aria-describedby={noAlt ? "alt-blocker-note" : undefined}
+        disabled={noAlt || noCaptions || approveMutation.isPending || isTemplateShell}
+        aria-describedby={
+          noAlt ? "alt-blocker-note" : noCaptions ? "no-captions-note" : undefined
+        }
       >
         <Check size={14} strokeWidth={1.75} aria-hidden="true" />
         Approve &amp; schedule
@@ -485,6 +513,23 @@ export function ContentEditorSheet({ rowId, mode, onClose, onSaved }: ContentEdi
               busy={shellMutation.isPending}
               onUseAsIs={(finalText) => shellMutation.mutate({ finalText, generate: false })}
               onGenerate={(finalText) => shellMutation.mutate({ finalText, generate: true })}
+            />
+          ) : enabled.length === 0 ? (
+            // Suggestion drafts arrive with raw_text only — no platforms, no
+            // captions. Point staff at Compose instead of an empty pane.
+            // Opening Compose seeds the Create draft with this idea's text.
+            <EmptyState
+              className="py-8"
+              title="No captions yet"
+              body={
+                <>
+                  <span id="no-captions-note">Add captions before approving.</span>{" "}
+                  Compose can grow captions from this idea.{" "}
+                  <TextLink href="/create" onClick={() => seedComposeDraft(row)}>
+                    Open Compose
+                  </TextLink>
+                </>
+              }
             />
           ) : (
             <>

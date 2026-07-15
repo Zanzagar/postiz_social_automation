@@ -9,7 +9,7 @@ import { api } from "@/lib/api";
 import { platformBy } from "@/lib/platforms";
 import { cn } from "@/lib/utils";
 import type { CreateDraft } from "@/hooks/useLocalDraft";
-import { hashtagCount } from "./caption-utils";
+import { appendHashtag, bareHashtag, captionHasHashtag, hashtagCount } from "./caption-utils";
 import { IterMessage } from "./IterMessage";
 import { PreviewRail } from "./PreviewRail";
 
@@ -68,6 +68,22 @@ export function RefineStage({
     enabled: rowId !== null,
   });
 
+  const hashtagsEnabled = meta.hashMax > 0;
+  const { data: hashtagSuggestions = [], isLoading: hashtagsLoading } = useQuery({
+    queryKey: ["hashtags", active],
+    queryFn: async () => {
+      // Quiet degrade: some harnesses mock the api module without this
+      // method, and a failed fetch should never surface an error banner.
+      try {
+        const res = await api.getHashtagSuggestions?.(active, 8);
+        return res?.hashtags ?? [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: hashtagsEnabled,
+  });
+
   function setCaption(platform: string, caption: string) {
     update({ captions: { ...draft.captions, [platform]: caption } });
   }
@@ -95,6 +111,11 @@ export function RefineStage({
       void queryClient.invalidateQueries({ queryKey: ["iterations", rowId] });
     },
   });
+
+  const visibleSuggestions = hashtagSuggestions.filter(
+    (s) => !captionHasHashtag(cap, s.hashtag),
+  );
+  const atTagLimit = hashtagsEnabled && tags >= meta.hashMax;
 
   const platformIterations = iterations.filter((i) => i.platform === active);
   const missingAlt = !!draft.mediaUrl && !draft.altText.trim();
@@ -212,6 +233,45 @@ export function RefineStage({
                   {tagsOver && <span className="text-red-600"> · too many</span>}
                 </span>
               </div>
+
+              {/* Suggested hashtags — from post history, quiet degrade on error/empty */}
+              {hashtagsEnabled && (hashtagsLoading || visibleSuggestions.length > 0) && (
+                <div className="mt-3">
+                  <div className="t-micro ink-muted font-semibold tracking-wide uppercase">
+                    Suggested tags
+                  </div>
+                  {hashtagsLoading ? (
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <span className="skeleton h-5 w-16 rounded-full" aria-hidden="true" />
+                      <span className="skeleton h-5 w-20 rounded-full" aria-hidden="true" />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        {visibleSuggestions.map((s) => (
+                          <button
+                            key={s.hashtag}
+                            type="button"
+                            aria-disabled={atTagLimit}
+                            title={s.times_used > 0 ? `used ${s.times_used} times` : undefined}
+                            onClick={() => {
+                              if (atTagLimit) return;
+                              setCaption(active, appendHashtag(cap, s.hashtag));
+                            }}
+                            className={cn(
+                              "fr rounded-full",
+                              atTagLimit && "cursor-not-allowed opacity-45",
+                            )}
+                          >
+                            <Chip tone="sage">#{bareHashtag(s.hashtag)}</Chip>
+                          </button>
+                        ))}
+                      </div>
+                      <p className="t-micro ink-muted mt-1.5">From your post history</p>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

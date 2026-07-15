@@ -42,6 +42,9 @@ export function DashboardPage() {
     pillarBalance,
     festivals,
     overview,
+    summary,
+    summaryError,
+    summaryLoading,
     pulseSeries,
     knowledge,
   } = useDashboardData();
@@ -141,7 +144,13 @@ export function DashboardPage() {
         {/* RIGHT COLUMN */}
         <div className="min-w-0 space-y-6">
           <BlessingCard pendingDrafts={pendingDrafts} />
-          <PulseCard overview={overview} series={pulseSeries} isLoading={isLoading} />
+          <PulseCard
+            summary={summary}
+            summaryError={summaryError}
+            overview={overview}
+            series={pulseSeries}
+            isLoading={isLoading || summaryLoading}
+          />
           <KnowledgeCard knowledge={knowledge} />
         </div>
       </div>

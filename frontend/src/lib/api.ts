@@ -116,12 +116,14 @@ export interface CalendarResponse {
   total: number;
 }
 
-export interface Suggestion {
-  suggested_date: string;
-  content_idea: string;
-  suggested_pillar: string;
-  rationale: string;
-  media_suggestion: string;
+export interface SuggestionItem {
+  id: number;
+  type: string;
+  title: string;
+  note: string;
+  pillar: string | null;
+  date: string | null;
+  days_until: number | null;
   status: string;
 }
 
@@ -298,6 +300,136 @@ export interface TopPost {
   reach: number;
 }
 
+// --- Analytics v2 Types (Phase 2) ---
+
+export interface KpiStat {
+  value: number;
+  delta_pct: number | null;
+  series: number[];
+}
+
+export interface Insight {
+  tone: "sage" | "terra";
+  title: string;
+  body: string;
+}
+
+export interface TopPostDetail {
+  id: number | null;
+  source: "app" | "history";
+  title: string;
+  platform: string;
+  date: string;
+  pillar: string | null;
+  likes: number;
+  comments: number;
+  engagement: number;
+  rate: number | null;
+}
+
+export interface AnalyticsSummary {
+  range: string;
+  kpis: {
+    posts: KpiStat;
+    engagement: KpiStat;
+    avg_rate: KpiStat;
+    reach: KpiStat;
+  };
+  engagement_by_day: {
+    current: { date: string; value: number }[];
+    previous: { date: string; value: number }[];
+  };
+  top_post: TopPostDetail | null;
+  insights: Insight[];
+  sources: { app: number; history: number };
+}
+
+export interface AnalyticsPostRow {
+  id: number | null;
+  source: "app" | "history";
+  title: string;
+  pillar: string | null;
+  platforms: string[];
+  date: string;
+  engagement: number;
+  rate: number | null;
+  trend: "up" | "down" | "flat";
+}
+
+export interface PillarInsightRow {
+  pillar: string;
+  color: string | null;
+  posts: number;
+  engagement: number;
+  rate: number | null;
+  target_pct: number | null;
+  actual_pct: number;
+  weekly_series: number[];
+}
+
+export interface PlatformStatRow {
+  platform: string;
+  posts: number;
+  engagement: number;
+  reach: number;
+  rate: number | null;
+}
+
+export interface AnalyticsHeatmap {
+  days: number[][];
+  hour_buckets: string[];
+  peak: { day: number; bucket: number } | null;
+  sample_size: number;
+}
+
+export interface RhythmWeek {
+  label: string;
+  posted: number;
+  target: number | null;
+}
+
+export interface FestivalLift {
+  date: string;
+  name: string;
+  posts: number;
+  lift_pct: number | null;
+  pending: boolean;
+}
+
+export interface SeasonSummary {
+  total_posts: number;
+  consistency: { on_target_weeks: number | null; total_weeks: number };
+  best_slot: { day: string; hour_bucket: string } | null;
+  avg_lead_days: number | null;
+}
+
+// --- Hashtag Types ---
+
+export interface HashtagSuggestion {
+  hashtag: string;
+  avg_engagement: number;
+  times_used: number;
+  trend: string;
+}
+
+// --- Knowledge Ask Types ---
+
+export interface KnowledgeAskSource {
+  content: string;
+  fact_type: string | null;
+  topic: string | null;
+  pillar: string | null;
+  site: string | null;
+  page_title: string | null;
+  score: number | null;
+}
+
+export interface KnowledgeAskResponse {
+  answer: string | null;
+  sources: KnowledgeAskSource[];
+  answered_by: "claude" | "search_only";
+}
+
 export interface KnowledgeSource {
   name: string;
   type: string;
@@ -321,6 +453,8 @@ export interface KnowledgeStats {
   by_topic: Array<{ topic: string; count: number }>;
   by_pillar: Array<{ pillar: string; count: number }>;
   coverage_gaps: Array<{ title: string; site: string; url: string; fact_count: number }>;
+  /** True total of zero-fact pages; coverage_gaps itself lists at most 10. */
+  coverage_gap_count?: number;
 }
 
 export interface KnowledgeEntry {
@@ -473,9 +607,30 @@ export const api = {
     return request<CalendarResponse>("/api/calendar");
   },
 
+  // Suggestions
   getSuggestions(status?: string) {
     const params = status ? `?status=${encodeURIComponent(status)}` : "";
-    return request<Suggestion[]>(`/api/suggestions${params}`);
+    return request<{ suggestions: SuggestionItem[] }>(`/api/suggestions${params}`);
+  },
+
+  refreshSuggestions() {
+    return request<{ suggestions: SuggestionItem[] }>("/api/suggestions/refresh", {
+      method: "POST",
+    });
+  },
+
+  dismissSuggestion(id: number) {
+    return request<{ id: number; status: string }>(
+      `/api/suggestions/${id}/dismiss`,
+      { method: "POST" },
+    );
+  },
+
+  draftSuggestion(id: number) {
+    return request<{ id: number; status: string; content_row_id: number }>(
+      `/api/suggestions/${id}/draft`,
+      { method: "POST" },
+    );
   },
 
   getContentRow(rowNumber: number) {
@@ -699,6 +854,66 @@ export const api = {
 
   getTopPosts(limit = 10) {
     return request<{ posts: TopPost[] }>(`/api/analytics/top-posts?limit=${limit}`);
+  },
+
+  // Analytics v2 (Phase 2)
+  getAnalyticsSummary(range = "30d") {
+    return request<AnalyticsSummary>(
+      `/api/analytics/summary?range=${encodeURIComponent(range)}`,
+    );
+  },
+
+  getAnalyticsPosts(range = "30d", limit = 20, offset = 0) {
+    const params = new URLSearchParams({
+      range,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    return request<{ posts: AnalyticsPostRow[]; total: number }>(
+      `/api/analytics/posts?${params}`,
+    );
+  },
+
+  getAnalyticsPillarInsights(range = "30d") {
+    return request<{ pillars: PillarInsightRow[]; insights: Insight[] }>(
+      `/api/analytics/pillar-insights?range=${encodeURIComponent(range)}`,
+    );
+  },
+
+  getAnalyticsPlatforms(range = "30d") {
+    return request<{ platforms: PlatformStatRow[]; heatmap: AnalyticsHeatmap }>(
+      `/api/analytics/platforms?range=${encodeURIComponent(range)}`,
+    );
+  },
+
+  getAnalyticsRhythm(range = "30d") {
+    return request<{ weeks: RhythmWeek[]; festivals: FestivalLift[]; season: SeasonSummary }>(
+      `/api/analytics/rhythm?range=${encodeURIComponent(range)}`,
+    );
+  },
+
+  syncAnalytics() {
+    return request<{ synced: number; failed: number; skipped: number; rate_limited: boolean }>(
+      "/api/analytics/sync",
+      { method: "POST" },
+    );
+  },
+
+  // Hashtags
+  getHashtagSuggestions(platform?: string, count = 8) {
+    const params = new URLSearchParams({ count: String(count) });
+    if (platform) params.set("platform", platform);
+    return request<{ hashtags: HashtagSuggestion[]; source: string }>(
+      `/api/analytics/hashtags?${params}`,
+    );
+  },
+
+  // Knowledge Ask
+  askKnowledge(question: string) {
+    return request<KnowledgeAskResponse>("/api/knowledge/ask", {
+      method: "POST",
+      body: JSON.stringify({ question }),
+    });
   },
 
   // Knowledge

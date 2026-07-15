@@ -1,6 +1,5 @@
 """Tests for knowledge base API endpoints."""
 
-import json
 import sqlite3
 
 import pytest
@@ -55,13 +54,17 @@ def knowledge_db(tmp_path):
             UNIQUE(platform, external_id)
         );
         INSERT INTO web_pages (url, site, title, body_text, pillar, content_hash, last_crawled)
-        VALUES ('https://gitavalley.com/about', 'gitavalley', 'About', 'A farm community.', 'Community', 'abc', '2026-03-01T10:00:00');
+        VALUES ('https://gitavalley.com/about', 'gitavalley', 'About', 'A farm community.',
+                'Community', 'abc', '2026-03-01T10:00:00');
         INSERT INTO web_pages (url, site, title, body_text, pillar, content_hash, last_crawled)
-        VALUES ('https://iskcongitanagari.org/cows', 'iskcon', 'Cows', '85 cows on 430 acres.', 'Cow Life', 'def', '2026-03-01T09:00:00');
+        VALUES ('https://iskcongitanagari.org/cows', 'iskcon', 'Cows', '85 cows on 430 acres.',
+                'Cow Life', 'def', '2026-03-01T09:00:00');
         INSERT INTO web_knowledge (web_page_id, fact_type, content, pillar, keywords)
-        VALUES (1, 'description', 'A spiritual farm community in PA.', 'Community', '["community","farm"]');
+        VALUES (1, 'description', 'A spiritual farm community in PA.', 'Community',
+                '["community","farm"]');
         INSERT INTO web_knowledge (web_page_id, fact_type, content, pillar, keywords)
-        VALUES (2, 'program', 'Cow protection program with 85 cows.', 'Cow Life', '["cows","ahimsa"]');
+        VALUES (2, 'program', 'Cow protection program with 85 cows.', 'Cow Life',
+                '["cows","ahimsa"]');
         INSERT INTO social_history (platform, external_id, post_text, likes, comments, shares)
         VALUES ('facebook', 'fb_1', 'Our cows love the sunrise', 45, 8, 12);
         INSERT INTO social_history (platform, external_id, post_text, likes, comments, shares)
@@ -98,6 +101,45 @@ class TestKnowledgeStatus:
         assert sources["gitavalley"]["page_count"] == 1
         assert sources["iskcon"]["page_count"] == 1
         assert sources["facebook"]["post_count"] == 1
+
+
+@pytest.mark.asyncio
+class TestKnowledgeStats:
+    async def test_coverage_gap_count_is_total_not_list_length(
+        self, knowledge_client, knowledge_db
+    ):
+        """coverage_gaps stays capped at 10, but coverage_gap_count is the true total."""
+        conn = sqlite3.connect(str(knowledge_db))
+        long_body = "x" * 300  # predicate requires length(body_text) > 200
+        for i in range(12):
+            conn.execute(
+                "INSERT INTO web_pages (url, site, title, body_text) VALUES (?, ?, ?, ?)",
+                (f"https://gitavalley.com/gap{i}", "gitavalley", f"Gap {i}", long_body),
+            )
+        conn.commit()
+        conn.close()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/knowledge/stats")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["coverage_gap_count"] == 12
+        assert len(data["coverage_gaps"]) == 10
+
+    async def test_no_gaps_reports_zero(self, knowledge_client):
+        """Seed pages are short (<200 chars) — no gap pages at all."""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/knowledge/stats")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["coverage_gap_count"] == 0
+        assert data["coverage_gaps"] == []
+        assert data["total_pages"] == 2
+        assert data["total_knowledge"] == 2
 
 
 @pytest.mark.asyncio

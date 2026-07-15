@@ -29,15 +29,38 @@ class ContentRowResponse(BaseModel):
     alt_text: str | None = None
 
 
-class SuggestionResponse(BaseModel):
-    """JSON-serializable suggestion."""
+class SuggestionItem(BaseModel):
+    """A single content suggestion (festival, pillar gap, or template reminder)."""
 
-    suggested_date: datetime
-    content_idea: str
-    suggested_pillar: str
-    rationale: str
-    media_suggestion: str
-    status: str = "suggested"
+    id: int
+    type: str
+    title: str
+    note: str
+    pillar: str | None = None
+    date: str | None = None  # YYYY-MM-DD
+    days_until: int | None = None  # date - today; negative if past
+    status: str
+
+
+class SuggestionsResponse(BaseModel):
+    """Envelope for suggestion lists."""
+
+    suggestions: list[SuggestionItem]
+
+
+class SuggestionDismissResponse(BaseModel):
+    """Result of dismissing a suggestion."""
+
+    id: int
+    status: str
+
+
+class SuggestionDraftResponse(BaseModel):
+    """Result of drafting a suggestion into a content row."""
+
+    id: int
+    status: str
+    content_row_id: int
 
 
 class CalendarEntry(BaseModel):

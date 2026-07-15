@@ -4,7 +4,7 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 from content_engine.models import ContentRow, ContentStatus, Platform
-from content_engine.validator import ContentValidator
+from content_engine.validator import SUPPORTED_MEDIA_TYPES, ContentValidator
 
 
 def _make_row(**overrides) -> ContentRow:
@@ -103,3 +103,19 @@ class TestValidateMediaFormat:
         is_valid, error = validator.validate_media_format("https://example.com/doc.pdf")
         assert is_valid is False
         assert "format" in error.lower()
+
+    def test_gif_not_in_supported_media_types(self) -> None:
+        # POSTIZ_CONTRACT I1: GIF is rejected at Postiz upload, so the
+        # pre-generation validator must reject it up front as well.
+        assert "image/gif" not in SUPPORTED_MEDIA_TYPES
+
+    @patch("content_engine.validator.requests.head")
+    def test_gif_is_rejected_with_helpful_message(self, mock_head) -> None:
+        mock_head.return_value = MagicMock(status_code=200, headers={"Content-Type": "image/gif"})
+        validator = ContentValidator()
+        is_valid, error = validator.validate_media_format("https://example.com/anim.gif")
+        assert is_valid is False
+        assert "gif" in error.lower()
+        # Message must steer users toward supported alternatives.
+        assert "mp4" in error.lower()
+        assert "jpeg" in error.lower()

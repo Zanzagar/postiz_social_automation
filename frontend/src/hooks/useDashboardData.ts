@@ -277,6 +277,11 @@ export function useDashboardData() {
     queryFn: () => api.getAnalyticsOverview(),
   });
 
+  const summary = useQuery({
+    queryKey: ["analytics", "summary", "7d"],
+    queryFn: () => api.getAnalyticsSummary("7d"),
+  });
+
   const festivals = useQuery({
     queryKey: ["festivals", "dashboard", todayIso],
     queryFn: () =>
@@ -359,6 +364,9 @@ export function useDashboardData() {
     pillarBalance: computePillarBalance(entries, pillars.data ?? [], now),
     festivals: festivalItems,
     overview: analytics.data,
+    summary: summary.data,
+    summaryError: summary.isError,
+    summaryLoading: summary.isLoading,
     pulseSeries: computePulseSeries(entries, now),
     knowledge: knowledge.data,
     services: health.data?.services ?? [],

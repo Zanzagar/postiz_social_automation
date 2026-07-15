@@ -14,8 +14,17 @@ export function AppShell() {
         setPaletteOpen((open) => !open);
       }
     }
+    // Pages (e.g. the Dashboard search button) can open the palette by
+    // dispatching this event rather than prop-drilling through the Outlet.
+    function onOpenPalette() {
+      setPaletteOpen(true);
+    }
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("gv:open-command-palette", onOpenPalette);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("gv:open-command-palette", onOpenPalette);
+    };
   }, []);
 
   return (

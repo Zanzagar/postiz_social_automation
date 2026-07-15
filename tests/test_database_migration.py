@@ -56,6 +56,8 @@ class TestMigration:
             "brand_settings",
             "few_shot_examples",
             "preference_pairs",
+            # Pasture Phase 2
+            "suggestions",
             # FTS5 virtual table + internal tables
             "web_knowledge_fts",
             "web_knowledge_fts_data",

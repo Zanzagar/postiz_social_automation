@@ -1,163 +1,294 @@
-import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
-import { api, type Suggestion, type ContentRow, type MediaItem } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ContentEditor } from "@/components/content/ContentEditor";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  CalendarPlus,
-  FileImage,
-  Image as ImageIcon,
+  Flame,
+  LayoutTemplate,
   Lightbulb,
+  RefreshCw,
+  Sparkles,
+  Sprout,
+  type LucideIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 
-function suggestionToContentRow(s: Suggestion): ContentRow {
-  return {
-    row_number: -1,
-    date: s.suggested_date,
-    content_pillar: s.suggested_pillar,
-    raw_text: s.content_idea,
-    media_url: null,
-    platforms: { instagram: true, facebook: true, tiktok: true, threads: true, linkedin: true },
-    status: "draft",
-    captions: {},
-    feedback: null,
-    postiz_ids: null,
-    posted_at: null,
-    error_msg: null,
-    source: "suggestion",
-    auto_publish_at: null,
-    require_review: false,
-    held_at: null,
-    alt_text: null,
-  };
+import { api, type SuggestionItem } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { EmptyState, PageHeader, SkeletonText } from "@/components/pasture";
+import { Button } from "@/components/ui/button";
+import { ContentEditorSheet } from "@/components/content/ContentEditorSheet";
+
+type SuggestionsData = { suggestions: SuggestionItem[] };
+
+type Tone = "sage" | "terra" | "cream";
+
+const TONE_STYLES: Record<Tone, string> = {
+  sage: "border-sage-200 bg-sage-50 dark:border-sage-700 dark:bg-sage-800",
+  terra:
+    "border-terra-200 bg-terra-50 dark:border-terra-600 dark:bg-terra-700/30",
+  cream:
+    "border-cream-300 bg-cream-100/80 dark:border-cream-400/40 dark:bg-cream-400/15",
+};
+
+function toneFor(type: string): Tone {
+  switch (type) {
+    case "festival":
+      return "terra";
+    case "pillar_gap":
+      return "sage";
+    case "template":
+      return "cream";
+    default:
+      return "sage";
+  }
 }
 
-function SuggestionMediaThumbs({ pillar }: { pillar: string }) {
-  const { data } = useQuery({
-    queryKey: ["media", "browse", "pillar", pillar],
-    queryFn: () => api.getMedia({ pillar, per_page: 2, sort: "engagement" }),
-    staleTime: 60_000,
-  });
+const TYPE_ICONS: Record<string, LucideIcon> = {
+  festival: Flame,
+  pillar_gap: Sprout,
+  template: LayoutTemplate,
+};
 
-  const items = data?.items ?? [];
-  if (items.length === 0) return null;
+/** "pillar_gap" reads as "pillar"; other types just lose their underscores. */
+function typeLabel(type: string): string {
+  return type === "pillar_gap" ? "pillar" : type.replace(/_/g, " ");
+}
 
+/** "2026-03-26" → "Mar 26" */
+function fmtDate(iso: string): string {
+  const d = new Date(`${iso.split("T")[0]}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+interface SuggestionCardProps {
+  suggestion: SuggestionItem;
+  drafting: boolean;
+  /** True while a Refresh is in flight — acting on a card mid-refresh races the new list. */
+  refreshing: boolean;
+  onDraft: () => void;
+  onDismiss: () => void;
+}
+
+function SuggestionCard({
+  suggestion: s,
+  drafting,
+  refreshing,
+  onDraft,
+  onDismiss,
+}: SuggestionCardProps) {
+  const Icon = TYPE_ICONS[s.type] ?? Lightbulb;
   return (
-    <div className="flex gap-1.5 mt-2">
-      {items.map((m: MediaItem) => (
-        <div
-          key={m.id}
-          className="h-10 w-10 rounded overflow-hidden bg-muted flex-shrink-0"
-          title={m.filename}
-        >
-          {m.thumbnail_path ? (
-            <img
-              src={`/media/thumbnails/${m.thumbnail_path.split("/").pop()}`}
-              alt={m.filename}
-              className="h-full w-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <FileImage className="h-4 w-4 text-muted-foreground/30" />
-            </div>
-          )}
+    <div
+      className={cn(
+        "group relative overflow-hidden rounded-2xl border p-5",
+        TONE_STYLES[toneFor(s.type)],
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <div className="bg-card border-hair flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sage-700 dark:text-sage-200">
+          <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
         </div>
-      ))}
+        <div className="min-w-0 flex-1">
+          <div className="mb-0.5 flex flex-wrap items-center gap-2">
+            <span className="t-label ink-muted">{typeLabel(s.type)}</span>
+            {s.date && (
+              <span className="t-micro ink-muted">· {fmtDate(s.date)}</span>
+            )}
+            {s.days_until != null && s.days_until >= 0 && (
+              <span className="t-micro ink-muted font-mono">
+                in {s.days_until}d
+              </span>
+            )}
+          </div>
+          <h3 className="t-title leading-tight text-sage-800 dark:text-sage-100">
+            {s.title}
+          </h3>
+          <p className="t-body-sm ink-muted mt-1.5 leading-relaxed">{s.note}</p>
+          <div className="mt-3 flex gap-2">
+            <Button
+              size="sm"
+              className="fr"
+              onClick={onDraft}
+              disabled={drafting || refreshing}
+              aria-disabled={drafting || refreshing}
+            >
+              <Sparkles size={12} strokeWidth={1.75} aria-hidden="true" />
+              {drafting ? "Drafting…" : "Draft it"}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="fr"
+              onClick={onDismiss}
+              disabled={refreshing}
+              aria-disabled={refreshing}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
 export function SuggestionsPage() {
   const queryClient = useQueryClient();
-  const [selectedSuggestion, setSelectedSuggestion] = useState<ContentRow | null>(null);
+  const [openId, setOpenId] = useState<number | null>(null);
 
-  const { data: suggestions, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["suggestions"],
     queryFn: () => api.getSuggestions(),
   });
+  const suggestions = data?.suggestions ?? [];
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4 p-6">
-        <h1 className="text-2xl font-bold text-sage-800">Content Suggestions</h1>
-        <p className="text-muted-foreground">Loading...</p>
-        <Skeleton className="h-32 rounded-xl" />
-      </div>
-    );
-  }
+  // Ids removed from the list this session (dismissed or drafted). An
+  // in-flight Refresh response must not resurrect them when it lands.
+  const removedIdsRef = useRef<Set<number>>(new Set());
 
-  if (!suggestions || suggestions.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12">
-        <Lightbulb className="mb-4 h-12 w-12 text-sage-400" />
-        <h2 className="text-xl font-semibold text-sage-700">No suggestions</h2>
-        <p className="mt-1 text-muted-foreground">
-          AI suggestions will appear here as content gaps are detected.
-        </p>
-        <Button asChild variant="outline" className="mt-4 gap-2">
-          <Link to="/calendar">
-            <CalendarPlus className="h-4 w-4" />
-            Plan Content Calendar
-          </Link>
-        </Button>
-      </div>
-    );
-  }
+  const refreshMutation = useMutation({
+    mutationFn: () => api.refreshSuggestions(),
+    onSuccess: (res) =>
+      queryClient.setQueryData<SuggestionsData>(["suggestions"], {
+        suggestions: res.suggestions.filter(
+          (s) => !removedIdsRef.current.has(s.id),
+        ),
+      }),
+    onError: () =>
+      toast.error("Couldn't refresh suggestions — try again in a moment."),
+  });
+  const { mutate: refreshNow, isPending: refreshing } = refreshMutation;
+
+  const draftMutation = useMutation({
+    mutationFn: (id: number) => api.draftSuggestion(id),
+    onSuccess: (res, id) => {
+      removedIdsRef.current.add(id);
+      queryClient.setQueryData<SuggestionsData>(["suggestions"], (prev) =>
+        prev
+          ? { suggestions: prev.suggestions.filter((s) => s.id !== id) }
+          : prev,
+      );
+      queryClient.invalidateQueries({ queryKey: ["drafts"] });
+      toast.success("Draft started — refine it here.");
+      setOpenId(res.content_row_id);
+    },
+    onError: () => toast.error("Couldn't draft that suggestion — try again."),
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: (id: number) => api.dismissSuggestion(id),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["suggestions"] });
+      removedIdsRef.current.add(id);
+      const prev = queryClient.getQueryData<SuggestionsData>(["suggestions"]);
+      queryClient.setQueryData<SuggestionsData>(["suggestions"], (cur) =>
+        cur ? { suggestions: cur.suggestions.filter((s) => s.id !== id) } : cur,
+      );
+      return { prev };
+    },
+    onError: (_err, id, ctx) => {
+      removedIdsRef.current.delete(id);
+      if (ctx?.prev) queryClient.setQueryData(["suggestions"], ctx.prev);
+      toast.error("Couldn't dismiss that suggestion.");
+    },
+    onSuccess: () => toast.success("Dismissed."),
+  });
+
+  // Self-seed: on the FIRST successful fetch only, an empty list means the
+  // generator hasn't run yet — ask the backend once so the page fills itself.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (!data || seededRef.current) return;
+    seededRef.current = true;
+    if (data.suggestions.length === 0) refreshNow();
+  }, [data, refreshNow]);
+
+  // While the self-seed (or a refresh from empty) runs, stay on the skeleton
+  // instead of flashing the empty state.
+  const showSkeleton = isLoading || (refreshing && suggestions.length === 0);
+
+  const refreshButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      className="fr"
+      onClick={() => refreshNow()}
+      disabled={refreshing}
+    >
+      <RefreshCw
+        size={12}
+        strokeWidth={1.75}
+        aria-hidden="true"
+        className={cn(refreshing && "animate-spin motion-reduce:animate-none")}
+      />
+      {refreshing ? "Refreshing…" : "Refresh"}
+    </Button>
+  );
 
   return (
-    <div className="space-y-4 p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-sage-800">Content Suggestions</h1>
-        <Button asChild variant="outline" size="sm" className="gap-2">
-          <Link to="/calendar">
-            <CalendarPlus className="h-4 w-4" />
-            Plan Calendar
-          </Link>
-        </Button>
+    <div className="flex flex-1 flex-col">
+      <PageHeader
+        greeting="Suggestions"
+        title="What the season is asking for."
+        subtitle="Pulled from the festival calendar, your pillar balance, the knowledge base, and what's trending."
+        icon={Lightbulb}
+        right={refreshButton}
+      />
+
+      <div className="flex-1 px-4 py-6 sm:px-8">
+        {showSkeleton ? (
+          <div
+            role="status"
+            aria-label="Loading suggestions"
+            className="grid max-w-5xl grid-cols-1 gap-4 md:grid-cols-2"
+          >
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="bg-card border-hair rounded-2xl p-5">
+                <SkeletonText lines={3} />
+              </div>
+            ))}
+          </div>
+        ) : isError ? (
+          <EmptyState
+            icon={Lightbulb}
+            title="Suggestions are resting."
+            body="We couldn't reach the field just now — try a refresh."
+            action={refreshButton}
+          />
+        ) : suggestions.length === 0 ? (
+          <EmptyState
+            icon={Lightbulb}
+            title="The season is quiet."
+            body="Refresh to ask again."
+            action={refreshButton}
+          />
+        ) : (
+          <div className="grid max-w-5xl grid-cols-1 gap-4 md:grid-cols-2">
+            {suggestions.map((s) => (
+              <SuggestionCard
+                key={s.id}
+                suggestion={s}
+                drafting={
+                  draftMutation.isPending && draftMutation.variables === s.id
+                }
+                refreshing={refreshing}
+                onDraft={() => {
+                  if (!draftMutation.isPending) draftMutation.mutate(s.id);
+                }}
+                onDismiss={() => dismissMutation.mutate(s.id)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {suggestions.map((s) => (
-        <Card
-          key={`${s.suggested_date}-${s.content_idea.slice(0, 30)}`}
-          className="cursor-pointer transition-colors hover:bg-muted/30"
-          onClick={() => setSelectedSuggestion(suggestionToContentRow(s))}
-        >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">{s.content_idea}</CardTitle>
-            <Badge variant="outline">{s.suggested_pillar}</Badge>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p className="text-muted-foreground">{s.rationale}</p>
-            <div className="flex items-center justify-between">
-              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                <span>Date: {s.suggested_date}</span>
-                {s.media_suggestion && (
-                  <span className="flex items-center gap-1">
-                    <ImageIcon className="h-3 w-3" />
-                    {s.media_suggestion}
-                  </span>
-                )}
-              </div>
-              <SuggestionMediaThumbs pillar={s.suggested_pillar} />
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-
-      <ContentEditor
-        contentRow={selectedSuggestion}
-        mode="create"
-        isOpen={!!selectedSuggestion}
-        onClose={() => setSelectedSuggestion(null)}
-        onSave={() => {
-          queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+      <ContentEditorSheet
+        rowId={openId}
+        mode="refine"
+        onClose={() => setOpenId(null)}
+        onSaved={() => {
           queryClient.invalidateQueries({ queryKey: ["drafts"] });
-          setSelectedSuggestion(null);
+          setOpenId(null);
         }}
       />
     </div>

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from PIL import Image
 
 from api.auth import get_current_user
-from api.dependencies import get_content_repo, get_postiz_client, get_sheets_client
+from api.dependencies import get_content_repo, get_postiz_client
 from api.models import MediaAdapted, MediaCatalog
 from api.repositories.content import ContentRepository
 from api.routes.media import PLATFORM_DIMENSIONS, _smart_crop
@@ -21,7 +21,6 @@ from api.schemas import (
     ContentRowResponse,
     EditCaptionsRequest,
     RequireReviewRequest,
-    SuggestionResponse,
 )
 from api.services.auto_publish import compute_auto_publish_at, no_alt_block
 from content_engine.postiz import PostizAPIError
@@ -101,26 +100,6 @@ async def get_calendar(repo: ContentRepository = Depends(get_content_repo)):
         entries.extend([_row_to_calendar_entry(r) for r in rows])
     entries.sort(key=lambda e: e.date)
     return CalendarResponse(entries=entries, total=len(entries))
-
-
-@router.get("/suggestions", response_model=list[SuggestionResponse])
-async def get_suggestions(status: str | None = None, sheets=Depends(get_sheets_client)):
-    """Return suggestions, optionally filtered by status.
-
-    Note: Suggestions still use Sheets until a Suggestion table is added.
-    """
-    suggestions = sheets.get_suggestions(status=status)
-    return [
-        SuggestionResponse(
-            suggested_date=s.suggested_date,
-            content_idea=s.content_idea,
-            suggested_pillar=str(s.suggested_pillar),
-            rationale=s.rationale,
-            media_suggestion=s.media_suggestion,
-            status=s.status,
-        )
-        for s in suggestions
-    ]
 
 
 @router.get("/content/{row_id}", response_model=ContentRowResponse)

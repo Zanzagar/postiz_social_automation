@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardPage } from "./DashboardPage";
-import type { CalendarEntry, ContentRow } from "@/lib/api";
+import type { AnalyticsSummary, CalendarEntry, ContentRow } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
   api: {
@@ -13,6 +13,7 @@ vi.mock("@/lib/api", () => ({
     getHealth: vi.fn(),
     getPillars: vi.fn(),
     getAnalyticsOverview: vi.fn(),
+    getAnalyticsSummary: vi.fn(),
     getFestivals: vi.fn(),
     getKnowledgeStatus: vi.fn(),
     holdContent: vi.fn(),
@@ -35,6 +36,7 @@ const mockGetCalendar = vi.mocked(api.getCalendar);
 const mockGetHealth = vi.mocked(api.getHealth);
 const mockGetPillars = vi.mocked(api.getPillars);
 const mockGetOverview = vi.mocked(api.getAnalyticsOverview);
+const mockGetSummary = vi.mocked(api.getAnalyticsSummary);
 const mockGetFestivals = vi.mocked(api.getFestivals);
 const mockGetKnowledge = vi.mocked(api.getKnowledgeStatus);
 const mockHold = vi.mocked(api.holdContent);
@@ -109,6 +111,38 @@ const calendarEntries: CalendarEntry[] = [
   entry({ row_number: 7, status: "posted", date: "2026-07-04", raw_text: "Daring Denise" }),
 ];
 
+function summaryFixture(overrides: Partial<AnalyticsSummary> = {}): AnalyticsSummary {
+  return {
+    range: "7d",
+    kpis: {
+      posts: { value: 12, delta_pct: 20, series: [1, 2, 1, 3, 2, 1, 2] },
+      engagement: {
+        value: 8412,
+        delta_pct: 24,
+        series: [900, 1100, 1000, 1400, 1200, 1300, 1512],
+      },
+      avg_rate: { value: 4.2, delta_pct: null, series: [] },
+      reach: { value: 34200, delta_pct: 12, series: [] },
+    },
+    engagement_by_day: { current: [], previous: [] },
+    top_post: {
+      id: 42,
+      source: "app",
+      title: "Lakshmi's birthday",
+      platform: "instagram",
+      date: "2026-07-04",
+      pillar: "Cow Life",
+      likes: 1200,
+      comments: 150,
+      engagement: 1400,
+      rate: 4.8,
+    },
+    insights: [],
+    sources: { app: 12, history: 0 },
+    ...overrides,
+  };
+}
+
 function seedMocks() {
   mockGetDrafts.mockResolvedValue([postedRow, pendingRow, countdownRow]);
   mockGetCalendar.mockResolvedValue({ entries: calendarEntries, total: calendarEntries.length });
@@ -131,6 +165,7 @@ function seedMocks() {
     total_reach: 34200,
     total_impressions: 51000,
   });
+  mockGetSummary.mockResolvedValue(summaryFixture());
   mockGetFestivals.mockResolvedValue([
     {
       name: "Ratha Yatra",
@@ -275,6 +310,82 @@ describe("DashboardPage", () => {
       expect(screen.getByText("Ratha Yatra")).toBeInTheDocument();
     });
     expect(screen.getByText("in 12d")).toBeInTheDocument();
+  });
+
+  it("renders weekly pulse KPIs with deltas from the analytics summary", async () => {
+    renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText("8,412")).toBeInTheDocument();
+    });
+    expect(mockGetSummary).toHaveBeenCalledWith("7d");
+    expect(screen.getByText("+24% vs last")).toBeInTheDocument();
+    expect(screen.getByText("34.2k")).toBeInTheDocument();
+    expect(screen.getByText("+12%")).toBeInTheDocument();
+    expect(screen.getByText("engagement per day · last 7 days")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /engagement per day, last 7 days/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the best post footer when the summary has a top post", async () => {
+    renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText("Lakshmi's birthday")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/· 1,400 engagements/)).toBeInTheDocument();
+  });
+
+  it("hides deltas when delta_pct is null and omits a missing top post", async () => {
+    mockGetSummary.mockResolvedValue(
+      summaryFixture({
+        kpis: {
+          posts: { value: 12, delta_pct: null, series: [] },
+          engagement: { value: 8412, delta_pct: null, series: [1, 2, 3] },
+          avg_rate: { value: 4.2, delta_pct: null, series: [] },
+          reach: { value: 34200, delta_pct: -8, series: [] },
+        },
+        top_post: null,
+      }),
+    );
+    renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText("8,412")).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/% vs last/)).not.toBeInTheDocument();
+    expect(screen.getByText("-8%")).toBeInTheDocument();
+    expect(screen.queryByText(/best post:/i)).not.toBeInTheDocument();
+  });
+
+  it("falls back to the posted-count pulse when the summary has no data", async () => {
+    mockGetSummary.mockResolvedValue(
+      summaryFixture({ sources: { app: 0, history: 0 } }),
+    );
+    renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText("avg 200 per post")).toBeInTheDocument();
+    });
+    expect(screen.getByText("51,000 impressions")).toBeInTheDocument();
+    expect(screen.getByText("posts per day · last 14 days")).toBeInTheDocument();
+    expect(screen.queryByText(/vs last/)).not.toBeInTheDocument();
+  });
+
+  it("falls back to the posted-count pulse when the summary query fails", async () => {
+    mockGetSummary.mockRejectedValue(new Error("summary unavailable"));
+    renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText("avg 200 per post")).toBeInTheDocument();
+    });
+    expect(screen.getByText("posts per day · last 14 days")).toBeInTheDocument();
+  });
+
+  it("links to the analytics page from the pulse card", async () => {
+    renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText("8,412")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByRole("link", { name: /see analytics/i }),
+    ).toHaveAttribute("href", "/analytics");
   });
 
   it("dispatches the command palette event from the search button", async () => {
