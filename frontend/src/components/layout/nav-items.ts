@@ -13,6 +13,7 @@ import {
   Settings,
   Sparkles,
   Sunrise,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -35,6 +36,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: "/templates", label: "Templates", icon: LayoutTemplate },
   { to: "/media", label: "Media", icon: Image },
   { to: "/knowledge", label: "Knowledge", icon: BookOpen },
+  { to: "/analytics", label: "Analytics", icon: TrendingUp },
   { to: "/settings", label: "Settings", icon: Settings },
   { to: "/health", label: "Health", icon: Activity },
 ];

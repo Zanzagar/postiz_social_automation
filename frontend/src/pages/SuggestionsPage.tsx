@@ -1,25 +1,20 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { api, type Suggestion, type ContentRow, type MediaItem } from "@/lib/api";
+import { api, type SuggestionItem, type ContentRow, type MediaItem } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ContentEditor } from "@/components/content/ContentEditor";
-import {
-  CalendarPlus,
-  FileImage,
-  Image as ImageIcon,
-  Lightbulb,
-} from "lucide-react";
+import { CalendarPlus, FileImage, Lightbulb } from "lucide-react";
 
-function suggestionToContentRow(s: Suggestion): ContentRow {
+function suggestionToContentRow(s: SuggestionItem): ContentRow {
   return {
     row_number: -1,
-    date: s.suggested_date,
-    content_pillar: s.suggested_pillar,
-    raw_text: s.content_idea,
+    date: s.date ?? "",
+    content_pillar: s.pillar,
+    raw_text: s.title,
     media_url: null,
     platforms: { instagram: true, facebook: true, tiktok: true, threads: true, linkedin: true },
     status: "draft",
@@ -76,10 +71,11 @@ export function SuggestionsPage() {
   const queryClient = useQueryClient();
   const [selectedSuggestion, setSelectedSuggestion] = useState<ContentRow | null>(null);
 
-  const { data: suggestions, isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["suggestions"],
     queryFn: () => api.getSuggestions(),
   });
+  const suggestions = data?.suggestions;
 
   if (isLoading) {
     return (
@@ -123,27 +119,22 @@ export function SuggestionsPage() {
 
       {suggestions.map((s) => (
         <Card
-          key={`${s.suggested_date}-${s.content_idea.slice(0, 30)}`}
+          key={s.id}
           className="cursor-pointer transition-colors hover:bg-muted/30"
           onClick={() => setSelectedSuggestion(suggestionToContentRow(s))}
         >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">{s.content_idea}</CardTitle>
-            <Badge variant="outline">{s.suggested_pillar}</Badge>
+            <CardTitle className="text-sm font-medium">{s.title}</CardTitle>
+            {s.pillar && <Badge variant="outline">{s.pillar}</Badge>}
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <p className="text-muted-foreground">{s.rationale}</p>
+            <p className="text-muted-foreground">{s.note}</p>
             <div className="flex items-center justify-between">
               <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                <span>Date: {s.suggested_date}</span>
-                {s.media_suggestion && (
-                  <span className="flex items-center gap-1">
-                    <ImageIcon className="h-3 w-3" />
-                    {s.media_suggestion}
-                  </span>
-                )}
+                {s.date && <span>Date: {s.date}</span>}
+                <span className="capitalize">{s.type}</span>
               </div>
-              <SuggestionMediaThumbs pillar={s.suggested_pillar} />
+              {s.pillar && <SuggestionMediaThumbs pillar={s.pillar} />}
             </div>
           </CardContent>
         </Card>

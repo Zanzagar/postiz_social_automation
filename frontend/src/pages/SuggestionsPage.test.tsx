@@ -18,11 +18,13 @@ import { api } from "@/lib/api";
 const mockGetSuggestions = vi.mocked(api.getSuggestions);
 
 const sampleSuggestion = {
-  suggested_date: "2026-03-20",
-  content_idea: "Spring planting ceremony photos",
-  suggested_pillar: "farm",
-  rationale: "Seasonal relevance",
-  media_suggestion: "Photos of the fields",
+  id: 1,
+  type: "gap",
+  title: "Spring planting ceremony photos",
+  note: "Seasonal relevance",
+  pillar: "farm",
+  date: "2026-03-20",
+  days_until: 4,
   status: "pending",
 };
 
@@ -47,7 +49,7 @@ describe("SuggestionsPage", () => {
   });
 
   it("renders suggestion cards", async () => {
-    mockGetSuggestions.mockResolvedValue([sampleSuggestion]);
+    mockGetSuggestions.mockResolvedValue({ suggestions: [sampleSuggestion] });
     renderSuggestions();
     await waitFor(() => {
       expect(screen.getByText(/spring planting/i)).toBeInTheDocument();
@@ -56,7 +58,7 @@ describe("SuggestionsPage", () => {
   });
 
   it("shows empty state", async () => {
-    mockGetSuggestions.mockResolvedValue([]);
+    mockGetSuggestions.mockResolvedValue({ suggestions: [] });
     renderSuggestions();
     await waitFor(() => {
       expect(screen.getByText(/no suggestions/i)).toBeInTheDocument();
@@ -67,7 +69,7 @@ describe("SuggestionsPage", () => {
 
   it("opens ContentEditor in create mode when clicking suggestion", async () => {
     const user = userEvent.setup();
-    mockGetSuggestions.mockResolvedValue([sampleSuggestion]);
+    mockGetSuggestions.mockResolvedValue({ suggestions: [sampleSuggestion] });
     vi.mocked(api.getIterations).mockResolvedValue([]);
     renderSuggestions();
 

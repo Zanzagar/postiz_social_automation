@@ -222,6 +222,91 @@ describe("api endpoints use correct paths", () => {
   });
 });
 
+// --- Phase 2: suggestions, analytics v2, hashtags, knowledge ask ---
+
+describe("phase 2 endpoints use correct paths", () => {
+  beforeEach(() => {
+    setToken("jwt");
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+    });
+  });
+
+  it("refreshSuggestions POSTs to /api/suggestions/refresh", async () => {
+    await api.refreshSuggestions();
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/suggestions/refresh");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+  });
+
+  it("dismissSuggestion POSTs to /api/suggestions/{id}/dismiss", async () => {
+    await api.dismissSuggestion(7);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/suggestions/7/dismiss");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+  });
+
+  it("draftSuggestion POSTs to /api/suggestions/{id}/draft", async () => {
+    await api.draftSuggestion(7);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/suggestions/7/draft");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+  });
+
+  it("getAnalyticsSummary defaults to range=30d", async () => {
+    await api.getAnalyticsSummary();
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/analytics/summary?range=30d");
+  });
+
+  it("getAnalyticsPosts passes range, limit and offset", async () => {
+    await api.getAnalyticsPosts("90d", 10, 20);
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      "/api/analytics/posts?range=90d&limit=10&offset=20",
+    );
+  });
+
+  it("getAnalyticsPillarInsights calls /api/analytics/pillar-insights", async () => {
+    await api.getAnalyticsPillarInsights();
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      "/api/analytics/pillar-insights?range=30d",
+    );
+  });
+
+  it("getAnalyticsPlatforms calls /api/analytics/platforms", async () => {
+    await api.getAnalyticsPlatforms("7d");
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/analytics/platforms?range=7d");
+  });
+
+  it("getAnalyticsRhythm calls /api/analytics/rhythm", async () => {
+    await api.getAnalyticsRhythm();
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/analytics/rhythm?range=30d");
+  });
+
+  it("syncAnalytics POSTs to /api/analytics/sync", async () => {
+    await api.syncAnalytics();
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/analytics/sync");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+  });
+
+  it("getHashtagSuggestions passes count and optional platform", async () => {
+    await api.getHashtagSuggestions();
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/analytics/hashtags?count=8");
+
+    await api.getHashtagSuggestions("instagram", 5);
+    expect(mockFetch.mock.calls[1][0]).toBe(
+      "/api/analytics/hashtags?count=5&platform=instagram",
+    );
+  });
+
+  it("askKnowledge POSTs the question to /api/knowledge/ask", async () => {
+    await api.askKnowledge("When is Janmashtami?");
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/knowledge/ask");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+      question: "When is Janmashtami?",
+    });
+  });
+});
+
 // --- Iteration endpoints ---
 
 describe("api.iterate", () => {

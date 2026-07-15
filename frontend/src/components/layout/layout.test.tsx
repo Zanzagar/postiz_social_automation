@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -204,6 +204,17 @@ describe("Command palette", () => {
     const user = userEvent.setup();
     renderShell();
     await user.keyboard("{Control>}k{/Control}");
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("opens when a gv:open-command-palette event is dispatched", async () => {
+    // The Dashboard search button dispatches this event instead of
+    // prop-drilling an opener through the Outlet.
+    renderShell();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    act(() => {
+      window.dispatchEvent(new CustomEvent("gv:open-command-palette"));
+    });
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
