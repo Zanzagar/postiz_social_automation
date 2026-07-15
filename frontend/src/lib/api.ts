@@ -498,6 +498,11 @@ export interface MediaItem {
   usage_count: number;
   avg_engagement: number;
   created_at: string;
+  alt_text: string | null;
+  default_caption: string | null;
+  /** Canonical lowercase: spring | summer | fall | winter | any */
+  season: string | null;
+  original_url: string | null;
 }
 
 export interface MediaBrowseResponse {
@@ -506,6 +511,8 @@ export interface MediaBrowseResponse {
   page: number;
   per_page: number;
   total_pages: number;
+  /** SUM(file_size) over the ENTIRE catalog, not the filtered page. */
+  storage_used_bytes: number;
 }
 
 export interface MediaTag {
@@ -541,9 +548,61 @@ export interface MediaBrowseParams {
   tag?: string;
   pillar?: string;
   source?: string;
+  /** Case-insensitive substring match on filename OR any tag. */
+  q?: string;
+  /** "image" | "video" (backend 422s anything else). */
+  media_type?: string;
+  /** Only media with zero tags. Omitted from the query unless true. */
+  untagged?: boolean;
   sort?: string;
   page?: number;
   per_page?: number;
+}
+
+/**
+ * PATCH body for /api/media/{id}. All fields optional; a field present
+ * with null CLEARS it on the backend; absent fields are untouched.
+ */
+export interface MediaUpdatePatch {
+  alt_text?: string | null;
+  default_caption?: string | null;
+  /** Canonical lowercase: spring | summer | fall | winter | any */
+  season?: string | null;
+  pillar?: string | null;
+}
+
+export interface AdaptedVersion {
+  id: number;
+  platform: string;
+  format: string;
+  adapted_path: string;
+  width: number;
+  height: number;
+  has_text_overlay: boolean;
+  created_at: string;
+}
+
+export interface MediaUploadResponse {
+  id: number;
+  filename: string;
+  local_path: string;
+  thumbnail_path: string | null;
+  postiz_media_id: string | null;
+  mime_type: string;
+  width: number | null;
+  height: number | null;
+  file_size: number | null;
+  source: string;
+  original_url: string | null;
+  tags: Array<{ tag: string; confidence: number }>;
+  alt_text: string | null;
+  season: string | null;
+}
+
+export interface MediaMetaResponse {
+  alt_text: string;
+  season: string | null;
+  suggested_tags: Array<{ tag: string; confidence: number }>;
 }
 
 export interface CalendarPlanSlot {
@@ -967,6 +1026,9 @@ export const api = {
     if (params.tag) searchParams.set("tag", params.tag);
     if (params.pillar) searchParams.set("pillar", params.pillar);
     if (params.source) searchParams.set("source", params.source);
+    if (params.q) searchParams.set("q", params.q);
+    if (params.media_type) searchParams.set("media_type", params.media_type);
+    if (params.untagged) searchParams.set("untagged", "true");
     if (params.sort) searchParams.set("sort", params.sort);
     if (params.page) searchParams.set("page", String(params.page));
     if (params.per_page) searchParams.set("per_page", String(params.per_page));
@@ -975,6 +1037,48 @@ export const api = {
 
   getMediaDetail(id: number) {
     return request<MediaDetailResponse>(`/api/media/${id}`);
+  },
+
+  updateMedia(id: number, patch: MediaUpdatePatch) {
+    return request<MediaItem>(`/api/media/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+  },
+
+  getAdaptedVersions(id: number) {
+    return request<{ adapted: AdaptedVersion[] }>(`/api/media/${id}/adapted`);
+  },
+
+  adaptMedia(id: number, platforms: string[], formats: string[]) {
+    return request<{
+      adapted: Array<Omit<AdaptedVersion, "has_text_overlay" | "created_at">>;
+    }>(`/api/media/${id}/adapt`, {
+      method: "POST",
+      body: JSON.stringify({ platforms, formats }),
+    });
+  },
+
+  generateMediaMeta(id: number) {
+    return request<MediaMetaResponse>(`/api/media/${id}/generate-meta`, {
+      method: "POST",
+    });
+  },
+
+  uploadMediaFile(file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request<MediaUploadResponse>("/api/media/upload", {
+      method: "POST",
+      body: formData,
+    });
+  },
+
+  importMediaUrl(url: string) {
+    return request<MediaUploadResponse>("/api/media/import-url", {
+      method: "POST",
+      body: JSON.stringify({ url }),
+    });
   },
 
   updateMediaTags(id: number, add: string[], remove: string[]) {
@@ -1065,6 +1169,13 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ slot_indices: slotIndices ?? null }),
       },
+    );
+  },
+
+  deleteCalendarPlan(id: number) {
+    return request<{ deleted: boolean; id: number }>(
+      `/api/calendar/plan/${id}`,
+      { method: "DELETE" },
     );
   },
 
