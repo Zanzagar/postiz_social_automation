@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # --- Content ---
 
@@ -343,6 +343,10 @@ class MediaItemResponse(BaseModel):
     usage_count: int = 0
     avg_engagement: float = 0.0
     created_at: datetime
+    alt_text: str | None = None
+    default_caption: str | None = None
+    season: str | None = None
+    original_url: str | None = None
 
 
 class MediaBrowseResponse(BaseModel):
@@ -351,6 +355,33 @@ class MediaBrowseResponse(BaseModel):
     page: int
     per_page: int
     total_pages: int
+    storage_used_bytes: int = 0
+
+
+MEDIA_SEASONS = frozenset({"spring", "summer", "fall", "winter", "any"})
+
+
+class MediaUpdateRequest(BaseModel):
+    """PATCH body for media metadata.
+
+    All fields optional; a field present with null CLEARS it; absent fields
+    are untouched (distinguished via model_fields_set).
+    """
+
+    alt_text: str | None = None
+    default_caption: str | None = None
+    season: str | None = None
+    pillar: str | None = None
+
+    @field_validator("season")
+    @classmethod
+    def _validate_season(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        lowered = v.lower()
+        if lowered not in MEDIA_SEASONS:
+            raise ValueError("season must be one of: spring, summer, fall, winter, any")
+        return lowered
 
 
 class MediaUsageResponse(BaseModel):

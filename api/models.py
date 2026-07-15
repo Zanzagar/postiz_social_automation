@@ -288,6 +288,10 @@ class MediaCatalog(Base):
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
     topic: Mapped[str | None] = mapped_column(String(100), nullable=True)
     pillar: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    alt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    default_caption: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Canonical lowercase values: spring | summer | fall | winter | any
+    season: Mapped[str | None] = mapped_column(String(20), nullable=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False)  # upload/drive/social_import
     usage_count: Mapped[int] = mapped_column(Integer, default=0)
     avg_engagement: Mapped[float] = mapped_column(Float, default=0.0)

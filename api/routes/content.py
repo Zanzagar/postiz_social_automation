@@ -3,16 +3,14 @@
 import json
 import logging
 from datetime import UTC, datetime
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from PIL import Image
 
 from api.auth import get_current_user
 from api.dependencies import get_content_repo, get_postiz_client
-from api.models import MediaAdapted, MediaCatalog
+from api.models import MediaCatalog
 from api.repositories.content import ContentRepository
-from api.routes.media import PLATFORM_DIMENSIONS, _smart_crop
+from api.routes.media import PLATFORM_DIMENSIONS, _adapt_and_record, _load_media_image
 from api.schemas import (
     AltTextRequest,
     ApproveResponse,
@@ -292,44 +290,39 @@ async def attach_media(
 
     row.media_catalog_ids = json.dumps(current_ids)
 
-    # Auto-adapt media for content row's platforms
+    # Auto-adapt media for content row's platforms (best-effort, non-fatal).
+    # Videos are skipped; drive:// sources are downloaded via the Drive service;
+    # outputs always land under media/adapted/ with row upsert (no duplicates).
     adapted_count = 0
     platforms = _parse_json_field(row.platforms)
     enabled_platforms = [p for p, on in platforms.items() if on]
 
     media = await repo.session.get(MediaCatalog, media_id)
-    if media and media.local_path:
-        src_path = Path(media.local_path)
-        if src_path.exists():
-            adapted_dir = src_path.parent / "adapted"
-            adapted_dir.mkdir(parents=True, exist_ok=True)
-            try:
-                with Image.open(src_path) as src_img:
-                    for platform in enabled_platforms:
-                        dims = PLATFORM_DIMENSIONS.get(platform, {})
-                        for fmt, (tw, th) in dims.items():
-                            out_name = f"{media_id}_{platform}_{fmt}.jpg"
-                            out_path = adapted_dir / out_name
-                            adapted_img = _smart_crop(src_img, tw, th)
-                            adapted_img.save(out_path, "JPEG", quality=90)
-                            repo.session.add(
-                                MediaAdapted(
-                                    media_id=media_id,
-                                    platform=platform,
-                                    format=fmt,
-                                    adapted_path=str(out_path),
-                                    width=tw,
-                                    height=th,
-                                )
-                            )
-                            adapted_count += 1
-            except Exception:
-                logger.warning("Auto-adapt failed for media %d", media_id, exc_info=True)
+    if media and media.mime_type and media.mime_type.startswith("image/"):
+        try:
+            src_img = _load_media_image(media)
+            with src_img:
+                for platform in enabled_platforms:
+                    dims = PLATFORM_DIMENSIONS.get(platform, {})
+                    for fmt, (tw, th) in dims.items():
+                        await _adapt_and_record(
+                            repo.session, media_id, src_img, platform, fmt, tw, th
+                        )
+                        adapted_count += 1
+        except Exception:
+            logger.warning("Auto-adapt failed for media %d", media_id, exc_info=True)
+
+    # Prefill the row's alt text from the media's alt text (Phase 3 item 8)
+    alt_text_prefilled = False
+    if media and media.alt_text and not row.alt_text:
+        row.alt_text = media.alt_text
+        alt_text_prefilled = True
 
     await repo.session.commit()
     return {
         "media_catalog_ids": current_ids,
         "adapted_count": adapted_count,
+        "alt_text_prefilled": alt_text_prefilled,
     }
 
 

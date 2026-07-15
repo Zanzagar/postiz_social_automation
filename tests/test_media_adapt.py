@@ -1,6 +1,5 @@
 """Tests for media adaptation endpoint — platform-specific image resizing."""
 
-
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -197,6 +196,126 @@ class TestMediaAdapt:
             headers=auth_headers,
         )
         assert resp.status_code == 400
+
+
+# ── Phase 3 behavior fixes (PART B item 6) ──────────────────────────────
+
+
+class TestAdaptPhase3:
+    def test_adapt_video_rejected(self, client, auth_headers, db_engine):
+        with Session(db_engine) as s:
+            m = MediaCatalog(
+                filename="clip.mp4",
+                local_path="media/clip.mp4",
+                mime_type="video/mp4",
+                file_size=50000,
+                source="upload",
+            )
+            s.add(m)
+            s.flush()
+            mid = m.id
+            s.commit()
+
+        resp = client.post(
+            f"/api/media/{mid}/adapt",
+            json={"platforms": ["instagram"], "formats": ["post"]},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "Only images can be adapted"
+
+    def test_adapt_output_always_under_media_adapted(
+        self, client, auth_headers, db_engine, tmp_path
+    ):
+        """Output path is media/adapted/{id}_{platform}_{format}.jpg regardless of source dir."""
+        path = _create_test_image(tmp_path)
+        mid = _seed_media(db_engine, path)
+
+        resp = client.post(
+            f"/api/media/{mid}/adapt",
+            json={"platforms": ["instagram"], "formats": ["post"]},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        adapted = resp.json()["adapted"][0]
+        assert adapted["adapted_path"] == f"media/adapted/{mid}_instagram_post.jpg"
+        from pathlib import Path
+
+        assert Path(adapted["adapted_path"]).exists()
+
+    def test_readapt_overwrites_no_duplicate_rows(self, client, auth_headers, db_engine, tmp_path):
+        path = _create_test_image(tmp_path)
+        mid = _seed_media(db_engine, path)
+
+        first = client.post(
+            f"/api/media/{mid}/adapt",
+            json={"platforms": ["instagram"], "formats": ["post"]},
+            headers=auth_headers,
+        )
+        second = client.post(
+            f"/api/media/{mid}/adapt",
+            json={"platforms": ["instagram"], "formats": ["post"]},
+            headers=auth_headers,
+        )
+        assert second.status_code == 200
+        # Same row is reused — no duplicates
+        assert first.json()["adapted"][0]["id"] == second.json()["adapted"][0]["id"]
+        with Session(db_engine) as s:
+            rows = (
+                s.execute(
+                    select(MediaAdapted).where(
+                        MediaAdapted.media_id == mid,
+                        MediaAdapted.platform == "instagram",
+                        MediaAdapted.format == "post",
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert len(rows) == 1
+
+    def test_adapt_drive_media(self, client, auth_headers, db_engine):
+        """drive:// media downloads bytes via the Drive service and crops from them."""
+        import io
+        from unittest.mock import MagicMock, patch
+
+        img = Image.new("RGB", (1920, 1080), color=(100, 150, 200))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+
+        mid = _seed_media(db_engine, "drive://abc123")
+
+        with (
+            patch("api.routes.drive.get_drive_service") as mock_service,
+            patch("api.routes.drive._download_drive_file") as mock_download,
+        ):
+            mock_service.return_value = MagicMock()
+            mock_download.return_value = buf.getvalue()
+            resp = client.post(
+                f"/api/media/{mid}/adapt",
+                json={"platforms": ["instagram"], "formats": ["post"]},
+                headers=auth_headers,
+            )
+        assert resp.status_code == 200
+        adapted = resp.json()["adapted"][0]
+        assert adapted["width"] == 1080
+        assert adapted["height"] == 1080
+        assert adapted["adapted_path"] == f"media/adapted/{mid}_instagram_post.jpg"
+
+    def test_adapt_drive_download_failure_400(self, client, auth_headers, db_engine):
+        from unittest.mock import patch
+
+        mid = _seed_media(db_engine, "drive://broken456")
+
+        with patch("api.routes.drive.get_drive_service") as mock_service:
+            mock_service.side_effect = Exception("no credentials")
+            resp = client.post(
+                f"/api/media/{mid}/adapt",
+                json={"platforms": ["instagram"], "formats": ["post"]},
+                headers=auth_headers,
+            )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "Source image unavailable"
 
 
 class TestSmartCrop:

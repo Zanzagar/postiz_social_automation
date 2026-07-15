@@ -90,14 +90,18 @@ def _seed_pillars(engine):
 class TestMediaUploadFlow:
     """Upload → browse → detail → tag → delete."""
 
-    @patch("api.routes.media._classify_media_tags")
+    @patch("api.routes.media._generate_media_meta")
     @patch("api.routes.media._upload_to_postiz")
     def test_full_media_lifecycle(self, mock_postiz, mock_tags, client, auth_headers):
         mock_postiz.return_value = None
-        mock_tags.return_value = [
-            {"tag": "cows", "confidence": 0.95},
-            {"tag": "farm", "confidence": 0.8},
-        ]
+        mock_tags.return_value = {
+            "alt_text": "Cows grazing in a farm pasture",
+            "season": None,
+            "tags": [
+                {"tag": "cows", "confidence": 0.95},
+                {"tag": "farm", "confidence": 0.8},
+            ],
+        }
 
         # 1. Upload
         img = _make_test_image()
@@ -142,11 +146,15 @@ class TestMediaUploadFlow:
 class TestMediaSuggestionFlow:
     """Create content → get suggestions → attach media."""
 
-    @patch("api.routes.media._classify_media_tags")
+    @patch("api.routes.media._generate_media_meta")
     @patch("api.routes.media._upload_to_postiz")
     def test_suggest_and_attach(self, mock_postiz, mock_tags, client, auth_headers, db_engine):
         mock_postiz.return_value = None
-        mock_tags.return_value = [{"tag": "farm", "confidence": 0.9}]
+        mock_tags.return_value = {
+            "alt_text": "A farm scene",
+            "season": None,
+            "tags": [{"tag": "farm", "confidence": 0.9}],
+        }
 
         # 1. Upload media with farm tag
         img = _make_test_image()
@@ -275,11 +283,11 @@ class TestCalendarPlanningFlow:
 class TestMediaAdaptationFlow:
     """Upload → adapt → verify dimensions."""
 
-    @patch("api.routes.media._classify_media_tags")
+    @patch("api.routes.media._generate_media_meta")
     @patch("api.routes.media._upload_to_postiz")
     def test_upload_and_adapt(self, mock_postiz, mock_tags, client, auth_headers):
         mock_postiz.return_value = None
-        mock_tags.return_value = []
+        mock_tags.return_value = {"alt_text": "A landscape", "season": None, "tags": []}
 
         # 1. Upload a landscape image
         img = _make_test_image(1920, 1080)
@@ -318,13 +326,17 @@ class TestMediaAdaptationFlow:
 class TestFilterAndSearchFlow:
     """Upload multiple → filter by source, pillar, tag."""
 
-    @patch("api.routes.media._classify_media_tags")
+    @patch("api.routes.media._generate_media_meta")
     @patch("api.routes.media._upload_to_postiz")
     def test_filters_work_end_to_end(self, mock_postiz, mock_tags, client, auth_headers, db_engine):
         mock_postiz.return_value = None
 
         # Upload 1: farm tag
-        mock_tags.return_value = [{"tag": "farm", "confidence": 0.9}]
+        mock_tags.return_value = {
+            "alt_text": "A farm scene",
+            "season": None,
+            "tags": [{"tag": "farm", "confidence": 0.9}],
+        }
         img1 = _make_test_image()
         client.post(
             "/api/media/upload",
@@ -333,7 +345,11 @@ class TestFilterAndSearchFlow:
         )
 
         # Upload 2: temple tag
-        mock_tags.return_value = [{"tag": "temple", "confidence": 0.9}]
+        mock_tags.return_value = {
+            "alt_text": "A temple building",
+            "season": None,
+            "tags": [{"tag": "temple", "confidence": 0.9}],
+        }
         img2 = _make_test_image()
         client.post(
             "/api/media/upload",

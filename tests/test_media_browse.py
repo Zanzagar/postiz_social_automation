@@ -396,3 +396,102 @@ class TestMediaDelete:
         ids = _seed_media(db_engine, count=1, local_path="/nonexistent/file.jpg")
         resp = client.delete(f"/api/media/{ids[0]}", headers=auth_headers)
         assert resp.status_code == 200
+
+
+# ── Phase 3 browse params (q, media_type, untagged, storage_used_bytes) ──
+
+
+class TestMediaBrowsePhase3:
+    def test_q_matches_filename_case_insensitive(self, client, auth_headers, db_engine):
+        _seed_media(db_engine, count=1, filename="Sunset_Pasture.jpg")
+        _seed_media(db_engine, count=1, filename="kitchen.jpg")
+        resp = client.get("/api/media?q=PASTURE", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["filename"] == "Sunset_Pasture.jpg"
+
+    def test_q_matches_tag(self, client, auth_headers, db_engine):
+        ids = _seed_media(db_engine, count=2)
+        _seed_tags(db_engine, ids[0], [{"tag": "deity"}])
+        _seed_tags(db_engine, ids[1], [{"tag": "kitchen"}])
+        resp = client.get("/api/media?q=DEI", headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["id"] == ids[0]
+
+    def test_q_matches_filename_or_tag(self, client, auth_headers, db_engine):
+        ids = _seed_media(db_engine, count=1, filename="cows_field.jpg")
+        other = _seed_media(db_engine, count=1, filename="building.jpg")
+        _seed_tags(db_engine, other[0], [{"tag": "cows"}])
+        resp = client.get("/api/media?q=cows", headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 2
+        found = {i["id"] for i in data["items"]}
+        assert found == {ids[0], other[0]}
+
+    def test_q_no_match(self, client, auth_headers, db_engine):
+        _seed_media(db_engine, count=2)
+        resp = client.get("/api/media?q=zzzznotthere", headers=auth_headers)
+        assert resp.json()["total"] == 0
+
+    def test_media_type_image(self, client, auth_headers, db_engine):
+        _seed_media(db_engine, count=2, mime_type="image/jpeg")
+        _seed_media(db_engine, count=1, mime_type="video/mp4", filename="clip.mp4")
+        resp = client.get("/api/media?media_type=image", headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 2
+
+    def test_media_type_video(self, client, auth_headers, db_engine):
+        _seed_media(db_engine, count=2, mime_type="image/jpeg")
+        _seed_media(db_engine, count=1, mime_type="video/mp4", filename="clip.mp4")
+        resp = client.get("/api/media?media_type=video", headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["mime_type"] == "video/mp4"
+
+    def test_media_type_invalid_422(self, client, auth_headers):
+        resp = client.get("/api/media?media_type=audio", headers=auth_headers)
+        assert resp.status_code == 422
+
+    def test_untagged_filter(self, client, auth_headers, db_engine):
+        ids = _seed_media(db_engine, count=3)
+        _seed_tags(db_engine, ids[0], [{"tag": "farm"}])
+        resp = client.get("/api/media?untagged=true", headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 2
+        found = {i["id"] for i in data["items"]}
+        assert ids[0] not in found
+
+    def test_untagged_default_false(self, client, auth_headers, db_engine):
+        ids = _seed_media(db_engine, count=2)
+        _seed_tags(db_engine, ids[0], [{"tag": "farm"}])
+        resp = client.get("/api/media", headers=auth_headers)
+        assert resp.json()["total"] == 2
+
+    def test_combined_filters_and_semantics(self, client, auth_headers, db_engine):
+        ids = _seed_media(db_engine, count=1, filename="cows.jpg", mime_type="image/jpeg")
+        _seed_media(db_engine, count=1, filename="cows.mp4", mime_type="video/mp4")
+        resp = client.get("/api/media?q=cows&media_type=image", headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["id"] == ids[0]
+
+    def test_storage_used_bytes_entire_catalog(self, client, auth_headers, db_engine):
+        _seed_media(db_engine, count=2, file_size=100, source="upload")
+        _seed_media(db_engine, count=1, file_size=50, source="import_url")
+        # Filtered browse still reports storage for the ENTIRE catalog
+        resp = client.get("/api/media?source=upload", headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 2
+        assert data["storage_used_bytes"] == 250
+
+    def test_storage_used_bytes_null_file_size_counts_zero(self, client, auth_headers, db_engine):
+        _seed_media(db_engine, count=1, file_size=100)
+        _seed_media(db_engine, count=1, file_size=None)
+        resp = client.get("/api/media", headers=auth_headers)
+        assert resp.json()["storage_used_bytes"] == 100
+
+    def test_storage_used_bytes_empty_catalog(self, client, auth_headers):
+        resp = client.get("/api/media", headers=auth_headers)
+        assert resp.json()["storage_used_bytes"] == 0
