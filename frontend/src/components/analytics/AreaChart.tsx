@@ -96,7 +96,17 @@ export function AreaChart({
         <g>
           <circle cx={px} cy={py} r="4" fill="#fff" stroke={CHART_SAGE} strokeWidth="2" />
           <g transform={`translate(${tipX}, ${tipY})`}>
-            <rect width={TIP_W} height={TIP_H} rx="6" fill={CHART_INK} />
+            {/* Subtle stroke keeps the pill visible in dark mode, where the
+                ink fill matches the card surface. */}
+            <rect
+              width={TIP_W}
+              height={TIP_H}
+              rx="6"
+              fill={CHART_INK}
+              stroke="#fff8e7"
+              strokeOpacity="0.3"
+              strokeWidth="1"
+            />
             <text
               x={TIP_W / 2}
               y="13"

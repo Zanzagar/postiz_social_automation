@@ -9,18 +9,34 @@ const UNCLASSIFIED = "Unclassified";
 interface InsightsTabProps {
   stats?: KnowledgeStats;
   isLoading: boolean;
+  /** True when the stats fetch failed — render an honest error, not "no insights". */
+  isError?: boolean;
 }
 
-export function InsightsTab({ stats, isLoading }: InsightsTabProps) {
+export function InsightsTab({ stats, isLoading, isError }: InsightsTabProps) {
   if (isLoading) {
     return (
-      <div className="grid gap-4 px-4 py-5 sm:px-8 md:grid-cols-3">
+      <div
+        role="status"
+        aria-label="Loading insights"
+        className="grid gap-4 px-4 py-5 sm:px-8 md:grid-cols-3"
+      >
         {[0, 1, 2].map((i) => (
           <div key={i} className="bg-card border-hair rounded-xl p-4">
             <SkeletonText lines={5} />
           </div>
         ))}
       </div>
+    );
+  }
+
+  if (isError) {
+    // A failed fetch is not an empty library — no call-to-action here.
+    return (
+      <EmptyState
+        title="Couldn't load this right now"
+        body="Try again in a moment."
+      />
     );
   }
 

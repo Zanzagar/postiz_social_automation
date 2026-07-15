@@ -266,6 +266,13 @@ describe("AnalyticsPage", () => {
     expect(screen.getByText("40 engagements")).toBeInTheDocument();
     expect(screen.getByText("Claude notices")).toBeInTheDocument();
     expect(screen.getByText("Herd posts outperform")).toBeInTheDocument();
+    // tooltip pill keeps a visible outline in dark mode, where its ink fill
+    // matches the card surface
+    const tipRect = screen
+      .getByText("40 engagements")
+      .closest("g")
+      ?.querySelector("rect");
+    expect(tipRect).toHaveAttribute("stroke", "#fff8e7");
   });
 
   it("shows the imported-history caption when history posts exist", async () => {
@@ -358,6 +365,43 @@ describe("AnalyticsPage", () => {
     await screen.findByText(/no posts in this window/i);
   });
 
+  it("stops paging when a page comes back empty despite a stale total", async () => {
+    const firstPage = Array.from({ length: 20 }, (_, i) => ({
+      ...POST_ROWS[0],
+      id: i + 1,
+      title: `Post number ${i + 1}`,
+    }));
+    mockPosts.mockImplementation((_range, _limit, offset) =>
+      Promise.resolve(
+        (offset ?? 0) === 0
+          ? { posts: firstPage, total: 25 }
+          : { posts: [], total: 25 },
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("tab", { name: /per post/i }));
+    await screen.findByText(/showing 20 of 25/i);
+    await user.click(screen.getByRole("button", { name: /show more/i }));
+    // the empty page ends pagination instead of re-requesting offset 20 forever
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: /show more/i }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(mockPosts).toHaveBeenCalledTimes(2);
+  });
+
+  it("announces tab loading to screen readers", async () => {
+    mockPillars.mockImplementation(() => new Promise<never>(() => {}));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("tab", { name: /per pillar/i }));
+    expect(
+      screen.getByRole("status", { name: "Loading analytics" }),
+    ).toBeInTheDocument();
+  });
+
   it("renders pillar cards with targets, no-target captions, and insights", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -369,6 +413,14 @@ describe("AnalyticsPage", () => {
     expect(screen.getByText("Kitchen")).toBeInTheDocument();
     expect(screen.getByText("No target set")).toBeInTheDocument();
     expect(screen.getByText("Support pillar over-indexed")).toBeInTheDocument();
+    // honest labels: the mini chart shows posts-per-week, not engagement rate
+    expect(screen.getAllByText("Posting rhythm")).toHaveLength(2);
+    expect(screen.queryByText("Engagement rate")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("img", {
+        name: "Cow Life posts per week, oldest to newest",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("renders platform cards without followers, sentiment, or benchmarks", async () => {
@@ -431,13 +483,17 @@ describe("AnalyticsPage", () => {
     expect(screen.queryByText(/consistency/i)).not.toBeInTheDocument();
   });
 
-  it("exports a CSV blob from the loaded posts data", async () => {
+  it("exports a CSV blob from freshly fetched pages, never the loaded tab rows", async () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(screen.getByRole("tab", { name: /per post/i }));
     await screen.findByText(/showing 3 of 3/i);
+    mockPosts.mockClear();
     await user.click(screen.getByRole("button", { name: /export csv/i }));
     await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+    // export refetches within the backend's 100-row limit — it never reuses
+    // the tab's (possibly truncated) rows
+    expect(mockPosts).toHaveBeenCalledWith("30d", 100, 0);
     const blob = createObjectURL.mock.calls[0][0] as Blob;
     expect(blob).toBeInstanceOf(Blob);
     expect(blob.type).toContain("text/csv");
@@ -448,13 +504,29 @@ describe("AnalyticsPage", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:gv-results");
   });
 
-  it("fetches posts on demand when exporting before the posts tab loads", async () => {
+  it("pages through every post when exporting before the posts tab loads", async () => {
+    const total = 150;
+    const allRows = Array.from({ length: total }, (_, i) => ({
+      ...POST_ROWS[0],
+      id: i + 1,
+      title: `Post number ${i + 1}`,
+    }));
+    mockPosts.mockImplementation((_range, limit = 20, offset = 0) =>
+      Promise.resolve({ posts: allRows.slice(offset, offset + limit), total }),
+    );
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("Posts published");
     expect(mockPosts).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: /export csv/i }));
-    await waitFor(() => expect(mockPosts).toHaveBeenCalledWith("30d", 500, 0));
-    await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+    expect(mockPosts).toHaveBeenNthCalledWith(1, "30d", 100, 0);
+    expect(mockPosts).toHaveBeenNthCalledWith(2, "30d", 100, 100);
+    expect(mockPosts).toHaveBeenCalledTimes(2);
+    const blob = createObjectURL.mock.calls[0][0] as Blob;
+    const text = await blob.text();
+    // header + all 150 rows — nothing silently truncated
+    expect(text.trim().split("\n")).toHaveLength(151);
+    expect(text).toContain("Post number 150");
   });
 });

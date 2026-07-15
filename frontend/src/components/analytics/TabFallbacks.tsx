@@ -5,7 +5,7 @@ import { EmptyState, SkeletonText } from "@/components/pasture";
 /** Composed skeleton shown while a tab's data is on its way in. */
 export function TabLoading() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" role="status" aria-label="Loading analytics">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="bg-card border-hair shadow-card rounded-xl p-4">

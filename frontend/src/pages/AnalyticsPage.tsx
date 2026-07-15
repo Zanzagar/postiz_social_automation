@@ -14,8 +14,10 @@ import { RhythmTab } from "@/components/analytics/RhythmTab";
 import { RANGES, buildResultsCsv } from "@/components/analytics/format";
 
 const POSTS_PAGE_SIZE = 20;
-/** Cap for the on-demand export fetch when the posts tab hasn't loaded. */
-const EXPORT_FETCH_LIMIT = 500;
+/** Page size for export fetches — the backend caps `limit` at 100. */
+const EXPORT_PAGE_SIZE = 100;
+/** Safety cap on export pagination (~5,000 posts). */
+const EXPORT_MAX_PAGES = 50;
 
 const TAB_ITEMS = [
   { id: "overview", label: "Overview" },
@@ -57,6 +59,9 @@ export function AnalyticsPage() {
     queryFn: ({ pageParam }) => api.getAnalyticsPosts(range, POSTS_PAGE_SIZE, pageParam),
     initialPageParam: 0,
     getNextPageParam: (last, all) => {
+      // An empty page with a stale total would otherwise refetch the same
+      // offset forever — stop paging as soon as a page comes back empty.
+      if (last.posts.length === 0) return undefined;
       const shown = all.reduce((n, page) => n + page.posts.length, 0);
       return shown < last.total ? shown : undefined;
     },
@@ -86,10 +91,13 @@ export function AnalyticsPage() {
 
   const handleExport = async () => {
     try {
-      let rows = postRows;
-      if (rows.length === 0) {
-        const res = await api.getAnalyticsPosts(range, EXPORT_FETCH_LIMIT, 0);
-        rows = res.posts;
+      // Always fetch fresh pages — the tab's loaded rows may be a truncated
+      // subset, and the backend caps `limit` at 100 per request.
+      const rows: AnalyticsPostRow[] = [];
+      for (let page = 0; page < EXPORT_MAX_PAGES; page++) {
+        const res = await api.getAnalyticsPosts(range, EXPORT_PAGE_SIZE, rows.length);
+        rows.push(...res.posts);
+        if (res.posts.length === 0 || rows.length >= res.total) break;
       }
       downloadCsv(rows, range);
     } catch {

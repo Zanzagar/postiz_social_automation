@@ -7,6 +7,7 @@ data set): /summary, /posts, /pillar-insights, /platforms, /rhythm,
 model and documented conventions.
 """
 
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -333,7 +334,9 @@ async def sync_analytics(db_path: str = Depends(get_db_path)):
             api_key=settings.postiz_api_key,
             base_url=settings.postiz_base_url,
         )
-    return sync_all(db_path, client=client)
+    # sync_all does blocking HTTP + time.sleep backoff — run it off the
+    # event loop so a long sync can't freeze every other request.
+    return await asyncio.to_thread(sync_all, db_path, client=client)
 
 
 @router.get("/hashtags", response_model=HashtagsResponse)

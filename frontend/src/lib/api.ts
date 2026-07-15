@@ -453,6 +453,8 @@ export interface KnowledgeStats {
   by_topic: Array<{ topic: string; count: number }>;
   by_pillar: Array<{ pillar: string; count: number }>;
   coverage_gaps: Array<{ title: string; site: string; url: string; fact_count: number }>;
+  /** True total of zero-fact pages; coverage_gaps itself lists at most 10. */
+  coverage_gap_count?: number;
 }
 
 export interface KnowledgeEntry {

@@ -359,6 +359,149 @@ class TestRefreshSuggestions:
         assert rows[0].note == original_note
 
     @pytest.mark.asyncio
+    async def test_refresh_deletes_stale_suggested_rows(self, db_session, tmp_path):
+        """Suggested rows the generators no longer produce are expired."""
+        db_session.add(
+            Suggestion(
+                type="pillar_gap",
+                title="«farm_life» has been quiet",
+                note="Old week.",
+                pillar="farm_life",
+                suggested_date=None,
+                status="suggested",
+                source_key="pillar:farm_life:2026-W30",  # previous ISO week
+            )
+        )
+        await db_session.commit()
+
+        path = _write_calendar(tmp_path, [_festival("Fest", TODAY + timedelta(days=5))])
+        await refresh_suggestions(db_session, TODAY, calendar_path=path)
+
+        rows = (await db_session.execute(select(Suggestion))).scalars().all()
+        assert [r.source_key for r in rows] == [
+            f"festival:Fest:{(TODAY + timedelta(days=5)).isoformat()}"
+        ]
+
+    @pytest.mark.asyncio
+    async def test_refresh_expires_past_festival_suggestion(self, db_session, tmp_path):
+        """A festival suggestion whose date has passed is removed on refresh."""
+        past = TODAY - timedelta(days=2)
+        path = _write_calendar(tmp_path, [_festival("Past Fest", past)])
+        db_session.add(
+            Suggestion(
+                type="festival",
+                title="Past Fest",
+                note="n",
+                suggested_date=past,
+                status="suggested",
+                source_key=f"festival:Past Fest:{past.isoformat()}",
+            )
+        )
+        await db_session.commit()
+
+        await refresh_suggestions(db_session, TODAY, calendar_path=path)
+        rows = (await db_session.execute(select(Suggestion))).scalars().all()
+        assert rows == []
+
+    @pytest.mark.asyncio
+    async def test_refresh_keeps_stale_dismissed_and_drafted(self, db_session, tmp_path):
+        """Dismissed/drafted rows are dedup history — never expired."""
+        db_session.add_all(
+            [
+                Suggestion(
+                    type="pillar_gap",
+                    title="A",
+                    note="n",
+                    status="dismissed",
+                    source_key="pillar:farm_life:2026-W01",
+                ),
+                Suggestion(
+                    type="template",
+                    title="B",
+                    note="n",
+                    status="drafted",
+                    source_key="template:9:2026-W01",
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        path = _write_calendar(tmp_path, [_festival("Fest", TODAY + timedelta(days=5))])
+        await refresh_suggestions(db_session, TODAY, calendar_path=path)
+
+        rows = (await db_session.execute(select(Suggestion))).scalars().all()
+        statuses = {r.source_key: r.status for r in rows}
+        assert statuses["pillar:farm_life:2026-W01"] == "dismissed"
+        assert statuses["template:9:2026-W01"] == "drafted"
+        assert len(rows) == 3  # 2 kept + 1 fresh festival
+
+    @pytest.mark.asyncio
+    async def test_refresh_resolves_pillar_slug_to_table_name(self, db_session, tmp_path):
+        """Calendar slugs resolve to canonical pillars-table names."""
+        db_session.add(_pillar("Spiritual Education", 0.40))
+        await db_session.commit()
+
+        # _festival() sets content_pillar="spiritual_education" (slug form)
+        path = _write_calendar(tmp_path, [_festival("Fest", TODAY + timedelta(days=5))])
+        await refresh_suggestions(db_session, TODAY, calendar_path=path)
+
+        row = (
+            await db_session.execute(select(Suggestion).where(Suggestion.type == "festival"))
+        ).scalar_one()
+        assert row.pillar == "Spiritual Education"
+
+    @pytest.mark.asyncio
+    async def test_refresh_keeps_unmatched_pillar_raw(self, db_session, tmp_path):
+        """Pillar values with no pillars-table match fall back to the raw value."""
+        path = _write_calendar(
+            tmp_path,
+            [_festival("Fest", TODAY + timedelta(days=5), content_pillar="mystery_pillar")],
+        )
+        await refresh_suggestions(db_session, TODAY, calendar_path=path)
+
+        row = (await db_session.execute(select(Suggestion))).scalar_one()
+        assert row.pillar == "mystery_pillar"
+
+    @pytest.mark.asyncio
+    async def test_refresh_survives_concurrent_duplicate_insert(
+        self, db_session, tmp_path, monkeypatch
+    ):
+        """A row committed between SELECT and INSERT must not raise a UNIQUE error."""
+        from sqlalchemy import text
+
+        import api.services.suggestion_generator as generator_module
+
+        on = TODAY + timedelta(days=5)
+        path = _write_calendar(tmp_path, [_festival("Fest", on)])
+        key = f"festival:Fest:{on.isoformat()}"
+
+        # Simulate the race: the row already exists, but the upsert's
+        # SELECT misses it (as if a concurrent refresh committed the same
+        # source_key after our SELECT ran).
+        db_session.add(
+            Suggestion(
+                type="festival",
+                title="Fest",
+                note="n",
+                suggested_date=on,
+                status="suggested",
+                source_key=key,
+            )
+        )
+        await db_session.commit()
+
+        def blind_select(*args, **kwargs):
+            return select(*args, **kwargs).where(text("1 = 0"))
+
+        monkeypatch.setattr(generator_module, "select", blind_select)
+
+        await refresh_suggestions(db_session, TODAY, calendar_path=path)  # must not raise
+
+        rows = (await db_session.execute(select(Suggestion))).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].source_key == key
+
+    @pytest.mark.asyncio
     async def test_refresh_combines_all_generators(self, db_session, tmp_path):
         path = _write_calendar(tmp_path, [_festival("Fest", TODAY + timedelta(days=5))])
         db_session.add_all(

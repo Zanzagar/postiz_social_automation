@@ -17,11 +17,13 @@ const SOURCE_LABELS: Record<string, string> = {
 interface SourcesTabProps {
   sources: KnowledgeSource[];
   isLoading: boolean;
+  /** True when the status fetch failed — render an honest error, not "nothing connected". */
+  isError?: boolean;
   /** True while a crawl is running — Re-sync is disabled to avoid double runs. */
   crawlRunning: boolean;
 }
 
-export function SourcesTab({ sources, isLoading, crawlRunning }: SourcesTabProps) {
+export function SourcesTab({ sources, isLoading, isError, crawlRunning }: SourcesTabProps) {
   const queryClient = useQueryClient();
 
   const crawlMutation = useMutation({
@@ -67,6 +69,12 @@ export function SourcesTab({ sources, isLoading, crawlRunning }: SourcesTabProps
           <div className="bg-card border-hair rounded-xl p-4">
             <SkeletonText lines={4} />
           </div>
+        ) : isError ? (
+          // A failed fetch is not an empty library — no call-to-action here.
+          <EmptyState
+            title="Couldn't load this right now"
+            body="Try again in a moment."
+          />
         ) : sources.length === 0 ? (
           <EmptyState
             title="Nothing connected yet"

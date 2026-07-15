@@ -12,6 +12,7 @@ returned so the frontend can show raw snippets.
 
 import asyncio
 import logging
+import os
 import sqlite3
 
 from content_engine.generator import _call_claude
@@ -23,9 +24,19 @@ logger = logging.getLogger(__name__)
 SEARCH_LIMIT = 12
 
 # Hard budget for the CLI synthesis step. If Claude doesn't answer within
-# this window we degrade to search-only results (read at call time so
-# tests can shrink it).
-CLI_BUDGET_SECONDS = 30
+# this window we degrade to search-only results (module attribute is read
+# at call time so tests can shrink it; default is env-tunable).
+#
+# KNOWN LIMITATION (orphaned worker): asyncio.wait_for cancels only the
+# awaiting coroutine — the underlying asyncio.to_thread worker keeps
+# running _call_claude to completion. The shared CLI runner retries up to
+# 3 attempts x 120s each plus backoff (~6 min worst case) and holds one
+# of the 3 shared rate-limiter slots the whole time, even after this
+# endpoint has already degraded to search_only. The runner is frozen and
+# exposes no timeout/attempt override, so the orphan cannot be cleanly
+# avoided here; tune GV_ASK_CLI_BUDGET_SECONDS to trade answer latency
+# against how long an abandoned worker can occupy a slot.
+CLI_BUDGET_SECONDS = float(os.environ.get("GV_ASK_CLI_BUDGET_SECONDS", "30"))
 
 # Cap question length injected into the prompt (mirrors the feedback
 # sanitization in content_engine.generator).

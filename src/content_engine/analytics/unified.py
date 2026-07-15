@@ -26,10 +26,12 @@ Conventions (documented decisions):
 import json
 import logging
 import math
+import os
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,18 @@ MAX_SERIES_BUCKETS = 14
 
 HOUR_BUCKET_LABELS = ["6a", "9a", "12p", "3p", "6p", "9p"]
 _HOUR_BUCKET_CENTERS = [6, 9, 12, 15, 18, 21]
+
+# Heatmap/rhythm buckets are shown as wall-clock times in the UI ("Best
+# time to post: 6p"), so bucketing converts stored UTC datetimes to a
+# display timezone first. Windowing and stored values stay UTC.
+DEFAULT_DISPLAY_TZ = "America/New_York"
+
+
+def _display_tz() -> ZoneInfo:
+    """Display timezone for hour/weekday bucketing (env-overridable)."""
+    return ZoneInfo(os.environ.get("GV_DISPLAY_TZ", DEFAULT_DISPLAY_TZ))
+
+
 DAY_NAMES = [
     "Monday",
     "Tuesday",
@@ -544,16 +558,22 @@ def compute_heatmap(records: list[PlatformRecord]) -> dict:
     Intensity is each cell's average engagement divided by the max cell
     average (0..1). Cells with no posts are 0.0. All-empty data yields
     all zeros and a null peak.
+
+    Weekday and hour are taken in the display timezone (GV_DISPLAY_TZ,
+    default America/New_York) — the UI labels buckets as local wall-clock
+    times. Stored datetimes remain naive UTC.
     """
     sums = [[0.0] * len(HOUR_BUCKET_LABELS) for _ in range(7)]
     counts = [[0] * len(HOUR_BUCKET_LABELS) for _ in range(7)]
     sample_size = 0
+    tz = _display_tz()
 
     for r in records:
         if r.date is None:
             continue
-        day = r.date.weekday()  # Mon=0..Sun=6
-        bucket = hour_bucket(r.date.hour)
+        local = r.date.replace(tzinfo=UTC).astimezone(tz)
+        day = local.weekday()  # Mon=0..Sun=6, display-timezone wall clock
+        bucket = hour_bucket(local.hour)
         sums[day][bucket] += r.engagement
         counts[day][bucket] += 1
         sample_size += 1

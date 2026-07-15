@@ -210,17 +210,19 @@ export function FactsTab({ pillars, stats, sources }: FactsTabProps) {
       {/* Fact list */}
       <div className="mt-4 space-y-2">
         {isLoading ? (
-          <>
+          <div role="status" aria-label="Loading facts" className="space-y-2">
             {[0, 1, 2].map((i) => (
               <div key={i} className="bg-card border-hair rounded-xl p-3.5">
                 <SkeletonText lines={2} />
               </div>
             ))}
-          </>
+          </div>
         ) : isError ? (
-          <p className="t-caption ink-muted py-8 text-center">
-            Couldn't load facts right now — the library may be busy.
-          </p>
+          // A failed fetch is not an empty library — no call-to-action here.
+          <EmptyState
+            title="Couldn't load this right now"
+            body="Try again in a moment."
+          />
         ) : facts.length === 0 ? (
           <EmptyState
             icon={Search}

@@ -186,6 +186,12 @@ class TestPostsRoute:
         assert len(data["posts"]) == 1
         assert data["total"] == 2
 
+    async def test_limit_above_cap_rejected(self, client_for, empty_db):
+        """limit is capped at 100 — the frontend pages at 100, so 500 must 422."""
+        async with client_for(empty_db) as client:
+            resp = await client.get("/api/analytics/posts?limit=500")
+        assert resp.status_code == 422
+
 
 @pytest.mark.asyncio
 class TestPillarInsightsRoute:
@@ -229,15 +235,17 @@ class TestPlatformsRoute:
         assert len(data["heatmap"]["days"]) == 7
         assert data["heatmap"]["hour_buckets"] == ["6a", "9a", "12p", "3p", "6p", "9p"]
 
-    async def test_history_only_heatmap(self, client_for, history_only_db):
+    async def test_history_only_heatmap(self, client_for, history_only_db, monkeypatch):
+        monkeypatch.setenv("GV_DISPLAY_TZ", "America/New_York")
         async with client_for(history_only_db) as client:
             resp = await client.get("/api/analytics/platforms?range=30d")
         data = resp.json()
         assert data["platforms"][0]["platform"] == "facebook"
         assert data["platforms"][0]["posts"] == 2
         assert data["heatmap"]["sample_size"] == 2
-        # fb_1: Tue Jul 7 18:30 → day 1, bucket 4 (6p); higher engagement → peak
-        assert data["heatmap"]["peak"] == {"day": 1, "bucket": 4}
+        # fb_1: Tue Jul 7 18:30 UTC = 14:30 ET → day 1, bucket 3 (3p);
+        # higher engagement → peak
+        assert data["heatmap"]["peak"] == {"day": 1, "bucket": 3}
         # No invented fields
         assert "followers" not in json.dumps(data)
         assert "sentiment" not in json.dumps(data)

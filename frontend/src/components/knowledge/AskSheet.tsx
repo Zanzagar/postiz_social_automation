@@ -79,7 +79,11 @@ export function AskSheet({ onClose }: AskSheetProps) {
         ))}
       </div>
 
-      {ask.isPending && <SkeletonText lines={4} className="mt-6" />}
+      {ask.isPending && (
+        <div role="status" aria-label="Looking for an answer">
+          <SkeletonText lines={4} className="mt-6" />
+        </div>
+      )}
 
       {ask.isError && (
         <p className="t-caption ink-muted mt-6">

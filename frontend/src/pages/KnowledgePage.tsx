@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, Eye, Globe, MessageSquare, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -51,6 +51,16 @@ export function KnowledgePage() {
 
   const crawlRunning = progress.data?.running ?? false;
 
+  // When a crawl finishes (running flips true → false), the metrics and fact
+  // lists are stale — refetch everything under the "knowledge" key.
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    if (wasRunning.current && !crawlRunning) {
+      void queryClient.invalidateQueries({ queryKey: ["knowledge"] });
+    }
+    wasRunning.current = crawlRunning;
+  }, [crawlRunning, queryClient]);
+
   const crawlMutation = useMutation({
     mutationFn: () => api.triggerCrawl(),
     onSuccess: (res) => {
@@ -74,7 +84,9 @@ export function KnowledgePage() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 4)
     .map((t) => t.type);
-  const gapCount = stats.data?.coverage_gaps.length ?? 0;
+  // coverage_gaps is capped server-side (10) — prefer the true count when sent.
+  const gapCount =
+    stats.data?.coverage_gap_count ?? stats.data?.coverage_gaps.length ?? 0;
   const metricsLoading = status.isLoading || stats.isLoading;
 
   return (
@@ -174,10 +186,17 @@ export function KnowledgePage() {
         <SourcesTab
           sources={sources}
           isLoading={status.isLoading}
+          isError={status.isError}
           crawlRunning={crawlRunning}
         />
       )}
-      {tab === "insights" && <InsightsTab stats={stats.data} isLoading={stats.isLoading} />}
+      {tab === "insights" && (
+        <InsightsTab
+          stats={stats.data}
+          isLoading={stats.isLoading}
+          isError={stats.isError}
+        />
+      )}
       {tab === "graph" && <GraphTab />}
 
       {askOpen && <AskSheet onClose={() => setAskOpen(false)} />}

@@ -63,6 +63,8 @@ function fmtDate(iso: string): string {
 interface SuggestionCardProps {
   suggestion: SuggestionItem;
   drafting: boolean;
+  /** True while a Refresh is in flight — acting on a card mid-refresh races the new list. */
+  refreshing: boolean;
   onDraft: () => void;
   onDismiss: () => void;
 }
@@ -70,6 +72,7 @@ interface SuggestionCardProps {
 function SuggestionCard({
   suggestion: s,
   drafting,
+  refreshing,
   onDraft,
   onDismiss,
 }: SuggestionCardProps) {
@@ -102,11 +105,24 @@ function SuggestionCard({
           </h3>
           <p className="t-body-sm ink-muted mt-1.5 leading-relaxed">{s.note}</p>
           <div className="mt-3 flex gap-2">
-            <Button size="sm" className="fr" onClick={onDraft} disabled={drafting}>
+            <Button
+              size="sm"
+              className="fr"
+              onClick={onDraft}
+              disabled={drafting || refreshing}
+              aria-disabled={drafting || refreshing}
+            >
               <Sparkles size={12} strokeWidth={1.75} aria-hidden="true" />
               {drafting ? "Drafting…" : "Draft it"}
             </Button>
-            <Button size="sm" variant="ghost" className="fr" onClick={onDismiss}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="fr"
+              onClick={onDismiss}
+              disabled={refreshing}
+              aria-disabled={refreshing}
+            >
               Dismiss
             </Button>
           </div>
@@ -126,9 +142,18 @@ export function SuggestionsPage() {
   });
   const suggestions = data?.suggestions ?? [];
 
+  // Ids removed from the list this session (dismissed or drafted). An
+  // in-flight Refresh response must not resurrect them when it lands.
+  const removedIdsRef = useRef<Set<number>>(new Set());
+
   const refreshMutation = useMutation({
     mutationFn: () => api.refreshSuggestions(),
-    onSuccess: (res) => queryClient.setQueryData(["suggestions"], res),
+    onSuccess: (res) =>
+      queryClient.setQueryData<SuggestionsData>(["suggestions"], {
+        suggestions: res.suggestions.filter(
+          (s) => !removedIdsRef.current.has(s.id),
+        ),
+      }),
     onError: () =>
       toast.error("Couldn't refresh suggestions — try again in a moment."),
   });
@@ -137,6 +162,7 @@ export function SuggestionsPage() {
   const draftMutation = useMutation({
     mutationFn: (id: number) => api.draftSuggestion(id),
     onSuccess: (res, id) => {
+      removedIdsRef.current.add(id);
       queryClient.setQueryData<SuggestionsData>(["suggestions"], (prev) =>
         prev
           ? { suggestions: prev.suggestions.filter((s) => s.id !== id) }
@@ -153,13 +179,15 @@ export function SuggestionsPage() {
     mutationFn: (id: number) => api.dismissSuggestion(id),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ["suggestions"] });
+      removedIdsRef.current.add(id);
       const prev = queryClient.getQueryData<SuggestionsData>(["suggestions"]);
       queryClient.setQueryData<SuggestionsData>(["suggestions"], (cur) =>
         cur ? { suggestions: cur.suggestions.filter((s) => s.id !== id) } : cur,
       );
       return { prev };
     },
-    onError: (_err, _id, ctx) => {
+    onError: (_err, id, ctx) => {
+      removedIdsRef.current.delete(id);
       if (ctx?.prev) queryClient.setQueryData(["suggestions"], ctx.prev);
       toast.error("Couldn't dismiss that suggestion.");
     },
@@ -243,6 +271,7 @@ export function SuggestionsPage() {
                 drafting={
                   draftMutation.isPending && draftMutation.variables === s.id
                 }
+                refreshing={refreshing}
                 onDraft={() => {
                   if (!draftMutation.isPending) draftMutation.mutate(s.id);
                 }}

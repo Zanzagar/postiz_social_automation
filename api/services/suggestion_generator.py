@@ -12,7 +12,8 @@ import logging
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models import ContentRow, Pillar, SocialHistory, Suggestion, Template
@@ -168,6 +169,31 @@ async def generate_template_suggestions(session: AsyncSession, today: date) -> l
     return candidates
 
 
+def _normalize_pillar_key(value: str) -> str:
+    """Normalize a pillar identifier: lowercase, alphanumerics only.
+
+    Makes calendar slugs comparable to pillars-table names, e.g.
+    "spiritual_education" == "Spiritual Education" == "spiritualeducation".
+    """
+    return "".join(ch for ch in value.lower() if ch.isalnum())
+
+
+async def _resolve_pillar_names(session: AsyncSession, candidates: list[dict]) -> None:
+    """Rewrite candidate pillar values to canonical pillars-table names.
+
+    Festival calendar entries carry slugs ("spiritual_education") that
+    must match the pillars table ("Spiritual Education") once suggestions
+    are drafted into content_rows. Unmatched values fall back to the raw
+    value untouched.
+    """
+    result = await session.execute(select(Pillar.name))
+    lookup = {_normalize_pillar_key(name): name for name in result.scalars().all()}
+    for cand in candidates:
+        raw = cand.get("pillar")
+        if raw:
+            cand["pillar"] = lookup.get(_normalize_pillar_key(raw), raw)
+
+
 async def refresh_suggestions(
     session: AsyncSession,
     today: date | None = None,
@@ -177,11 +203,15 @@ async def refresh_suggestions(
 
     Rows whose status is "dismissed" or "drafted" are never resurrected —
     the upsert only inserts new rows or updates rows still in "suggested".
+    Stale "suggested" rows absent from the current candidate set (past
+    festivals, closed pillar gaps, previous ISO weeks' reminders) are
+    deleted; dismissed/drafted rows are kept as dedup history.
     """
     today = today or date.today()
     candidates = generate_festival_suggestions(today, calendar_path)
     candidates += await generate_pillar_gap_suggestions(session, today)
     candidates += await generate_template_suggestions(session, today)
+    await _resolve_pillar_names(session, candidates)
 
     for cand in candidates:
         result = await session.execute(
@@ -189,7 +219,14 @@ async def refresh_suggestions(
         )
         existing = result.scalar_one_or_none()
         if existing is None:
-            session.add(Suggestion(status="suggested", **cand))
+            # ON CONFLICT DO NOTHING absorbs the select-then-insert race:
+            # a concurrent refresh can commit the same source_key between
+            # our SELECT and this INSERT.
+            await session.execute(
+                sqlite_insert(Suggestion)
+                .values(status="suggested", **cand)
+                .on_conflict_do_nothing(index_elements=["source_key"])
+            )
         elif existing.status == "suggested":
             existing.type = cand["type"]
             existing.title = cand["title"]
@@ -198,4 +235,12 @@ async def refresh_suggestions(
             existing.suggested_date = cand["suggested_date"]
             existing.updated_at = datetime.now(UTC)
         # dismissed/drafted rows: leave untouched
+
+    # Expire stale suggestions so weekly source_keys don't pile up:
+    # any still-"suggested" row the generators no longer produce is gone.
+    candidate_keys = [c["source_key"] for c in candidates]
+    stale = delete(Suggestion).where(Suggestion.status == "suggested")
+    if candidate_keys:
+        stale = stale.where(Suggestion.source_key.not_in(candidate_keys))
+    await session.execute(stale)
     await session.commit()

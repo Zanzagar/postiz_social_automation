@@ -281,8 +281,11 @@ class TestHeatmap:
         assert all(len(row) == 6 for row in result["days"])
         assert all(v == 0.0 for row in result["days"] for v in row)
 
-    def test_peak_cell_normalized_to_one(self):
-        # Tuesday 2026-07-07 at 18:30 (6p bucket) and Monday at 09:00 (9a).
+    def test_peak_cell_normalized_to_one(self, monkeypatch):
+        # Buckets are Eastern wall-clock (July = EDT, UTC-4):
+        # Tue 2026-07-07 18:30 UTC = 14:30 ET (3p bucket);
+        # Mon 2026-07-06 09:00 UTC = 05:00 ET (6a bucket).
+        monkeypatch.setenv("GV_DISPLAY_TZ", "America/New_York")
         records = [
             PlatformRecord(
                 1, "history", "", None, "facebook", datetime(2026, 7, 7, 18, 30), 90, 5, 5, 100
@@ -293,9 +296,42 @@ class TestHeatmap:
         ]
         result = compute_heatmap(records)
         assert result["sample_size"] == 2
-        assert result["peak"] == {"day": 1, "bucket": 4}  # Tue, 6p
-        assert result["days"][1][4] == 1.0
-        assert result["days"][0][1] == pytest.approx(0.1)  # 10/100
+        assert result["peak"] == {"day": 1, "bucket": 3}  # Tue, 3p ET
+        assert result["days"][1][3] == 1.0
+        assert result["days"][0][0] == pytest.approx(0.1)  # Mon 6a ET, 10/100
+
+    def test_utc_evening_buckets_to_eastern_6p(self, monkeypatch):
+        """23:30 UTC = 19:30 ET (EDT) → 6p bucket, same weekday."""
+        monkeypatch.setenv("GV_DISPLAY_TZ", "America/New_York")
+        records = [
+            PlatformRecord(
+                1, "history", "", None, "facebook", datetime(2026, 7, 7, 23, 30), 10, 0, 0, 100
+            ),
+        ]
+        result = compute_heatmap(records)
+        assert result["peak"] == {"day": 1, "bucket": 4}  # Tue, 6p ET
+
+    def test_utc_early_morning_shifts_to_previous_eastern_weekday(self, monkeypatch):
+        """Wed 02:30 UTC = Tue 22:30 ET → previous weekday, 9p bucket."""
+        monkeypatch.setenv("GV_DISPLAY_TZ", "America/New_York")
+        records = [
+            PlatformRecord(
+                1, "history", "", None, "facebook", datetime(2026, 7, 8, 2, 30), 10, 0, 0, 100
+            ),
+        ]
+        result = compute_heatmap(records)
+        assert result["peak"] == {"day": 1, "bucket": 5}  # Tue 9p ET, not Wed
+
+    def test_display_tz_env_override(self, monkeypatch):
+        """GV_DISPLAY_TZ=UTC keeps buckets in UTC wall-clock."""
+        monkeypatch.setenv("GV_DISPLAY_TZ", "UTC")
+        records = [
+            PlatformRecord(
+                1, "history", "", None, "facebook", datetime(2026, 7, 7, 18, 30), 10, 0, 0, 100
+            ),
+        ]
+        result = compute_heatmap(records)
+        assert result["peak"] == {"day": 1, "bucket": 4}  # Tue, 6p UTC
 
     def test_records_without_dates_excluded(self):
         records = [PlatformRecord(1, "history", "", None, "facebook", None, 9, 0, 0, 10)]

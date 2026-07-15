@@ -386,6 +386,69 @@ describe("SuggestionsPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("disables each card's Draft/Dismiss while a refresh is in flight (regression: dismissed card resurrection)", async () => {
+    const user = userEvent.setup();
+    let resolveRefresh!: (v: { suggestions: SuggestionItem[] }) => void;
+    mockRefreshSuggestions.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRefresh = resolve;
+      }),
+    );
+    renderSuggestions();
+    await screen.findByRole("heading", { name: "Rama Navami" });
+
+    await user.click(screen.getByRole("button", { name: /refresh/i }));
+
+    // Every card's actions are locked while the new list is in flight
+    const card = cardOf("Rama Navami");
+    expect(within(card).getByRole("button", { name: /draft it/i })).toBeDisabled();
+    expect(within(card).getByRole("button", { name: /dismiss/i })).toBeDisabled();
+
+    resolveRefresh({ suggestions: sampleSuggestions });
+    await waitFor(() => {
+      expect(
+        within(cardOf("Rama Navami")).getByRole("button", { name: /draft it/i }),
+      ).toBeEnabled();
+    });
+    expect(
+      within(cardOf("Rama Navami")).getByRole("button", { name: /dismiss/i }),
+    ).toBeEnabled();
+  });
+
+  it("does not resurrect a suggestion dismissed while a refresh response lands", async () => {
+    const user = userEvent.setup();
+    mockDismissSuggestion.mockResolvedValue({ id: 1, status: "dismissed" });
+    let resolveRefresh!: (v: { suggestions: SuggestionItem[] }) => void;
+    mockRefreshSuggestions.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRefresh = resolve;
+      }),
+    );
+    renderSuggestions();
+    await screen.findByRole("heading", { name: "Rama Navami" });
+
+    // Dismiss first, then refresh — the stale response still includes id 1
+    await user.click(
+      within(cardOf("Rama Navami")).getByRole("button", { name: /dismiss/i }),
+    );
+    await waitFor(() => {
+      expect(mockDismissSuggestion).toHaveBeenCalledWith(1);
+    });
+    await user.click(screen.getByRole("button", { name: /refresh/i }));
+    resolveRefresh({ suggestions: sampleSuggestions });
+
+    await waitFor(() => {
+      expect(mockRefreshSuggestions).toHaveBeenCalledTimes(1);
+    });
+    // The dismissed card stays gone; the rest of the list lands normally
+    expect(
+      screen.queryByRole("heading", { name: "Rama Navami" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /weekly cow spotlight/i }),
+    ).toBeInTheDocument();
+  });
+
   it("degrades quietly when the suggestions query fails", async () => {
     mockGetSuggestions.mockRejectedValue(new Error("down"));
     renderSuggestions();

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
@@ -185,13 +185,14 @@ function seedMocks() {
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const utils = render(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
         <KnowledgePage />
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return { ...utils, qc };
 }
 
 describe("KnowledgePage", () => {
@@ -315,6 +316,67 @@ describe("KnowledgePage", () => {
     renderPage();
     await waitFor(() => expect(mockGetProgress).toHaveBeenCalled());
     expect(screen.queryByText(/crawling/i)).not.toBeInTheDocument();
+  });
+
+  it("refetches knowledge data when a crawl completes (regression: stale metrics)", async () => {
+    mockGetProgress.mockResolvedValue({
+      running: true,
+      source: "gitavalley.org",
+      current: 12,
+      total: 84,
+      phase: "extracting",
+    });
+    const { qc } = renderPage();
+    expect(await screen.findByText(/crawling gitavalley\.org/i)).toBeInTheDocument();
+    const statusCalls = mockGetStatus.mock.calls.length;
+    const statsCalls = mockGetStats.mock.calls.length;
+
+    // The crawl finishes: the next progress payload flips running to false.
+    mockGetProgress.mockResolvedValue(idleProgress);
+    act(() => {
+      qc.setQueryData(["knowledge", "progress"], idleProgress);
+    });
+
+    await waitFor(() => {
+      expect(mockGetStatus.mock.calls.length).toBeGreaterThan(statusCalls);
+      expect(mockGetStats.mock.calls.length).toBeGreaterThan(statsCalls);
+    });
+  });
+
+  it("shows the true coverage-gap count when the backend sends coverage_gap_count", async () => {
+    mockGetStats.mockResolvedValue({ ...statsData, coverage_gap_count: 27 });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText("27")).toBeInTheDocument();
+    });
+  });
+
+  it("falls back to the capped gap-list length when coverage_gap_count is absent", async () => {
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText("1")).toBeInTheDocument();
+    });
+  });
+
+  it("shows an honest error state on the Sources tab when the status fetch fails", async () => {
+    mockGetStatus.mockRejectedValue(new Error("boom"));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("tab", { name: "Sources" }));
+    expect(
+      await screen.findByText("Couldn't load this right now"),
+    ).toBeInTheDocument();
+    // No copy implying the library is empty, no re-crawl call-to-action.
+    expect(screen.queryByText(/nothing connected yet/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/run a re-crawl/i)).not.toBeInTheDocument();
+  });
+
+  it("announces the facts skeleton to screen readers while loading", async () => {
+    mockBrowse.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    expect(
+      await screen.findByRole("status", { name: /loading facts/i }),
+    ).toBeInTheDocument();
   });
 
   it("fires triggerCrawl from the Re-crawl header button", async () => {

@@ -11,6 +11,7 @@ from datetime import date, datetime, time, timedelta
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.models import Base, ContentRow, Suggestion
@@ -290,6 +291,15 @@ class TestDismissEndpoint:
         assert resp.status_code == 200
         assert resp.json() == {"id": suggestion.id, "status": "dismissed"}
 
+    def test_dismiss_is_idempotent(self, client, auth_headers, db_session):
+        """Repeating a dismiss returns 200 with the same body."""
+        suggestion = _seed(db_session)
+        first = client.post(f"/api/suggestions/{suggestion.id}/dismiss", headers=auth_headers)
+        second = client.post(f"/api/suggestions/{suggestion.id}/dismiss", headers=auth_headers)
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert second.json() == {"id": suggestion.id, "status": "dismissed"}
+
     def test_dismiss_missing_returns_404(self, client, auth_headers):
         resp = client.post("/api/suggestions/9999/dismiss", headers=auth_headers)
         assert resp.status_code == 404
@@ -336,6 +346,31 @@ class TestDraftEndpoint:
         assert resp.status_code == 200
         row = _run(db_session.get(ContentRow, resp.json()["content_row_id"]))
         assert row.date is None
+
+    def test_redraft_is_idempotent(self, client, auth_headers, db_session):
+        """Re-drafting returns the existing content_row_id without a new row."""
+        suggestion = _seed(db_session, title="Idea", note="N.")
+        first = client.post(f"/api/suggestions/{suggestion.id}/draft", headers=auth_headers)
+        second = client.post(f"/api/suggestions/{suggestion.id}/draft", headers=auth_headers)
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert second.json() == first.json()
+
+        result = _run(db_session.execute(select(func.count()).select_from(ContentRow)))
+        assert result.scalar_one() == 1
+
+    def test_draft_dismissed_returns_409(self, client, auth_headers, db_session):
+        """A dismissed suggestion must not be resurrected by drafting."""
+        suggestion = _seed(db_session, status="dismissed")
+        resp = client.post(f"/api/suggestions/{suggestion.id}/draft", headers=auth_headers)
+        assert resp.status_code == 409
+        assert resp.json() == {"detail": "Suggestion was dismissed"}
+
+        result = _run(db_session.execute(select(func.count()).select_from(ContentRow)))
+        assert result.scalar_one() == 0
+        updated = _run(db_session.get(Suggestion, suggestion.id))
+        assert updated.status == "dismissed"
 
     def test_draft_missing_returns_404(self, client, auth_headers):
         resp = client.post("/api/suggestions/9999/draft", headers=auth_headers)

@@ -91,10 +91,21 @@ async def draft_suggestion(
     session: AsyncSession = Depends(get_db),
     repo: ContentRepository = Depends(get_content_repo),
 ):
-    """Create a draft ContentRow from a suggestion and link the two."""
+    """Create a draft ContentRow from a suggestion and link the two.
+
+    Idempotent: re-drafting returns the existing content_row_id instead
+    of creating a duplicate row. Drafting a dismissed suggestion is a
+    409 — dismissal is dedup history and must not be resurrected.
+    """
     suggestion = await session.get(Suggestion, suggestion_id)
     if not suggestion:
         raise HTTPException(status_code=404, detail=f"Suggestion {suggestion_id} not found.")
+    if suggestion.status == "drafted" and suggestion.content_row_id is not None:
+        return SuggestionDraftResponse(
+            id=suggestion.id, status="drafted", content_row_id=suggestion.content_row_id
+        )
+    if suggestion.status == "dismissed":
+        raise HTTPException(status_code=409, detail="Suggestion was dismissed")
 
     row_data: dict = {
         "raw_text": f"{suggestion.title} — {suggestion.note}",

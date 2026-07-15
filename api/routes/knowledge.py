@@ -133,6 +133,19 @@ async def get_stats(db_path: str = Depends(get_db_path)):
            LIMIT 10"""
     ).fetchall()
 
+    # True total of gap pages (same predicate) — the list above is capped
+    # at 10, so the frontend must not use its length as the total.
+    coverage_gap_count = conn.execute(
+        """SELECT COUNT(*) FROM (
+               SELECT wp.id
+               FROM web_pages wp
+               LEFT JOIN web_knowledge wk ON wk.web_page_id = wp.id
+               WHERE length(wp.body_text) > 200
+               GROUP BY wp.id
+               HAVING COUNT(wk.id) = 0
+           )"""
+    ).fetchone()[0]
+
     conn.close()
 
     return {
@@ -148,6 +161,7 @@ async def get_stats(db_path: str = Depends(get_db_path)):
             for r in coverage
             if r["fact_count"] == 0
         ],
+        "coverage_gap_count": coverage_gap_count,
     }
 
 

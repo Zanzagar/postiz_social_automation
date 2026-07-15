@@ -63,14 +63,14 @@ function PillarCard({ p }: { p: PillarInsightRow }) {
         </div>
         <div>
           <div className="t-label mb-1 text-sage-600 dark:text-sage-300">
-            Engagement rate
+            Posting rhythm
           </div>
           {p.weekly_series.length > 0 ? (
             <>
               <div
                 className="flex h-6 items-end gap-0.5"
                 role="img"
-                aria-label={`${p.pillar} weekly engagement, oldest to newest`}
+                aria-label={`${p.pillar} posts per week, oldest to newest`}
               >
                 {p.weekly_series.map((v, i) => (
                   <div

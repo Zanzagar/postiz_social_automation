@@ -9,9 +9,14 @@ export function bareHashtag(tag: string): string {
   return tag.replace(/^#+/, "");
 }
 
-/** Case-insensitive containment check: does the caption already hold "#tag"? */
+/**
+ * Case-insensitive whole-tag check: does the caption already hold "#tag"?
+ * Word-boundary aware so "#cowsofinstagram" doesn't hide the separate "#cows"
+ * suggestion (and vice versa).
+ */
 export function captionHasHashtag(caption: string, tag: string): boolean {
-  return caption.toLowerCase().includes(`#${bareHashtag(tag).toLowerCase()}`);
+  const escaped = bareHashtag(tag).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`#${escaped}(?![\\w])`, "i").test(caption);
 }
 
 /** Append " #tag" to a caption (no leading space when the caption is empty). */

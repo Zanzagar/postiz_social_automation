@@ -67,7 +67,11 @@ export function GraphTab() {
   if (isLoading || !ForceGraph) {
     return (
       <div className="px-4 py-5 sm:px-8">
-        <div className="bg-card border-hair rounded-2xl p-6">
+        <div
+          role="status"
+          aria-label="Loading knowledge map"
+          className="bg-card border-hair rounded-2xl p-6"
+        >
           <SkeletonText lines={6} />
         </div>
       </div>
