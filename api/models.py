@@ -1,8 +1,18 @@
 """SQLAlchemy models for the Gita Valley content database."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -318,6 +328,32 @@ class PreferencePair(Base):
     edited_text: Mapped[str] = mapped_column(Text, nullable=False)
     instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class Suggestion(Base):
+    """A generated content suggestion (festival reminder, pillar gap, template)."""
+
+    __tablename__ = "suggestions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    type: Mapped[str] = mapped_column(String(50), nullable=False)  # festival/pillar_gap/template
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    note: Mapped[str] = mapped_column(Text, nullable=False)
+    pillar: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    suggested_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="suggested"
+    )  # suggested/dismissed/drafted
+    source_key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    content_row_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("content_rows.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
 
 
 class MediaAdapted(Base):

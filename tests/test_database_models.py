@@ -66,6 +66,8 @@ class TestTableCreation:
             "brand_settings",
             "few_shot_examples",
             "preference_pairs",
+            # Pasture Phase 2
+            "suggestions",
         }
         assert expected == tables
 
