@@ -33,11 +33,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["media"], dependencies=[Depends(get_current_user)])
 
+# NOTE: image/gif is intentionally excluded — Postiz upload (the hard gate)
+# rejects GIF, so we reject it up front instead of failing late at publish time.
 ALLOWED_TYPES = {
     "image/jpeg",
     "image/png",
     "image/webp",
-    "image/gif",
     "video/mp4",
     "video/quicktime",
     "video/webm",
@@ -281,11 +282,17 @@ async def upload_media(
     session: AsyncSession = Depends(get_db),
 ):
     """Upload a media file to the catalog with AI tagging."""
+    if file.content_type == "image/gif":
+        raise HTTPException(
+            status_code=400,
+            detail="GIF is not supported for publishing (rejected at Postiz upload). "
+            "Convert animated GIFs to MP4, or static GIFs to JPEG/PNG.",
+        )
     if not file.content_type or file.content_type not in ALLOWED_TYPES:
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported file type: {file.content_type}. "
-            f"Allowed: {', '.join(ALLOWED_TYPES)}",
+            f"Allowed: {', '.join(sorted(ALLOWED_TYPES))}",
         )
 
     content = await file.read()

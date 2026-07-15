@@ -11,12 +11,13 @@ from content_engine.models import ContentRow
 
 logger = logging.getLogger(__name__)
 
+# NOTE: image/gif is intentionally excluded — Postiz upload (the hard gate in
+# content_engine.postiz) rejects GIF, so we reject it up front to fail early.
 SUPPORTED_MEDIA_TYPES = {
     "image/jpeg",
     "image/png",
     "image/webp",
     "video/mp4",
-    "image/gif",
 }
 
 # Allowed URL schemes for media downloads
@@ -69,7 +70,7 @@ class ContentValidator:
         return True, None
 
     def validate_media_format(self, url: str) -> tuple[bool, str | None]:
-        """Validate media is a supported format (JPEG, PNG, WebP, MP4, GIF)."""
+        """Validate media is a supported format (JPEG, PNG, WebP, MP4)."""
         try:
             validate_external_url(url)
             resp = requests.head(url, timeout=10, allow_redirects=True)
@@ -77,6 +78,11 @@ class ContentValidator:
                 return False, f"Media URL returned status {resp.status_code}"
 
             content_type = resp.headers.get("Content-Type", "").split(";")[0].strip()
+            if content_type == "image/gif":
+                return False, (
+                    "GIF is not supported for publishing (rejected at Postiz upload). "
+                    "Convert animated GIFs to MP4, or static GIFs to JPEG/PNG."
+                )
             if content_type not in SUPPORTED_MEDIA_TYPES:
                 return False, f"Unsupported media format: {content_type}"
 
