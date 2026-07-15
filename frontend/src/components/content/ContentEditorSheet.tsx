@@ -6,11 +6,13 @@ import { toast } from "sonner";
 import {
   Chip,
   CountdownChip,
+  EmptyState,
   GVSheet,
   PillarChip,
   PlatformDots,
   SkeletonText,
   StatusPill,
+  TextLink,
   Toggle,
 } from "@/components/pasture";
 import { Button } from "@/components/ui/button";
@@ -485,6 +487,19 @@ export function ContentEditorSheet({ rowId, mode, onClose, onSaved }: ContentEdi
               busy={shellMutation.isPending}
               onUseAsIs={(finalText) => shellMutation.mutate({ finalText, generate: false })}
               onGenerate={(finalText) => shellMutation.mutate({ finalText, generate: true })}
+            />
+          ) : enabled.length === 0 ? (
+            // Suggestion drafts arrive with raw_text only — no platforms, no
+            // captions. Point staff at Compose instead of an empty pane.
+            <EmptyState
+              className="py-8"
+              title="No captions yet"
+              body={
+                <>
+                  Compose can grow them from this draft.{" "}
+                  <TextLink href="/create">Open Compose</TextLink>
+                </>
+              }
             />
           ) : (
             <>

@@ -290,6 +290,31 @@ describe("ContentEditorSheet — refine mode", () => {
     renderSheet({ rowId: null });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+
+  it("shows a calm 'No captions yet' hint for suggestion drafts (raw_text only, no platforms/captions)", async () => {
+    mockGetContentRow.mockResolvedValue({
+      ...baseRow,
+      raw_text: "Rama Navami — feast day, plan two posts.",
+      platforms: {},
+      captions: {},
+      source: "suggestion",
+      status: "draft",
+    });
+    mockGetIterations.mockResolvedValue([]);
+    renderSheet();
+
+    await screen.findByText("Rama Navami — feast day, plan two posts.");
+    expect(screen.getByText("No captions yet")).toBeInTheDocument();
+    expect(
+      screen.getByText(/compose can grow them from this draft/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open compose/i })).toHaveAttribute(
+      "href",
+      "/create",
+    );
+    // No caption cards for a captionless draft — the hint replaces them
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
 });
 
 describe("ContentEditorSheet — autosave, countdown, and copy", () => {
