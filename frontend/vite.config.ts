@@ -26,6 +26,13 @@ export default defineConfig({
           });
         },
       },
+      // Media asset files (thumbnails, adapted crops) served by FastAPI's static
+      // mount. Regex keeps the /media SPA route itself out of the proxy,
+      // mirroring nginx.conf's `location ~ ^/media/.+\..+$`.
+      "^/media/.+\\..+$": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
     },
   },
   test: {
