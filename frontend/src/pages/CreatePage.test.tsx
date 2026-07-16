@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CreatePage } from "./CreatePage";
-import type { IterationRecord, Pillar } from "@/lib/api";
+import type { IterationRecord, MediaDetailResponse, Pillar } from "@/lib/api";
 import type { CreateDraft } from "@/hooks/useLocalDraft";
 
 vi.mock("@/lib/api", () => ({
@@ -20,6 +20,8 @@ vi.mock("@/lib/api", () => ({
     editDraft: vi.fn(),
     sendToPostiz: vi.fn(),
     setAltText: vi.fn(),
+    getMediaDetail: vi.fn(),
+    attachMedia: vi.fn(),
   },
   request: vi.fn(),
   fetchGenerateStream: vi.fn(),
@@ -34,7 +36,12 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
 import { api, fetchGenerateStream, request } from "@/lib/api";
+import { toast } from "sonner";
 
 const mockFetchGenerateStream = vi.mocked(fetchGenerateStream);
 const mockRequest = vi.mocked(request);
@@ -92,11 +99,11 @@ function seedRefineDraft(overrides: Partial<CreateDraft> = {}) {
   );
 }
 
-function renderCreate() {
+function renderCreate(route = "/create") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[route]}>
         <CreatePage />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -335,5 +342,149 @@ describe("CreatePage", () => {
       expect(screen.getByRole("status")).toHaveTextContent(/sent to postiz: 2 draft/i);
     });
     expect(localStorage.getItem("gv-draft-create")).toBeNull();
+  });
+
+  describe("media-library intake (?media={id})", () => {
+    const sampleDetail: MediaDetailResponse = {
+      media: {
+        id: 7,
+        filename: "tabby-sunrise.jpg",
+        local_path: "media/tabby-sunrise.jpg",
+        thumbnail_path: "media/thumbnails/thumb_tabby.jpg",
+        mime_type: "image/jpeg",
+        width: 1600,
+        height: 2000,
+        file_size: 123456,
+        pillar: "Cow Life",
+        source: "upload",
+        usage_count: 0,
+        avg_engagement: 0,
+        created_at: "2026-07-01T10:00:00Z",
+        alt_text: "Tabby the cow at sunrise in the east pasture",
+        default_caption: null,
+        season: "summer",
+        original_url: null,
+      },
+      tags: [],
+      usage: [],
+      performance: [],
+    };
+
+    it("preloads the catalog photo as an already-chosen photo with a removable filename chip", async () => {
+      vi.mocked(api.getMediaDetail).mockResolvedValue(sampleDetail);
+      renderCreate("/create?media=7");
+
+      await waitFor(() => {
+        expect(api.getMediaDetail).toHaveBeenCalledWith(7);
+      });
+
+      // Filename chip
+      expect(await screen.findByText("tabby-sunrise.jpg")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /remove tabby-sunrise\.jpg/i }),
+      ).toBeInTheDocument();
+      // Appears as the chosen photo in compose (existing media slot + remove)
+      expect(
+        screen.getByRole("button", { name: /remove media/i }),
+      ).toBeInTheDocument();
+      // Catalog alt text preloaded into the alt field
+      expect(screen.getByLabelText(/alt text/i)).toHaveValue(
+        "Tabby the cow at sunrise in the east pasture",
+      );
+    });
+
+    it("attaches the catalog media once after the draft row is created", async () => {
+      const user = userEvent.setup();
+      vi.mocked(api.getMediaDetail).mockResolvedValue(sampleDetail);
+      vi.mocked(api.attachMedia).mockResolvedValue({ media_catalog_ids: [7] });
+      mockRequest.mockResolvedValue({ captions: {}, row_id: 55 });
+
+      renderCreate("/create?media=7");
+      expect(await screen.findByText("tabby-sunrise.jpg")).toBeInTheDocument();
+
+      await user.type(
+        screen.getByLabelText(/the seed of an idea/i),
+        "Tabby at dawn",
+      );
+      await user.click(screen.getByRole("button", { name: "Instagram" }));
+      await user.click(
+        screen.getByRole("button", { name: /save as draft without generating/i }),
+      );
+
+      await waitFor(() => {
+        expect(api.attachMedia).toHaveBeenCalledWith(55, 7);
+      });
+      expect(api.attachMedia).toHaveBeenCalledTimes(1);
+
+      // The row was created with the preloaded media URL
+      const [, options] = mockRequest.mock.calls[0];
+      expect(JSON.parse(String(options?.body))).toMatchObject({
+        media_url: "/media/tabby-sunrise.jpg",
+      });
+    });
+
+    it("keeps the save flow alive when attach fails (toast, non-fatal)", async () => {
+      const user = userEvent.setup();
+      vi.mocked(api.getMediaDetail).mockResolvedValue(sampleDetail);
+      vi.mocked(api.attachMedia).mockRejectedValue(new Error("boom"));
+      mockRequest.mockResolvedValue({ captions: {}, row_id: 55 });
+
+      renderCreate("/create?media=7");
+      expect(await screen.findByText("tabby-sunrise.jpg")).toBeInTheDocument();
+
+      await user.type(
+        screen.getByLabelText(/the seed of an idea/i),
+        "Tabby at dawn",
+      );
+      await user.click(screen.getByRole("button", { name: "Instagram" }));
+      await user.click(
+        screen.getByRole("button", { name: /save as draft without generating/i }),
+      );
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          "Draft saved, but the library photo couldn't be attached.",
+        );
+      });
+      // Flow continued: draft saved notice still shows
+      expect(screen.getByRole("status")).toHaveTextContent(/saved to drafts/i);
+    });
+
+    it("does not attach after the chip is removed", async () => {
+      const user = userEvent.setup();
+      vi.mocked(api.getMediaDetail).mockResolvedValue(sampleDetail);
+      mockRequest.mockResolvedValue({ captions: {}, row_id: 55 });
+
+      renderCreate("/create?media=7");
+      expect(await screen.findByText("tabby-sunrise.jpg")).toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole("button", { name: /remove tabby-sunrise\.jpg/i }),
+      );
+      expect(screen.queryByText("tabby-sunrise.jpg")).not.toBeInTheDocument();
+
+      await user.type(
+        screen.getByLabelText(/the seed of an idea/i),
+        "Tabby at dawn",
+      );
+      await user.click(screen.getByRole("button", { name: "Instagram" }));
+      await user.click(
+        screen.getByRole("button", { name: /save as draft without generating/i }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("status")).toHaveTextContent(/saved to drafts/i);
+      });
+      expect(api.attachMedia).not.toHaveBeenCalled();
+    });
+
+    it("ignores a missing media param entirely", async () => {
+      renderCreate();
+      expect(
+        await screen.findByLabelText(/the seed of an idea/i),
+      ).toBeInTheDocument();
+      expect(api.getMediaDetail).not.toHaveBeenCalled();
+      expect(screen.queryByText(/from the media library/i)).not.toBeInTheDocument();
+    });
   });
 });

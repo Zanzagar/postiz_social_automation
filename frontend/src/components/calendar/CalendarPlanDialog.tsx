@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { api, ApiError } from "@/lib/api";
 import type { CalendarPlanSlot } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +23,7 @@ import {
   CheckCheck,
   Loader2,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 
 const ALL_PLATFORMS = ["instagram", "facebook", "tiktok", "threads", "linkedin"];
@@ -83,6 +85,23 @@ export function CalendarPlanDialog({
       setPhase("done");
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
       queryClient.invalidateQueries({ queryKey: ["drafts"] });
+    },
+  });
+
+  // Discard the just-generated draft plan so it doesn't linger as an orphan.
+  const discardMutation = useMutation({
+    mutationFn: () => api.deleteCalendarPlan(planId!),
+    onSuccess: () => {
+      toast.success("Plan discarded");
+      handleClose();
+    },
+    onError: (err) => {
+      // 400 = plan is no longer a draft (e.g. already approved elsewhere).
+      toast.error(
+        err instanceof ApiError && err.status === 400
+          ? err.detail
+          : "Couldn't discard the plan",
+      );
     },
   });
 
@@ -274,6 +293,21 @@ export function CalendarPlanDialog({
             </div>
 
             <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => discardMutation.mutate()}
+                disabled={discardMutation.isPending || approveMutation.isPending}
+                aria-busy={discardMutation.isPending}
+                className="gap-2 text-muted-foreground sm:mr-auto"
+              >
+                {discardMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                Discard plan
+              </Button>
               <Button variant="outline" onClick={handleClose}>
                 Cancel
               </Button>

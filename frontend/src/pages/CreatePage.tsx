@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { FileText, Save, Sprout } from "lucide-react";
+import { FileText, Save, Sprout, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { GVSheet, PageHeader } from "@/components/pasture";
@@ -16,6 +18,25 @@ import {
   type Template,
 } from "@/lib/api";
 
+/** A catalog item preloaded into compose via /create?media={id}. */
+interface PendingMedia {
+  id: number;
+  url: string;
+  thumbnailUrl: string;
+  filename: string;
+}
+
+/**
+ * Contract "URL construction": drive://<id> streams from the Drive proxy;
+ * local paths (media/<file>) are served from the static mount.
+ */
+function mediaFileUrl(localPath: string): string {
+  if (localPath.startsWith("drive://")) {
+    return `/api/media/drive/file/${localPath.slice("drive://".length)}`;
+  }
+  return `/${localPath}`;
+}
+
 /**
  * Create flow — three rooms: Compose → Generate (live SSE) → Refine.
  * Compose state persists to localStorage (useLocalDraft) so an
@@ -28,6 +49,68 @@ export function CreatePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [templateSheetOpen, setTemplateSheetOpen] = useState(false);
+
+  // --- Media-library intake (/create?media={id}) ---
+  const [searchParams] = useSearchParams();
+  const mediaParam = searchParams.get("media");
+  const mediaParamId =
+    mediaParam && /^\d+$/.test(mediaParam) ? Number(mediaParam) : null;
+
+  const [pendingMedia, setPendingMedia] = useState<PendingMedia | null>(null);
+  const pendingMediaRef = useRef<PendingMedia | null>(null);
+  useEffect(() => {
+    pendingMediaRef.current = pendingMedia;
+  }, [pendingMedia]);
+  const preloadedIdRef = useRef<number | null>(null);
+
+  const { data: mediaDetail, isError: mediaLoadFailed } = useQuery({
+    queryKey: ["media", "detail", mediaParamId],
+    queryFn: () => api.getMediaDetail(mediaParamId!),
+    enabled: mediaParamId !== null,
+  });
+
+  // Preload the catalog image into compose exactly once per media id.
+  useEffect(() => {
+    if (!mediaDetail) return;
+    const m = mediaDetail.media;
+    if (preloadedIdRef.current === m.id) return;
+    preloadedIdRef.current = m.id;
+    const url = mediaFileUrl(m.local_path);
+    setPendingMedia({
+      id: m.id,
+      url,
+      thumbnailUrl: m.thumbnail_path ? `/${m.thumbnail_path}` : url,
+      filename: m.filename,
+    });
+    update({ mediaUrl: url, altText: m.alt_text ?? "" });
+  }, [mediaDetail, update]);
+
+  useEffect(() => {
+    if (mediaLoadFailed) {
+      toast.error("Couldn't load that media item — starting without it.");
+    }
+  }, [mediaLoadFailed]);
+
+  // If the photo is removed or replaced in compose, drop the pending attach.
+  useEffect(() => {
+    if (pendingMedia && draft.mediaUrl !== pendingMedia.url) {
+      setPendingMedia(null);
+    }
+  }, [draft.mediaUrl, pendingMedia]);
+
+  /** Attach the preloaded catalog item to the freshly created row (once). */
+  async function attachPendingMedia(rowId: number) {
+    const pending = pendingMediaRef.current;
+    if (!pending) return;
+    pendingMediaRef.current = null;
+    setPendingMedia(null);
+    try {
+      await api.attachMedia(rowId, pending.id);
+    } catch {
+      // Non-fatal: the draft row exists either way.
+      toast.error("Draft saved, but the library photo couldn't be attached.");
+    }
+  }
 
   const { data: pillars = [] } = useQuery({
     queryKey: ["pillars", "active"],
@@ -61,6 +144,7 @@ export function CreatePage() {
   }
 
   function handleGenerated(rowId: number | null, captions: Record<string, string>) {
+    if (rowId !== null) void attachPendingMedia(rowId);
     update({ rowId, captions, stage: "refine" });
   }
 
@@ -86,6 +170,9 @@ export function CreatePage() {
       });
       if (result.row_id && draft.mediaUrl && draft.altText.trim()) {
         await api.setAltText(result.row_id, draft.altText.trim());
+      }
+      if (result.row_id) {
+        await attachPendingMedia(result.row_id);
       }
       clear();
       setNotice("Saved to Drafts — find it under Review Drafts.");
@@ -184,6 +271,33 @@ export function CreatePage() {
           className="t-body-sm mx-8 mt-4 rounded-lg border border-terra-200 bg-terra-50 px-3 py-2 text-terra-700 dark:border-terra-600 dark:bg-terra-700/20 dark:text-terra-200"
         >
           {error}
+        </div>
+      )}
+
+      {pendingMedia && draft.stage === "compose" && (
+        <div className="bg-card border-hair mx-8 mt-4 flex items-center gap-2.5 self-start rounded-lg px-2.5 py-1.5">
+          <img
+            src={pendingMedia.thumbnailUrl}
+            alt=""
+            className="h-8 w-8 rounded object-cover"
+          />
+          <div className="min-w-0">
+            <div className="t-caption ink max-w-[240px] truncate font-medium">
+              {pendingMedia.filename}
+            </div>
+            <div className="t-micro ink-muted">From the media library</div>
+          </div>
+          <button
+            type="button"
+            aria-label={`Remove ${pendingMedia.filename}`}
+            onClick={() => {
+              setPendingMedia(null);
+              update({ mediaUrl: "", altText: "" });
+            }}
+            className="fr ink-muted ml-1 flex h-6 w-6 items-center justify-center rounded-md hover:bg-sage-50 dark:hover:bg-sage-800"
+          >
+            <X size={13} strokeWidth={1.75} aria-hidden="true" />
+          </button>
         </div>
       )}
 
