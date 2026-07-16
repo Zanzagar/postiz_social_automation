@@ -531,3 +531,392 @@ describe("api publish config", () => {
     expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ platforms: configs });
   });
 });
+
+// --- Phase 3: media catalog endpoints ---
+
+describe("media catalog endpoints", () => {
+  beforeEach(() => {
+    setToken("jwt");
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+    });
+  });
+
+  it("getMedia GETs /api/media with empty query and auth header by default", async () => {
+    await api.getMedia();
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media?");
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(opts.headers["Authorization"]).toBe("Bearer jwt");
+  });
+
+  it("getMedia serializes all filter params including q, media_type, untagged", async () => {
+    await api.getMedia({
+      tag: "cows",
+      pillar: "farm",
+      source: "upload",
+      q: "sunset barn",
+      media_type: "image",
+      untagged: true,
+      sort: "date",
+      page: 2,
+      per_page: 30,
+    });
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      "/api/media?tag=cows&pillar=farm&source=upload&q=sunset+barn&media_type=image&untagged=true&sort=date&page=2&per_page=30",
+    );
+  });
+
+  it("getMedia omits untagged from the query when false", async () => {
+    await api.getMedia({ untagged: false });
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media?");
+  });
+
+  it("getMedia returns the browse response with storage_used_bytes", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          items: [],
+          total: 0,
+          page: 1,
+          per_page: 30,
+          total_pages: 0,
+          storage_used_bytes: 1234,
+        }),
+    });
+    const result = await api.getMedia();
+    expect(result.storage_used_bytes).toBe(1234);
+  });
+
+  it("getMediaDetail GETs /api/media/{id}", async () => {
+    await api.getMediaDetail(9);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media/9");
+  });
+
+  it("updateMedia PATCHes /api/media/{id} preserving explicit nulls", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ id: 9, alt_text: null, season: "fall" }),
+    });
+    const result = await api.updateMedia(9, { alt_text: null, season: "fall" });
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media/9");
+    expect(mockFetch.mock.calls[0][1].method).toBe("PATCH");
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+      alt_text: null,
+      season: "fall",
+    });
+    expect(result.season).toBe("fall");
+  });
+
+  it("updateMedia omits absent fields from the PATCH body", async () => {
+    await api.updateMedia(9, { default_caption: "Calves at dawn" });
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+      default_caption: "Calves at dawn",
+    });
+  });
+
+  it("getAdaptedVersions GETs /api/media/{id}/adapted", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          adapted: [
+            {
+              id: 1,
+              platform: "instagram",
+              format: "post",
+              adapted_path: "media/adapted/9_instagram_post.jpg",
+              width: 1080,
+              height: 1080,
+              has_text_overlay: false,
+              created_at: "2026-07-01T00:00:00",
+            },
+          ],
+        }),
+    });
+    const result = await api.getAdaptedVersions(9);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media/9/adapted");
+    expect(result.adapted).toHaveLength(1);
+    expect(result.adapted[0].platform).toBe("instagram");
+  });
+
+  it("adaptMedia POSTs platforms and formats to /api/media/{id}/adapt", async () => {
+    await api.adaptMedia(9, ["instagram", "facebook"], ["post", "story"]);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media/9/adapt");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+      platforms: ["instagram", "facebook"],
+      formats: ["post", "story"],
+    });
+  });
+
+  it("generateMediaMeta POSTs to /api/media/{id}/generate-meta", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          alt_text: "A cow grazing in the morning pasture.",
+          season: "summer",
+          suggested_tags: [{ tag: "cows", confidence: 0.9 }],
+        }),
+    });
+    const result = await api.generateMediaMeta(9);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media/9/generate-meta");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+    expect(result.alt_text).toBe("A cow grazing in the morning pasture.");
+    expect(result.suggested_tags[0].tag).toBe("cows");
+  });
+
+  it("uploadMediaFile POSTs FormData field 'file' to /api/media/upload", async () => {
+    const file = new File(["img"], "cow.jpg", { type: "image/jpeg" });
+    await api.uploadMediaFile(file);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media/upload");
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(opts.method).toBe("POST");
+    expect(opts.body).toBeInstanceOf(FormData);
+    expect(opts.body.get("file")).toBe(file);
+    // Content-Type must NOT be set for FormData (browser sets boundary)
+    expect(opts.headers["Content-Type"]).toBeUndefined();
+    expect(opts.headers["Authorization"]).toBe("Bearer jwt");
+  });
+
+  it("importMediaUrl POSTs the url to /api/media/import-url", async () => {
+    await api.importMediaUrl("https://example.org/cow.jpg");
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media/import-url");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+      url: "https://example.org/cow.jpg",
+    });
+  });
+
+  it("updateMediaTags PUTs add/remove to /api/media/{id}/tags", async () => {
+    await api.updateMediaTags(9, ["cow"], ["barn"]);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media/9/tags");
+    expect(mockFetch.mock.calls[0][1].method).toBe("PUT");
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+      add: ["cow"],
+      remove: ["barn"],
+    });
+  });
+
+  it("deleteMedia DELETEs /api/media/{id}", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ deleted: true, id: 9 }),
+    });
+    const result = await api.deleteMedia(9);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media/9");
+    expect(mockFetch.mock.calls[0][1].method).toBe("DELETE");
+    expect(result.deleted).toBe(true);
+  });
+
+  it("suggestMedia GETs /api/media/suggest with content_row_id", async () => {
+    await api.suggestMedia(12);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media/suggest?content_row_id=12");
+  });
+
+  it("attachMedia PUTs to /api/content/{row}/attach-media with media_id query", async () => {
+    await api.attachMedia(3, 9);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/content/3/attach-media?media_id=9");
+    expect(mockFetch.mock.calls[0][1].method).toBe("PUT");
+  });
+
+  it("detachMedia PUTs to /api/content/{row}/detach-media with media_id query", async () => {
+    await api.detachMedia(3, 9);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/content/3/detach-media?media_id=9");
+    expect(mockFetch.mock.calls[0][1].method).toBe("PUT");
+  });
+
+  it("getMediaHealth GETs /api/media-health", async () => {
+    await api.getMediaHealth();
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media-health");
+  });
+
+  it("mediaCleanup POSTs /api/media-cleanup with both flags", async () => {
+    await api.mediaCleanup(true, false);
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      "/api/media-cleanup?remove_missing=true&remove_orphans=false",
+    );
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+  });
+});
+
+// --- Phase 3: drive endpoints ---
+
+describe("drive endpoints", () => {
+  beforeEach(() => {
+    setToken("jwt");
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+    });
+  });
+
+  it("browseDrive GETs /api/media/drive/browse with folder_id", async () => {
+    await api.browseDrive("folder-1");
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      "/api/media/drive/browse?folder_id=folder-1",
+    );
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(opts.headers["Authorization"]).toBe("Bearer jwt");
+  });
+
+  it("browseDrive passes page_token when provided", async () => {
+    await api.browseDrive("folder-1", "tok-2");
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      "/api/media/drive/browse?folder_id=folder-1&page_token=tok-2",
+    );
+  });
+
+  it("importFromDrive POSTs file_ids to /api/media/import-drive", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ imported: 2, errors: [], skipped: [] }),
+    });
+    const result = await api.importFromDrive(["a", "b"]);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media/import-drive");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+      file_ids: ["a", "b"],
+    });
+    expect(result.imported).toBe(2);
+  });
+
+  it("syncDrive POSTs to /api/media/drive/sync", async () => {
+    await api.syncDrive();
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media/drive/sync");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+  });
+
+  it("getDriveSettings GETs /api/media/drive/settings", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ folder_id: "f-1" }),
+    });
+    const result = await api.getDriveSettings();
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/media/drive/settings");
+    expect(result.folder_id).toBe("f-1");
+  });
+});
+
+// --- Phase 3: calendar plan endpoints ---
+
+describe("calendar plan endpoints", () => {
+  const samplePlan = {
+    id: 1,
+    date_range_start: "2026-07-20",
+    date_range_end: "2026-07-27",
+    platforms: ["facebook"],
+    slots: [],
+    status: "draft",
+    created_at: "2026-07-15T10:00:00",
+  };
+
+  beforeEach(() => {
+    setToken("jwt");
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(samplePlan),
+    });
+  });
+
+  it("createCalendarPlan POSTs to /api/calendar/plan with the full body", async () => {
+    const req = {
+      date_range_start: "2026-07-20",
+      date_range_end: "2026-07-27",
+      platforms: ["facebook"],
+      constraints: "2 posts per week",
+    };
+    const result = await api.createCalendarPlan(req);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/calendar/plan");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual(req);
+    expect(result.status).toBe("draft");
+  });
+
+  it("getCalendarPlan GETs /api/calendar/plan/{id}", async () => {
+    const result = await api.getCalendarPlan(1);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/calendar/plan/1");
+    expect(result.id).toBe(1);
+  });
+
+  it("getCalendarPlans GETs /api/calendar/plans without status", async () => {
+    await api.getCalendarPlans();
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/calendar/plans");
+  });
+
+  it("getCalendarPlans passes the status filter", async () => {
+    await api.getCalendarPlans("draft");
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/calendar/plans?status=draft");
+  });
+
+  it("approveCalendarPlan POSTs slot_indices to /api/calendar/plan/{id}/approve", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ created_count: 2, content_row_ids: [10, 11] }),
+    });
+    const result = await api.approveCalendarPlan(1, [0, 2]);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/calendar/plan/1/approve");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+      slot_indices: [0, 2],
+    });
+    expect(result.created_count).toBe(2);
+  });
+
+  it("approveCalendarPlan sends slot_indices null when omitted", async () => {
+    await api.approveCalendarPlan(1);
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+      slot_indices: null,
+    });
+  });
+
+  it("deleteCalendarPlan DELETEs /api/calendar/plan/{id}", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ deleted: true, id: 1 }),
+    });
+    const result = await api.deleteCalendarPlan(1);
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/calendar/plan/1");
+    expect(mockFetch.mock.calls[0][1].method).toBe("DELETE");
+    expect(result.deleted).toBe(true);
+  });
+});
+
+// --- Phase 3: festival endpoints ---
+
+describe("festival endpoints", () => {
+  beforeEach(() => {
+    setToken("jwt");
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve([]),
+    });
+  });
+
+  it("getFestivals GETs /api/festivals with empty query by default", async () => {
+    await api.getFestivals();
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/festivals?");
+  });
+
+  it("getFestivals passes from and to", async () => {
+    await api.getFestivals("2026-07-01", "2026-08-01");
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      "/api/festivals?from=2026-07-01&to=2026-08-01",
+    );
+  });
+});

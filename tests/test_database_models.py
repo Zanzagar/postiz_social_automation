@@ -377,6 +377,9 @@ class TestMediaCatalogModel:
             "avg_engagement",
             "created_by",
             "created_at",
+            "alt_text",
+            "default_caption",
+            "season",
         }
         assert expected == columns
 

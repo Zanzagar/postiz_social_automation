@@ -121,6 +121,8 @@ export function CalendarRail({
           <div className="space-y-2">
             {upcoming.map((f) => {
               const d = parseISO(f.date);
+              // Content-angle nudge: first suggested angle, else the significance.
+              const note = f.suggested_content_angles?.[0] || f.significance;
               return (
                 <div
                   key={`${f.name}-${f.date}`}
@@ -141,6 +143,9 @@ export function CalendarRail({
                     <div className="t-micro ink-muted">
                       {f.days === 0 ? "today" : `in ${f.days} day${f.days !== 1 ? "s" : ""}`}
                     </div>
+                    {note && (
+                      <div className="t-micro ink-muted truncate">{note}</div>
+                    )}
                   </div>
                 </div>
               );
