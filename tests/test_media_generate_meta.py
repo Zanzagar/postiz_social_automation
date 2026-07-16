@@ -180,6 +180,57 @@ class TestGenerateMediaMetaHelper:
             _generate_media_meta("/tmp/x.jpg")
 
     @patch("api.routes.media.subprocess.run")
+    def test_missing_tags_key_returns_empty_list(self, mock_run):
+        """Missing 'tags' key must yield {"tags": []}, not an error."""
+        from api.routes.media import _generate_media_meta
+
+        payload = {"alt_text": "A red barn beside a field.", "season": "summer"}
+        mock_run.return_value = _cli_result(json.dumps(payload))
+        assert _generate_media_meta("/tmp/x.jpg")["tags"] == []
+
+    @patch("api.routes.media.subprocess.run")
+    def test_non_list_tags_returns_empty_list(self, mock_run):
+        from api.routes.media import _generate_media_meta
+
+        payload = dict(_VALID_META, tags="cows")
+        mock_run.return_value = _cli_result(json.dumps(payload))
+        assert _generate_media_meta("/tmp/x.jpg")["tags"] == []
+
+    @patch("api.routes.media.subprocess.run")
+    def test_malformed_tag_entries_dropped_or_coerced(self, mock_run):
+        """Non-dict entries and bad tag names are dropped; bad confidence -> 0.5."""
+        from api.routes.media import _generate_media_meta
+
+        payload = dict(
+            _VALID_META,
+            tags=[
+                "farm",  # plain string — dropped
+                {"confidence": 0.9},  # missing tag — dropped
+                {"tag": ""},  # empty tag — dropped
+                {"tag": 42, "confidence": 0.9},  # non-string tag — dropped
+                {"tag": "cows"},  # missing confidence — defaults to 0.5
+                {"tag": "farm", "confidence": "high"},  # unparseable — defaults to 0.5
+                {"tag": "kitchen", "confidence": "0.7"},  # numeric string — coerced
+            ],
+        )
+        mock_run.return_value = _cli_result(json.dumps(payload))
+        tags = _generate_media_meta("/tmp/x.jpg")["tags"]
+        assert tags == [
+            {"tag": "cows", "confidence": 0.5},
+            {"tag": "farm", "confidence": 0.5},
+            {"tag": "kitchen", "confidence": 0.7},
+        ]
+
+    @patch("api.routes.media.subprocess.run")
+    def test_classify_media_tags_missing_tags_key_returns_empty(self, mock_run):
+        """Wrapper must not raise KeyError when 'tags' is absent from the JSON."""
+        from api.routes.media import _classify_media_tags
+
+        payload = {"alt_text": "A red barn beside a field.", "season": "summer"}
+        mock_run.return_value = _cli_result(json.dumps(payload))
+        assert _classify_media_tags("/tmp/x.jpg") == []
+
+    @patch("api.routes.media.subprocess.run")
     def test_classify_media_tags_backward_compat(self, mock_run):
         """src/content_engine imports _classify_media_tags — must keep working."""
         from api.routes.media import _classify_media_tags

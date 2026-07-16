@@ -5,6 +5,7 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from starlette.concurrency import run_in_threadpool
 
 from api.auth import get_current_user
 from api.dependencies import get_content_repo, get_postiz_client
@@ -300,7 +301,9 @@ async def attach_media(
     media = await repo.session.get(MediaCatalog, media_id)
     if media and media.mime_type and media.mime_type.startswith("image/"):
         try:
-            src_img = _load_media_image(media)
+            # Blocking resource: Google Drive HTTP download + PIL decode —
+            # run in a threadpool so it doesn't block the event loop.
+            src_img = await run_in_threadpool(_load_media_image, media)
             with src_img:
                 for platform in enabled_platforms:
                     dims = PLATFORM_DIMENSIONS.get(platform, {})

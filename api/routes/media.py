@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from api.auth import get_current_user
 from api.dependencies import get_db, get_settings
@@ -146,12 +147,25 @@ def _generate_media_meta(image_path: str) -> dict:
     else:
         season = None
 
-    raw_tags = data.get("tags") or []
-    tags = [
-        {"tag": t["tag"], "confidence": float(t.get("confidence", 0.5))}
-        for t in raw_tags
-        if isinstance(t, dict) and t.get("tag")
-    ]
+    # "tags" is GUARANTEED to be a list of {"tag": str, "confidence": float}:
+    # missing/non-list "tags" -> [] (not an error); malformed entries (non-dict,
+    # missing/non-string tag) are dropped; unparseable confidence defaults to 0.5.
+    # Callers (including the _classify_media_tags wrapper) may index t["tag"] safely.
+    raw_tags = data.get("tags")
+    if not isinstance(raw_tags, list):
+        raw_tags = []
+    tags = []
+    for t in raw_tags:
+        if not isinstance(t, dict):
+            continue
+        tag_name = t.get("tag")
+        if not isinstance(tag_name, str) or not tag_name.strip():
+            continue
+        try:
+            confidence = float(t.get("confidence", 0.5))
+        except (TypeError, ValueError):
+            confidence = 0.5
+        tags.append({"tag": tag_name, "confidence": confidence})
     return {"alt_text": alt_text, "season": season, "tags": tags}
 
 
@@ -443,11 +457,16 @@ async def browse_media(
             MediaTag.tag == tag
         )
     if q:
-        pattern = f"%{q.lower()}%"
-        tag_match_ids = select(MediaTag.media_id).where(func.lower(MediaTag.tag).like(pattern))
+        # Escape LIKE wildcards so q matches as a literal substring —
+        # '%'/'_' in user input must not act as wildcards.
+        escaped_q = q.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped_q}%"
+        tag_match_ids = select(MediaTag.media_id).where(
+            func.lower(MediaTag.tag).like(pattern, escape="\\")
+        )
         query = query.where(
             or_(
-                func.lower(MediaCatalog.filename).like(pattern),
+                func.lower(MediaCatalog.filename).like(pattern, escape="\\"),
                 MediaCatalog.id.in_(tag_match_ids),
             )
         )
@@ -892,8 +911,13 @@ async def _adapt_and_record(
     ADAPTED_DIR.mkdir(parents=True, exist_ok=True)
     out_path = ADAPTED_DIR / f"{media_id}_{platform}_{fmt}.jpg"
 
-    adapted_img = _smart_crop(src_img, target_w, target_h)
-    adapted_img.save(out_path, format="JPEG", quality=90)
+    def _crop_and_save() -> None:
+        adapted_img = _smart_crop(src_img, target_w, target_h)
+        adapted_img.save(out_path, format="JPEG", quality=90)
+
+    # Blocking resource: PIL crop/resize + JPEG encode (CPU + disk I/O) —
+    # run in a threadpool so it doesn't block the event loop.
+    await run_in_threadpool(_crop_and_save)
 
     existing_result = await session.execute(
         select(MediaAdapted).where(
@@ -946,7 +970,9 @@ async def adapt_media(
 
     if media.local_path.startswith("drive://"):
         try:
-            src_img = _load_media_image(media)
+            # Blocking resource: Google Drive HTTP download + PIL decode —
+            # run in a threadpool so it doesn't block the event loop.
+            src_img = await run_in_threadpool(_load_media_image, media)
         except Exception as e:
             logger.warning("Drive download failed for media %d", media_id, exc_info=True)
             raise HTTPException(status_code=400, detail="Source image unavailable") from e
@@ -992,15 +1018,22 @@ async def regenerate_media_meta(
 
     import tempfile
 
-    try:
+    def _fetch_and_generate() -> dict:
         content = _get_media_bytes(media)
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
         try:
-            meta = _generate_media_meta(tmp_path)
+            return _generate_media_meta(tmp_path)
         finally:
             Path(tmp_path).unlink(missing_ok=True)
+
+    try:
+        # Blocking resources: Google Drive HTTP download / local file read
+        # (_get_media_bytes) and the up-to-120s Claude CLI subprocess
+        # (_generate_media_meta) — run in a threadpool so they don't block
+        # the event loop (e.g. starve SSE /api/generate).
+        meta = await run_in_threadpool(_fetch_and_generate)
     except Exception as e:
         logger.warning("Meta generation failed for media %d", media_id, exc_info=True)
         raise HTTPException(status_code=502, detail="AI generation failed") from e

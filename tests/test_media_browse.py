@@ -435,6 +435,54 @@ class TestMediaBrowsePhase3:
         resp = client.get("/api/media?q=zzzznotthere", headers=auth_headers)
         assert resp.json()["total"] == 0
 
+    def test_q_underscore_is_literal(self, client, auth_headers, db_engine):
+        """'_' in q must not act as a single-char wildcard."""
+        _seed_media(db_engine, count=1, filename="a_b.jpg")
+        _seed_media(db_engine, count=1, filename="axb.jpg")
+        resp = client.get("/api/media", params={"q": "a_b"}, headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["filename"] == "a_b.jpg"
+
+    def test_q_percent_matches_only_literal_percent(self, client, auth_headers, db_engine):
+        """'%' in q must not match everything — only literal '%' occurrences."""
+        _seed_media(db_engine, count=1, filename="sale_100%.jpg")
+        _seed_media(db_engine, count=1, filename="normal.jpg")
+        resp = client.get("/api/media", params={"q": "%"}, headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["filename"] == "sale_100%.jpg"
+
+    def test_q_percent_matches_literal_in_tag(self, client, auth_headers, db_engine):
+        """Escaping applies to the tag branch too, not just filenames."""
+        ids = _seed_media(db_engine, count=2)
+        _seed_tags(db_engine, ids[0], [{"tag": "50%off"}])
+        _seed_tags(db_engine, ids[1], [{"tag": "plain"}])
+        resp = client.get("/api/media", params={"q": "%"}, headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["id"] == ids[0]
+
+    def test_q_100_percent_literal(self, client, auth_headers, db_engine):
+        """q='100%' matches literal '100%', not any string containing '100'."""
+        _seed_media(db_engine, count=1, filename="sale_100%.jpg")
+        _seed_media(db_engine, count=1, filename="100days.jpg")
+        resp = client.get("/api/media", params={"q": "100%"}, headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["filename"] == "sale_100%.jpg"
+
+    def test_q_backslash_literal(self, client, auth_headers, db_engine):
+        """Backslash in q is escaped, not treated as an escape char itself."""
+        _seed_media(db_engine, count=1, filename="back\\slash.jpg")
+        _seed_media(db_engine, count=1, filename="backslash.jpg")
+        resp = client.get("/api/media", params={"q": "back\\slash"}, headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["filename"] == "back\\slash.jpg"
+
     def test_media_type_image(self, client, auth_headers, db_engine):
         _seed_media(db_engine, count=2, mime_type="image/jpeg")
         _seed_media(db_engine, count=1, mime_type="video/mp4", filename="clip.mp4")
