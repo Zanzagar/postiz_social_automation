@@ -83,9 +83,12 @@ export function PlatformVersions({ media }: { media: MediaItem }) {
       setGenerateError(null);
       setPickerOpen(false);
       toast.success("Platform versions ready");
-      void queryClient.invalidateQueries({ queryKey: ["media", "adapted", media.id] });
     },
     onError: (err) => setGenerateError(errorDetail(err, "Couldn't generate crops")),
+    // Invalidate on settle (not just success): a mid-sequence failure may
+    // still have created some crops — render them alongside the error.
+    onSettled: () =>
+      void queryClient.invalidateQueries({ queryKey: ["media", "adapted", media.id] }),
   });
 
   function toggleCombo(key: string) {

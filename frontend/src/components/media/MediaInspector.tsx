@@ -48,10 +48,23 @@ interface MediaInspectorProps {
  * below-`lg` GVSheet so both render paths show identical content.
  */
 export function MediaInspector({ mediaId, inSheet = false, onDeleted }: MediaInspectorProps) {
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: ["media", "detail", mediaId],
     queryFn: () => api.getMediaDetail(mediaId),
   });
+
+  if (isError) {
+    return (
+      <div className={cn("space-y-2", inSheet ? "py-2" : "p-5")}>
+        <p className="t-caption ink-muted">
+          Couldn't load this item — it may have been deleted.
+        </p>
+        <TextLink className="t-caption" onClick={() => void refetch()}>
+          Retry
+        </TextLink>
+      </div>
+    );
+  }
 
   if (!data) {
     return (
@@ -119,9 +132,17 @@ function InspectorBody({ detail, inSheet, onDeleted }: InspectorBodyProps) {
         if (!d) return d;
         const kept = d.tags.filter((t) => !remove.includes(t.tag));
         const existing = new Set(kept.map((t) => t.tag));
+        // Placeholder ids stay strictly below the cache minimum so two quick
+        // optimistic adds never collide (real ids are positive).
+        const nextPlaceholderId = Math.min(0, ...kept.map((t) => t.id)) - 1;
         const added = add
           .filter((t) => !existing.has(t))
-          .map((tag, i) => ({ id: -(i + 1), tag, confidence: 1, source: "manual" }));
+          .map((tag, i) => ({
+            id: nextPlaceholderId - i,
+            tag,
+            confidence: 1,
+            source: "manual",
+          }));
         return { ...d, tags: [...kept, ...added] };
       });
       return { prev };
@@ -290,7 +311,7 @@ function InspectorBody({ detail, inSheet, onDeleted }: InspectorBodyProps) {
           <div className="flex flex-wrap items-center gap-1.5">
             {detail.tags.map((t) => (
               <span
-                key={t.id}
+                key={t.tag}
                 className="t-caption inline-flex items-center gap-1 rounded-full border border-sage-100 bg-sage-50 px-2 py-0.5 font-medium text-sage-700 dark:border-sage-700 dark:bg-sage-800 dark:text-sage-100"
               >
                 {t.tag}
@@ -298,7 +319,7 @@ function InspectorBody({ detail, inSheet, onDeleted }: InspectorBodyProps) {
                   type="button"
                   aria-label={`Remove ${t.tag}`}
                   onClick={() => tagsMutation.mutate({ add: [], remove: [t.tag] })}
-                  className="fr relative -mr-0.5 rounded-full p-0.5 before:absolute before:-inset-3.5 before:content-[''] hover:bg-black/5 dark:hover:bg-white/10"
+                  className="fr relative -mr-0.5 rounded-full p-0.5 before:absolute before:-inset-4 before:content-[''] hover:bg-black/5 dark:hover:bg-white/10"
                 >
                   <X size={11} strokeWidth={1.75} aria-hidden="true" />
                 </button>
@@ -345,7 +366,9 @@ function InspectorBody({ detail, inSheet, onDeleted }: InspectorBodyProps) {
               Season
             </Label>
             <Select
-              value={media.season ?? undefined}
+              // Fully controlled from the cache ("" = placeholder) so the
+              // optimistic-rollback in onError visually reverts a failed save.
+              value={media.season ?? ""}
               onValueChange={(v) => {
                 if (v !== media.season) patchMutation.mutate({ season: v });
               }}

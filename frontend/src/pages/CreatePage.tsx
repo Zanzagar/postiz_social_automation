@@ -63,14 +63,30 @@ export function CreatePage() {
   }, [pendingMedia]);
   const preloadedIdRef = useRef<number | null>(null);
 
+  // A restored mid-flow draft (generate/refine) must never be clobbered by a
+  // ?media= preload — captured once at mount from the restored draft's stage.
+  const [mediaIntakeBlocked] = useState(
+    () => mediaParamId !== null && draft.stage !== "compose",
+  );
+  const blockedToastShownRef = useRef(false);
+  useEffect(() => {
+    if (mediaIntakeBlocked && !blockedToastShownRef.current) {
+      blockedToastShownRef.current = true;
+      toast.error(
+        "You already have a draft in progress — save or discard it first, then use the library photo.",
+      );
+    }
+  }, [mediaIntakeBlocked]);
+
   const { data: mediaDetail, isError: mediaLoadFailed } = useQuery({
     queryKey: ["media", "detail", mediaParamId],
     queryFn: () => api.getMediaDetail(mediaParamId!),
-    enabled: mediaParamId !== null,
+    enabled: mediaParamId !== null && !mediaIntakeBlocked,
   });
 
   // Preload the catalog image into compose exactly once per media id.
   useEffect(() => {
+    if (mediaIntakeBlocked) return;
     if (!mediaDetail) return;
     const m = mediaDetail.media;
     if (preloadedIdRef.current === m.id) return;
@@ -83,7 +99,7 @@ export function CreatePage() {
       filename: m.filename,
     });
     update({ mediaUrl: url, altText: m.alt_text ?? "" });
-  }, [mediaDetail, update]);
+  }, [mediaDetail, mediaIntakeBlocked, update]);
 
   useEffect(() => {
     if (mediaLoadFailed) {

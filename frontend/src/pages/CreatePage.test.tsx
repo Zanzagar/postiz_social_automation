@@ -478,6 +478,37 @@ describe("CreatePage", () => {
       expect(api.attachMedia).not.toHaveBeenCalled();
     });
 
+    it("skips the preload and warns when a restored draft is mid-flow", async () => {
+      seedRefineDraft();
+      vi.mocked(api.getMediaDetail).mockResolvedValue(sampleDetail);
+
+      renderCreate("/create?media=7");
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          "You already have a draft in progress — save or discard it first, then use the library photo.",
+        );
+      });
+      expect(api.getMediaDetail).not.toHaveBeenCalled();
+
+      // The refine draft is untouched — captions intact, no library chip.
+      expect(await screen.findByLabelText("Instagram caption")).toHaveValue(
+        "First draft caption",
+      );
+      expect(screen.queryByText("tabby-sunrise.jpg")).not.toBeInTheDocument();
+      expect(screen.queryByText(/from the media library/i)).not.toBeInTheDocument();
+
+      // Persisted draft was not clobbered with the catalog media/alt-text.
+      const stored = JSON.parse(localStorage.getItem("gv-draft-create")!) as {
+        mediaUrl: string;
+        altText: string;
+        stage: string;
+      };
+      expect(stored.mediaUrl).toBe("");
+      expect(stored.altText).toBe("");
+      expect(stored.stage).toBe("refine");
+    });
+
     it("ignores a missing media param entirely", async () => {
       renderCreate();
       expect(

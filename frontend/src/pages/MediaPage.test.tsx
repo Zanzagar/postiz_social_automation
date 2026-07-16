@@ -439,6 +439,8 @@ describe("MediaPage", () => {
     await user.click(screen.getByRole("button", { name: "Really delete?" }));
     await waitFor(() => expect(mockDeleteMedia).toHaveBeenCalledWith(1));
     await screen.findByText("Select an item to edit its details.");
+    // focus lands somewhere deliberate (the search box), not <body>
+    expect(screen.getByRole("searchbox", { name: "Search media" })).toHaveFocus();
   });
 
   it("uploads via the file input and shows the Claude banner while in flight", async () => {
@@ -473,6 +475,35 @@ describe("MediaPage", () => {
         screen.queryByText(/claude is generating alt-text/i),
       ).not.toBeInTheDocument(),
     );
+  });
+
+  it("auto-selects the uploaded item when nothing is selected", async () => {
+    renderPage();
+    await screen.findByText("lakshmi-calf.jpg");
+    const input = screen.getByLabelText("Upload files");
+    const file = new File(["x"], "new-photo.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Added new-photo.png"),
+    );
+    // the fresh item becomes the selection — its detail loads in the aside
+    await waitFor(() => expect(mockGetMediaDetail).toHaveBeenCalledWith(99));
+  });
+
+  it("does not steal the selection when an upload completes while another item is open", async () => {
+    const user = userEvent.setup();
+    await openInspector(user); // selects item 1
+    const input = screen.getByLabelText("Upload files");
+    const file = new File(["x"], "new-photo.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Added new-photo.png"),
+    );
+    // selection untouched: tile 1 stays pressed, the new item never loads
+    expect(
+      screen.getByRole("button", { name: /a cow with her calf/i }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(mockGetMediaDetail).not.toHaveBeenCalledWith(99);
   });
 
   it("rejects GIFs and oversized files client-side before any API call", async () => {

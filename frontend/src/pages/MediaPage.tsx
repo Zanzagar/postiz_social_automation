@@ -137,7 +137,7 @@ function MediaTile({
       {!item.alt_text && (
         <span
           role="status"
-          className="absolute top-1.5 right-1.5 rounded bg-terra-500 px-1 py-0.5 text-[9px] font-medium tracking-wider text-white"
+          className="absolute top-1.5 right-1.5 rounded bg-terra-700 px-1 py-0.5 text-[9px] font-medium tracking-wider text-white"
         >
           NO ALT
         </span>
@@ -156,6 +156,7 @@ export function MediaPage() {
   const queryClient = useQueryClient();
   const isDesktop = useIsDesktop();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [page, setPage] = useState(1);
   const [qInput, setQInput] = useState("");
@@ -234,7 +235,9 @@ export function MediaPage() {
         const res = await api.uploadMediaFile(next.file);
         toast.success(`Added ${res.filename}`);
         void queryClient.invalidateQueries({ queryKey: ["media"] });
-        setSelectedId(res.id);
+        // Auto-select only when nothing is selected — never steal the
+        // selection (and unsaved blur-persisted edits) from the inspector.
+        setSelectedId((prev) => prev ?? res.id);
       } catch (err) {
         toast.error(errorDetail(err, `Couldn't upload ${next.file.name}`));
       } finally {
@@ -312,7 +315,10 @@ export function MediaPage() {
   const handleDeleted = useCallback(() => {
     setSelectedId(null);
     setSheetOpen(false);
-  }, []);
+    // Desktop aside unmounts with the focused Delete button in it — move
+    // focus somewhere deliberate instead of letting it drop to <body>.
+    if (isDesktop) searchInputRef.current?.focus();
+  }, [isDesktop]);
 
   return (
     <div className="flex h-full min-h-0">
@@ -432,6 +438,7 @@ export function MediaPage() {
                 aria-hidden="true"
               />
               <Input
+                ref={searchInputRef}
                 type="search"
                 aria-label="Search media"
                 placeholder={data ? `Search ${data.total} items` : "Search"}
