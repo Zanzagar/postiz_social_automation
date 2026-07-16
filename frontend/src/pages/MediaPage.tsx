@@ -1,17 +1,29 @@
-import { useState, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import type { MediaItem, MediaTag } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Film,
+  Image as ImageIcon,
+  Link as LinkIcon,
+  Loader2,
+  Search,
+  Sparkles,
+  Upload,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import { api, type MediaBrowseParams, type MediaItem } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { EmptyState, GVSheet, PageHeader } from "@/components/pasture";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -20,582 +32,657 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DriveImportDialog } from "@/components/media/DriveImportDialog";
-import {
-  Image as ImageIcon,
-  X,
-  ChevronLeft,
-  ChevronRight,
-  Calendar,
-  TrendingUp,
-  FileImage,
-  Trash2,
-  HardDrive,
-  RefreshCw,
-  Loader2,
-} from "lucide-react";
+import { MediaInspector } from "@/components/media/MediaInspector";
+import { errorDetail, formatBytes, thumbnailUrl } from "@/components/media/media-utils";
 
-function formatBytes(bytes: number | null): string {
-  if (!bytes) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+const PER_PAGE = 30;
+const MAX_FILE_BYTES = 100 * 1024 * 1024;
+const ALLOWED_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+]);
+
+const TYPE_FILTERS = [
+  { id: "all", label: "All" },
+  { id: "photos", label: "Photos" },
+  { id: "videos", label: "Videos" },
+  { id: "untagged", label: "Untagged" },
+] as const;
+
+type TypeFilterId = (typeof TYPE_FILTERS)[number]["id"];
+
+interface UploadRow {
+  key: number;
+  name: string;
+  kind: "IMG" | "MP4";
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+function validateFile(file: File): string | null {
+  if (file.type === "image/gif") {
+    return `"${file.name}" is a GIF — those aren't supported. Save it as an MP4 clip or a JPEG/PNG still instead.`;
+  }
+  if (!ALLOWED_MIME_TYPES.has(file.type)) {
+    return `"${file.name}" isn't a supported format — JPEG, PNG, WebP, MP4, MOV, or WebM.`;
+  }
+  if (file.size > MAX_FILE_BYTES) {
+    return `"${file.name}" is over the 100 MB limit.`;
+  }
+  return null;
 }
 
-// --- Media Card ---
+/** Mirrors Tailwind's `lg` breakpoint so only ONE inspector instance exists. */
+function useIsDesktop(): boolean {
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window === "undefined" || window.innerWidth >= 1024,
+  );
+  useEffect(() => {
+    function onResize() {
+      setIsDesktop(window.innerWidth >= 1024);
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return isDesktop;
+}
 
-function MediaCard({
+function MediaTile({
   item,
-  onClick,
+  selected,
+  onSelect,
 }: {
   item: MediaItem;
-  onClick: () => void;
+  selected: boolean;
+  onSelect: () => void;
 }) {
+  const isVideo = item.mime_type.startsWith("video/");
+  const thumb = thumbnailUrl(item.thumbnail_path);
   return (
-    <div
-      onClick={onClick}
-      className="group relative cursor-pointer overflow-hidden rounded-lg border border-border bg-card transition-all hover:shadow-lg hover:border-sage-400"
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={cn(
+        "fr group relative aspect-[4/5] overflow-hidden rounded-lg border-2 text-left transition",
+        selected
+          ? "border-sage-500 ring-2 ring-sage-500/30"
+          : "border-transparent hover:border-sage-300",
+      )}
     >
-      <div className="aspect-square w-full overflow-hidden bg-muted">
-        {item.thumbnail_path ? (
-          <img
-            src={`/media/thumbnails/${item.thumbnail_path.split("/").pop()}`}
-            alt={item.filename}
-            className="h-full w-full object-cover transition-transform group-hover:scale-105"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <FileImage className="h-12 w-12 text-muted-foreground/30" />
-          </div>
-        )}
-      </div>
-      <div className="p-3">
-        <h3 className="text-sm font-medium text-foreground line-clamp-1">
-          {item.filename}
-        </h3>
-        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{formatBytes(item.file_size)}</span>
-          {item.width && item.height && (
-            <>
-              <span>·</span>
-              <span>
-                {item.width}×{item.height}
-              </span>
-            </>
+      {thumb ? (
+        <img
+          src={thumb}
+          alt={item.alt_text || item.filename}
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      ) : (
+        <span className="bg-warm absolute inset-0 flex items-center justify-center">
+          {isVideo ? (
+            <Film size={22} strokeWidth={1.75} className="ink-muted" aria-hidden="true" />
+          ) : (
+            <ImageIcon size={22} strokeWidth={1.75} className="ink-muted" aria-hidden="true" />
           )}
-        </div>
-        {item.pillar && (
-          <Badge variant="outline" className="mt-2 text-xs">
-            {item.pillar}
-          </Badge>
-        )}
-      </div>
-    </div>
+          <span className="sr-only">{item.filename}</span>
+        </span>
+      )}
+      {isVideo && (
+        <span className="absolute top-1.5 left-1.5 rounded bg-black/60 px-1 py-0.5 text-[9px] font-medium tracking-wider text-white">
+          REEL
+        </span>
+      )}
+      {!item.alt_text && (
+        <span
+          role="status"
+          className="absolute top-1.5 right-1.5 rounded bg-terra-500 px-1 py-0.5 text-[9px] font-medium tracking-wider text-white"
+        >
+          NO ALT
+        </span>
+      )}
+      <span
+        aria-hidden="true"
+        className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1.5 pt-5 pb-1"
+      >
+        <span className="t-micro block truncate text-white">{item.filename}</span>
+      </span>
+    </button>
   );
 }
-
-// --- Media Detail Dialog ---
-
-function MediaDetailDialog({
-  mediaId,
-  open,
-  onOpenChange,
-}: {
-  mediaId: number | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const queryClient = useQueryClient();
-  const [editingTags, setEditingTags] = useState(false);
-  const [tagInput, setTagInput] = useState("");
-
-  const { data, isLoading } = useQuery({
-    queryKey: ["media", "detail", mediaId],
-    queryFn: () => api.getMediaDetail(mediaId!),
-    enabled: !!mediaId && open,
-  });
-
-  const tagMutation = useMutation({
-    mutationFn: ({
-      add,
-      remove,
-    }: {
-      add: string[];
-      remove: string[];
-    }) => api.updateMediaTags(mediaId!, add, remove),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["media", "detail", mediaId] });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: () => api.deleteMedia(mediaId!),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["media"] });
-      onOpenChange(false);
-    },
-  });
-
-  const handleAddTag = useCallback(() => {
-    const tag = tagInput.trim();
-    if (tag) {
-      tagMutation.mutate({ add: [tag], remove: [] });
-      setTagInput("");
-    }
-  }, [tagInput, tagMutation]);
-
-  const handleRemoveTag = useCallback(
-    (tag: string) => {
-      tagMutation.mutate({ add: [], remove: [tag] });
-    },
-    [tagMutation],
-  );
-
-  const media = data?.media;
-  const tags = data?.tags ?? [];
-  const usage = data?.usage ?? [];
-  const performance = data?.performance ?? [];
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="text-muted-foreground">Loading...</div>
-          </div>
-        ) : media ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>{media.filename}</DialogTitle>
-              <DialogDescription>
-                {formatBytes(media.file_size)}
-                {media.width && media.height && ` · ${media.width}×${media.height}`}
-                {` · ${media.source}`}
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-6">
-              {/* Media preview */}
-              <div className="aspect-video w-full overflow-hidden rounded-lg border border-border bg-muted">
-                {media.mime_type.startsWith("video/") ? (
-                  media.local_path.startsWith("drive://") ? (
-                    <video
-                      src={`/api/media/drive/file/${media.local_path.replace("drive://", "")}`}
-                      poster={
-                        media.thumbnail_path
-                          ? `/media/thumbnails/${media.thumbnail_path.split("/").pop()}`
-                          : undefined
-                      }
-                      controls
-                      className="h-full w-full object-contain"
-                    />
-                  ) : (
-                    <video
-                      src={`/media/${media.local_path.split("/").pop()}`}
-                      controls
-                      className="h-full w-full object-contain"
-                    />
-                  )
-                ) : media.local_path ? (
-                  <img
-                    src={
-                      media.local_path.startsWith("drive://")
-                        ? `/api/media/drive/file/${media.local_path.replace("drive://", "")}`
-                        : `/media/${media.local_path.split("/").pop()}`
-                    }
-                    alt={media.filename}
-                    className="h-full w-full object-contain"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <FileImage className="h-16 w-16 text-muted-foreground/30" />
-                  </div>
-                )}
-              </div>
-
-              {/* Tags */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Tags</h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setEditingTags(!editingTags)}
-                  >
-                    {editingTags ? "Done" : "Edit"}
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {tags.map((t: MediaTag) => (
-                    <Badge key={t.id} variant="secondary" className="gap-1">
-                      {t.tag}
-                      <span className="text-xs text-muted-foreground">
-                        {Math.round(t.confidence * 100)}%
-                      </span>
-                      {editingTags && (
-                        <button
-                          onClick={() => handleRemoveTag(t.tag)}
-                          className="ml-1 hover:text-destructive"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      )}
-                    </Badge>
-                  ))}
-                  {tags.length === 0 && (
-                    <span className="text-sm text-muted-foreground">No tags</span>
-                  )}
-                </div>
-                {editingTags && (
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Add tag..."
-                      value={tagInput}
-                      onChange={(e) => setTagInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleAddTag();
-                        }
-                      }}
-                    />
-                    <Button onClick={handleAddTag} size="sm">
-                      Add
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {/* Performance */}
-              {performance.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold">Performance</h3>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {performance.map((p) => (
-                      <div
-                        key={p.id}
-                        className="rounded-lg border border-border bg-card p-3"
-                      >
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <TrendingUp className="h-4 w-4" />
-                          <span className="text-xs">{p.platform}</span>
-                        </div>
-                        <p className="mt-1 text-lg font-bold">
-                          {p.engagement_score.toFixed(2)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Usage history */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold">
-                  Usage History ({usage.length})
-                </h3>
-                {usage.length > 0 ? (
-                  <div className="space-y-2">
-                    {usage.map((u) => (
-                      <div
-                        key={u.content_row_id}
-                        className="flex items-center justify-between rounded-lg border border-border bg-card p-3"
-                      >
-                        <div>
-                          <span className="text-sm font-medium">
-                            Content #{u.content_row_id}
-                          </span>
-                          {u.pillar && (
-                            <Badge variant="outline" className="ml-2 text-xs">
-                              {u.pillar}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Badge
-                            variant={u.status === "published" ? "default" : "secondary"}
-                            className="text-xs"
-                          >
-                            {u.status}
-                          </Badge>
-                          {u.date && (
-                            <>
-                              <Calendar className="h-3 w-3" />
-                              {formatDate(u.date)}
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Not used in any content yet
-                  </p>
-                )}
-              </div>
-
-              {/* Metadata */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold">Details</h3>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="text-muted-foreground">Source</div>
-                  <div>{media.source}</div>
-                  <div className="text-muted-foreground">Type</div>
-                  <div>{media.mime_type}</div>
-                  <div className="text-muted-foreground">Times Used</div>
-                  <div>{media.usage_count}</div>
-                  <div className="text-muted-foreground">Added</div>
-                  <div>{formatDate(media.created_at)}</div>
-                </div>
-              </div>
-
-              {/* Delete */}
-              <div className="border-t pt-4">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => {
-                    if (confirm("Delete this media permanently?")) {
-                      deleteMutation.mutate();
-                    }
-                  }}
-                  disabled={deleteMutation.isPending}
-                >
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  {deleteMutation.isPending ? "Deleting..." : "Delete Media"}
-                </Button>
-              </div>
-            </div>
-          </>
-        ) : null}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// --- Main Page ---
 
 export function MediaPage() {
   const queryClient = useQueryClient();
+  const isDesktop = useIsDesktop();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [page, setPage] = useState(1);
-  const [source, setSource] = useState("all");
+  const [qInput, setQInput] = useState("");
+  const [q, setQ] = useState("");
+  const [typeFilter, setTypeFilter] = useState<TypeFilterId>("all");
   const [pillar, setPillar] = useState("all");
+  const [source, setSource] = useState("all");
   const [sort, setSort] = useState("date");
-  const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [driveDialogOpen, setDriveDialogOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [driveOpen, setDriveOpen] = useState(false);
+  const [urlFormOpen, setUrlFormOpen] = useState(false);
+  const [urlValue, setUrlValue] = useState("");
+  const [dragActive, setDragActive] = useState(false);
+  const [uploads, setUploads] = useState<UploadRow[]>([]);
 
-  const syncMutation = useMutation({
-    mutationFn: () => api.syncDrive(),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["media"] });
-      alert(`Synced: ${data.imported} new, ${data.skipped} already imported`);
-    },
-    onError: (err) => {
-      alert(`Sync failed: ${err instanceof Error ? err.message : "Unknown error"}`);
-    },
-  });
+  const keyRef = useRef(0);
+  const queueRef = useRef<Array<{ key: number; file: File }>>([]);
+  const drainingRef = useRef(false);
 
-  const pillars = useQuery({
+  // Debounce the search box into the server-backed `q` param (300ms).
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setQ(qInput.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [qInput]);
+
+  const pillarsQuery = useQuery({
     queryKey: ["pillars"],
-    queryFn: () => api.getPillars(true),
+    queryFn: () => api.getPillars(),
+    staleTime: 60_000,
   });
 
-  const media = useQuery({
-    queryKey: ["media", page, source, pillar, sort],
-    queryFn: () =>
-      api.getMedia({
-        page,
-        per_page: 20,
-        source: source !== "all" ? source : undefined,
-        pillar: pillar !== "all" ? pillar : undefined,
-        sort,
-      }),
+  const params = useMemo<MediaBrowseParams>(() => {
+    const p: MediaBrowseParams = { page, per_page: PER_PAGE, sort };
+    if (q) p.q = q;
+    if (typeFilter === "photos") p.media_type = "image";
+    if (typeFilter === "videos") p.media_type = "video";
+    if (typeFilter === "untagged") p.untagged = true;
+    if (pillar !== "all") p.pillar = pillar;
+    if (source !== "all") p.source = source;
+    return p;
+  }, [page, q, typeFilter, pillar, source, sort]);
+
+  const browse = useQuery({
+    queryKey: ["media", params],
+    queryFn: () => api.getMedia(params),
+    placeholderData: keepPreviousData,
+  });
+  const data = browse.data;
+
+  const filtersActive =
+    q !== "" || typeFilter !== "all" || pillar !== "all" || source !== "all";
+
+  function clearFilters() {
+    setQInput("");
+    setQ("");
+    setTypeFilter("all");
+    setPillar("all");
+    setSource("all");
+    setPage(1);
+  }
+
+  // --- Uploads: sequential queue (backend is synchronous + AI-analyzes each
+  // file, up to ~2 min — never parallel-blast it) ---
+
+  const drainQueue = useCallback(async () => {
+    if (drainingRef.current) return;
+    drainingRef.current = true;
+    for (;;) {
+      const next = queueRef.current.shift();
+      if (!next) break;
+      try {
+        const res = await api.uploadMediaFile(next.file);
+        toast.success(`Added ${res.filename}`);
+        void queryClient.invalidateQueries({ queryKey: ["media"] });
+        setSelectedId(res.id);
+      } catch (err) {
+        toast.error(errorDetail(err, `Couldn't upload ${next.file.name}`));
+      } finally {
+        setUploads((rows) => rows.filter((r) => r.key !== next.key));
+      }
+    }
+    drainingRef.current = false;
+  }, [queryClient]);
+
+  const handleFiles = useCallback(
+    (files: File[]) => {
+      const accepted: Array<{ key: number; file: File }> = [];
+      for (const file of files) {
+        const problem = validateFile(file);
+        if (problem) {
+          toast.error(problem);
+          continue;
+        }
+        keyRef.current += 1;
+        accepted.push({ key: keyRef.current, file });
+      }
+      if (accepted.length === 0) return;
+      setUploads((rows) => [
+        ...rows,
+        ...accepted.map(({ key, file }) => ({
+          key,
+          name: file.name,
+          kind: (file.type.startsWith("video/") ? "MP4" : "IMG") as UploadRow["kind"],
+        })),
+      ]);
+      queueRef.current.push(...accepted);
+      void drainQueue();
+    },
+    [drainQueue],
+  );
+
+  // Paste-from-clipboard uploads work anywhere on the page.
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const files = e.clipboardData?.files;
+      if (files && files.length > 0) handleFiles(Array.from(files));
+    }
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [handleFiles]);
+
+  const importUrlMutation = useMutation({
+    mutationFn: (url: string) => api.importMediaUrl(url),
+    onSuccess: (res) => {
+      toast.success(`Added ${res.filename}`);
+      void queryClient.invalidateQueries({ queryKey: ["media"] });
+      setSelectedId(res.id);
+      setUrlValue("");
+      setUrlFormOpen(false);
+    },
+    onError: (err) => toast.error(errorDetail(err, "Couldn't import that URL")),
   });
 
-  const data = media.data;
-  const totalPages = data?.total_pages ?? 0;
+  function handleUrlSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const url = urlValue.trim();
+    if (!url || importUrlMutation.isPending) return;
+    importUrlMutation.mutate(url);
+  }
 
-  const handleMediaClick = (id: number) => {
-    setSelectedMediaId(id);
-    setDialogOpen(true);
-  };
+  function openPicker() {
+    fileInputRef.current?.click();
+  }
+
+  function selectTile(id: number) {
+    setSelectedId(id);
+    if (!isDesktop) setSheetOpen(true);
+  }
+
+  const handleDeleted = useCallback(() => {
+    setSelectedId(null);
+    setSheetOpen(false);
+  }, []);
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Media Library</h1>
-          <p className="text-sm text-muted-foreground">
-            Browse and manage your media catalog
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => syncMutation.mutate()}
-            disabled={syncMutation.isPending}
-          >
-            {syncMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
+    <div className="flex h-full min-h-0">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <PageHeader
+          greeting="The media library"
+          title="Images, reels, and stills"
+          subtitle="Upload, tag, caption — Claude reuses these across platforms."
+          icon={ImageIcon}
+          right={
+            <Button size="sm" className="fr" onClick={openPicker}>
+              <Upload size={12} strokeWidth={1.75} aria-hidden="true" />
+              Upload
+            </Button>
+          }
+        />
+
+        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-8">
+          {/* Dropzone */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragActive(false);
+              const files = e.dataTransfer?.files;
+              if (files && files.length > 0) handleFiles(Array.from(files));
+            }}
+            className={cn(
+              "flex flex-wrap items-center gap-3 rounded-xl border-2 border-dashed p-3 transition-colors sm:p-4",
+              dragActive
+                ? "border-sage-500 bg-sage-50 dark:bg-sage-800/40"
+                : "border-sage-200 dark:border-sage-700",
             )}
-            Sync Drive
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setDriveDialogOpen(true)}
           >
-            <HardDrive className="h-4 w-4" />
-            Browse Drive
-          </Button>
-        </div>
-      </div>
+            <button
+              type="button"
+              onClick={openPicker}
+              className="fr flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-sage-100 bg-sage-50 text-sage-700 dark:border-sage-700 dark:bg-sage-800 dark:text-sage-200">
+                <Upload size={16} strokeWidth={1.75} aria-hidden="true" />
+              </span>
+              <span className="min-w-0">
+                <span className="ink block text-[13px] font-bold">
+                  Drop photos or videos here, or paste from clipboard
+                </span>
+                <span className="t-caption ink-muted block">
+                  JPEG, PNG, WebP, or MP4 up to 100 MB · Claude will suggest alt-text,
+                  tags, and season
+                </span>
+              </span>
+            </button>
+            <span className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="fr"
+                aria-expanded={urlFormOpen}
+                onClick={() => setUrlFormOpen((v) => !v)}
+              >
+                <LinkIcon size={12} strokeWidth={1.75} aria-hidden="true" />
+                From URL
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="fr"
+                onClick={() => setDriveOpen(true)}
+              >
+                From Drive
+              </Button>
+            </span>
+          </div>
 
-      {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-2">
-          <Select
-            value={source}
-            onValueChange={(v) => {
-              setSource(v);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Source" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Sources</SelectItem>
-              <SelectItem value="upload">Upload</SelectItem>
-              <SelectItem value="import_url">Import URL</SelectItem>
-              <SelectItem value="drive">Google Drive</SelectItem>
-              <SelectItem value="social_import">Social Import</SelectItem>
-            </SelectContent>
-          </Select>
+          {urlFormOpen && (
+            <form
+              onSubmit={handleUrlSubmit}
+              className="bg-card border-hair flex items-center gap-2 rounded-lg p-2.5"
+            >
+              <Label htmlFor="media-import-url" className="sr-only">
+                Media URL
+              </Label>
+              <Input
+                id="media-import-url"
+                type="url"
+                placeholder="https://example.org/photo.jpg"
+                value={urlValue}
+                onChange={(e) => setUrlValue(e.target.value)}
+                className="fr"
+              />
+              <Button
+                type="submit"
+                size="sm"
+                className="fr"
+                disabled={urlValue.trim() === "" || importUrlMutation.isPending}
+                aria-busy={importUrlMutation.isPending}
+              >
+                {importUrlMutation.isPending && (
+                  <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                )}
+                Import
+              </Button>
+            </form>
+          )}
 
-          <Select
-            value={pillar}
-            onValueChange={(v) => {
-              setPillar(v);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Pillar" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Pillars</SelectItem>
-              {(pillars.data ?? []).map((p) => (
-                <SelectItem key={p.id} value={p.name}>
-                  {p.name}
-                </SelectItem>
+          {/* Filter bar */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-56">
+              <Search
+                size={13}
+                strokeWidth={1.75}
+                className="ink-muted pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2"
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
+                aria-label="Search media"
+                placeholder={data ? `Search ${data.total} items` : "Search"}
+                value={qInput}
+                onChange={(e) => setQInput(e.target.value)}
+                className="fr pl-8"
+              />
+            </div>
+            <span className="t-caption ink-muted font-medium">Filters:</span>
+            {TYPE_FILTERS.map((f) => {
+              const active = typeFilter === f.id;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => {
+                    setTypeFilter(f.id);
+                    setPage(1);
+                  }}
+                  aria-pressed={active}
+                  className={cn(
+                    "fr t-body-sm flex h-8 items-center rounded-full px-3 font-medium transition",
+                    active
+                      ? "bg-sage-500 text-white"
+                      : "bg-card border-hair ink hover:bg-sage-50 dark:hover:bg-sage-800",
+                  )}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+            <Select
+              value={pillar}
+              onValueChange={(v) => {
+                setPillar(v);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger size="sm" className="fr" aria-label="Filter by pillar">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All pillars</SelectItem>
+                {(pillarsQuery.data ?? []).map((p) => (
+                  <SelectItem key={p.id} value={p.name}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={source}
+              onValueChange={(v) => {
+                setSource(v);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger size="sm" className="fr" aria-label="Filter by source">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All sources</SelectItem>
+                <SelectItem value="upload">Upload</SelectItem>
+                <SelectItem value="import_url">From URL</SelectItem>
+                <SelectItem value="drive">Google Drive</SelectItem>
+                <SelectItem value="social_import">Social import</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={sort}
+              onValueChange={(v) => {
+                setSort(v);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger size="sm" className="fr" aria-label="Sort media">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">Newest first</SelectItem>
+                <SelectItem value="engagement">Top engagement</SelectItem>
+                <SelectItem value="usage_count">Most used</SelectItem>
+              </SelectContent>
+            </Select>
+            {data && (
+              <span className="t-caption ink-muted ml-auto">
+                {data.total} {data.total === 1 ? "item" : "items"} ·{" "}
+                {formatBytes(data.storage_used_bytes)} used
+              </span>
+            )}
+          </div>
+
+          {/* Upload-in-progress rows */}
+          {uploads.length > 0 && (
+            <div className="space-y-2">
+              {uploads.map((u) => (
+                <div
+                  key={u.key}
+                  className="bg-card border-hair flex items-center gap-3 rounded-lg p-2.5"
+                >
+                  <span className="bg-warm border-hair flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
+                    <span className="t-micro ink-muted font-mono font-medium">
+                      {u.kind}
+                    </span>
+                  </span>
+                  <span className="ink min-w-0 flex-1 truncate text-[13px] font-medium">
+                    {u.name}
+                  </span>
+                  <span
+                    role="progressbar"
+                    aria-label={`Uploading ${u.name}`}
+                    className="hidden h-1.5 w-24 overflow-hidden rounded-full sm:block md:w-40"
+                  >
+                    <span className="skeleton block h-full w-full" />
+                  </span>
+                  <span className="ink-muted shrink-0 font-mono text-[11px]">
+                    Uploading & analyzing…
+                  </span>
+                </div>
               ))}
-            </SelectContent>
-          </Select>
-        </div>
+              <div className="flex items-center gap-2 rounded-lg border border-sage-100 bg-sage-50 px-3 py-2 text-sage-700 dark:border-sage-700 dark:bg-sage-800 dark:text-sage-100">
+                <Sparkles
+                  size={13}
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                  className="shrink-0"
+                />
+                <span className="t-caption">
+                  Claude is generating alt-text, tags, and a season guess for your
+                  upload.
+                </span>
+              </div>
+            </div>
+          )}
 
-        <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="date">Newest First</SelectItem>
-            <SelectItem value="engagement">Top Engagement</SelectItem>
-            <SelectItem value="usage_count">Most Used</SelectItem>
-          </SelectContent>
-        </Select>
+          {/* Grid */}
+          {browse.isLoading ? (
+            <div
+              role="status"
+              aria-label="Loading media"
+              className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5"
+            >
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} className="skeleton aspect-[4/5] rounded-lg" />
+              ))}
+            </div>
+          ) : !data || data.items.length === 0 ? (
+            filtersActive ? (
+              <EmptyState
+                icon={ImageIcon}
+                title="Nothing matches those filters"
+                action={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="fr"
+                    onClick={clearFilters}
+                  >
+                    Clear filters
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon={ImageIcon}
+                title="No media yet"
+                body="Drop a photo above or import from Drive to start the library."
+                action={
+                  <Button size="sm" className="fr" onClick={openPicker}>
+                    <Upload size={12} strokeWidth={1.75} aria-hidden="true" />
+                    Upload
+                  </Button>
+                }
+              />
+            )
+          ) : (
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+              {data.items.map((item) => (
+                <MediaTile
+                  key={item.id}
+                  item={item}
+                  selected={selectedId === item.id}
+                  onSelect={() => selectTile(item.id)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {data && data.total_pages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="fr"
+                disabled={page === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft size={12} strokeWidth={1.75} aria-hidden="true" />
+                Prev
+              </Button>
+              <span className="t-caption ink-muted">
+                Page {data.page} of {data.total_pages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="fr"
+                disabled={page >= data.total_pages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+                <ChevronRight size={12} strokeWidth={1.75} aria-hidden="true" />
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Results count */}
-      {data && (
-        <div className="text-sm text-muted-foreground">
-          {data.total} {data.total === 1 ? "item" : "items"}
-        </div>
+      {/* Inspector aside (≥ lg). Below lg the same content opens in a GVSheet. */}
+      <aside
+        aria-label="Media details"
+        className="bg-warm hidden w-[380px] shrink-0 overflow-y-auto border-l lg:block"
+      >
+        {isDesktop && selectedId != null ? (
+          <MediaInspector mediaId={selectedId} onDeleted={handleDeleted} />
+        ) : (
+          <EmptyState className="pt-24" title="Select an item to edit its details." />
+        )}
+      </aside>
+
+      {!isDesktop && sheetOpen && selectedId != null && (
+        <GVSheet title="Media details" width={420} onClose={() => setSheetOpen(false)}>
+          <MediaInspector mediaId={selectedId} inSheet onDeleted={handleDeleted} />
+        </GVSheet>
       )}
 
-      {/* Grid */}
-      {media.isLoading ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div
-              key={i}
-              className="aspect-square animate-pulse rounded-lg bg-muted"
-            />
-          ))}
-        </div>
-      ) : data && data.items.length > 0 ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {data.items.map((item) => (
-            <MediaCard
-              key={item.id}
-              item={item}
-              onClick={() => handleMediaClick(item.id)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <ImageIcon className="h-12 w-12 text-muted-foreground/30" />
-          <p className="mt-4 text-lg font-medium">No media found</p>
-          <p className="text-sm text-muted-foreground">
-            Upload images via the API or import from URLs
-          </p>
-        </div>
-      )}
+      <DriveImportDialog open={driveOpen} onOpenChange={setDriveOpen} />
 
-      {/* Pagination */}
-      {data && totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-          >
-            Next
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
-
-      {/* Detail Dialog */}
-      <MediaDetailDialog
-        mediaId={selectedMediaId}
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-      />
-
-      <DriveImportDialog
-        open={driveDialogOpen}
-        onOpenChange={setDriveDialogOpen}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
+        aria-label="Upload files"
+        className="hidden"
+        onChange={(e) => {
+          const files = e.currentTarget.files;
+          if (files && files.length > 0) handleFiles(Array.from(files));
+          e.currentTarget.value = "";
+        }}
       />
     </div>
   );
