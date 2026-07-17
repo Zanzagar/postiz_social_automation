@@ -141,7 +141,7 @@ function SeasonCard({ season, range }: { season: SeasonSummary; range: string })
       <div className="t-label text-cream-200/80">The season at a glance</div>
       <p className="t-title mt-2 leading-snug">
         You've published {season.total_posts} {season.total_posts === 1 ? "post" : "posts"}{" "}
-        this {meta.noun}.
+        {range === "all" ? "in all." : `this ${meta.noun}.`}
       </p>
       <div className="t-body-sm mt-4 space-y-1.5 border-t border-sage-600/40 pt-4 text-cream-200/80">
         {onTarget !== null && (

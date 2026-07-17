@@ -1,23 +1,79 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle2, AlertTriangle, HardDrive, Loader2, Trash2 } from "lucide-react";
+import type * as React from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  HardDrive,
+  Loader2,
+  Trash2,
+} from "lucide-react";
 import { format, parseISO } from "date-fns";
 
-const statusColor: Record<string, string> = {
-  healthy: "bg-green-500",
-  degraded: "bg-yellow-500",
-  unhealthy: "bg-red-500",
+import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PageHeader, SkeletonText } from "@/components/pasture";
+
+interface HealthStatusMeta {
+  label: string;
+  dot: string;
+  badge: "default" | "secondary" | "destructive" | "outline";
+}
+
+/**
+ * Backend emits "ok"/"error" (api/routes/health.py); older payloads said
+ * "healthy"/"unhealthy" — both vocabularies map onto the same three states.
+ */
+const HEALTH_STATUS_META: Record<string, HealthStatusMeta> = {
+  ok: { label: "Healthy", dot: "bg-sage-500", badge: "default" },
+  healthy: { label: "Healthy", dot: "bg-sage-500", badge: "default" },
+  degraded: { label: "Degraded", dot: "bg-cream-500", badge: "secondary" },
+  error: { label: "Error", dot: "bg-terra-500", badge: "destructive" },
+  unhealthy: { label: "Error", dot: "bg-terra-500", badge: "destructive" },
 };
 
-const statusBadge: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  healthy: "default",
-  degraded: "secondary",
-  unhealthy: "destructive",
+function statusMeta(status: string): HealthStatusMeta {
+  return (
+    HEALTH_STATUS_META[status.toLowerCase()] ?? {
+      label: status,
+      dot: "bg-neutral-300",
+      badge: "outline",
+    }
+  );
+}
+
+/** Backend service ids → display names (same map as the sidebar footer). */
+const SERVICE_LABELS: Record<string, string> = {
+  postiz: "Postiz",
+  claude: "Claude",
+  oauth: "Claude login",
+  sheets: "Sheets",
 };
+
+const CARD = "bg-card border-hair shadow-card rounded-xl p-5";
+const SAGE_BANNER =
+  "flex items-center gap-2 rounded-lg border border-sage-100 bg-sage-50 px-4 py-2.5 text-sage-700 dark:border-sage-700 dark:bg-sage-800 dark:text-sage-100";
+const CREAM_BANNER =
+  "flex items-center gap-2 rounded-lg border border-cream-300 bg-cream-100 px-4 py-2.5 text-cream-ink dark:border-cream-400/40 dark:bg-cream-400/15";
+
+function Header() {
+  return (
+    <PageHeader
+      greeting="Systems"
+      title="Health"
+      subtitle="A calm look at every connection the pasture relies on."
+      icon={Activity}
+    />
+  );
+}
+
+function CardTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="t-label text-sage-600 dark:text-sage-300">{children}</div>
+  );
+}
 
 export function HealthPage() {
   const queryClient = useQueryClient();
@@ -52,163 +108,189 @@ export function HealthPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-4 p-6">
-        <h1 className="text-2xl font-bold text-sage-800">System Health</h1>
-        <p className="text-muted-foreground">Loading...</p>
-        <Skeleton className="h-24 rounded-xl" />
-        <Skeleton className="h-24 rounded-xl" />
+      <div>
+        <Header />
+        <div
+          role="status"
+          aria-label="Loading health"
+          className="mx-auto w-full max-w-[1180px] space-y-4 px-4 py-6 sm:px-8"
+        >
+          <div className={CARD}>
+            <SkeletonText lines={3} />
+          </div>
+          <div className={CARD}>
+            <SkeletonText lines={2} />
+          </div>
+        </div>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-6 p-6">
-      <h1 className="text-2xl font-bold text-sage-800">System Health</h1>
+  const mediaIssues =
+    mediaHealth !== undefined &&
+    (mediaHealth.missing_file.length > 0 || mediaHealth.orphan_files > 0);
 
-      {/* Services */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Services</CardTitle>
-        </CardHeader>
-        <CardContent>
+  return (
+    <div>
+      <Header />
+      <div className="mx-auto w-full max-w-[1180px] space-y-4 px-4 py-6 sm:px-8">
+        {/* Services */}
+        <section aria-label="Services" className={CARD}>
+          <CardTitle>Services</CardTitle>
           {health?.services && health.services.length > 0 ? (
-            <div className="space-y-3">
-              {health.services.map((svc) => (
-                <div
-                  key={svc.name}
-                  className="flex items-center justify-between rounded-md border px-4 py-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`h-3 w-3 rounded-full ${statusColor[svc.status] ?? "bg-gray-400"}`}
-                    />
-                    <div>
-                      <p className="text-sm font-medium">{svc.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {svc.message}
-                      </p>
+            <div className="mt-3 space-y-2">
+              {health.services.map((svc) => {
+                const m = statusMeta(svc.status);
+                return (
+                  <div
+                    key={svc.name}
+                    className="border-hair flex items-center justify-between gap-3 rounded-lg px-4 py-3"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span
+                        className={cn("h-2 w-2 shrink-0 rounded-full", m.dot)}
+                        aria-hidden="true"
+                      />
+                      <div className="min-w-0">
+                        <p className="t-body-sm ink font-medium">
+                          {SERVICE_LABELS[svc.name] ?? svc.name}
+                        </p>
+                        <p
+                          className="t-caption ink-muted truncate"
+                          title={svc.message}
+                        >
+                          {svc.message}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Badge variant={m.badge}>{m.label}</Badge>
+                      <span className="t-micro ink-muted">
+                        {formatTime(svc.last_checked)}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={statusBadge[svc.status] ?? "outline"}>
-                      {svc.status}
-                    </Badge>
-                    <span className="text-[10px] text-muted-foreground">
-                      {formatTime(svc.last_checked)}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No services configured</p>
+            <p className="t-body-sm ink-muted mt-3">No services configured</p>
           )}
-        </CardContent>
-      </Card>
+        </section>
 
-      {/* Integrations */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Postiz Integrations</CardTitle>
-        </CardHeader>
-        <CardContent>
+        {/* Postiz integrations */}
+        <section aria-label="Postiz integrations" className={CARD}>
+          <CardTitle>Postiz integrations</CardTitle>
           {integrations && integrations.length > 0 ? (
-            <div className="space-y-2">
+            <div className="mt-3 space-y-2">
               {integrations.map((int) => (
                 <div
                   key={int.id}
-                  className="flex items-center justify-between rounded-md border px-4 py-2.5"
+                  className="border-hair flex items-center justify-between gap-3 rounded-lg px-4 py-2.5"
                 >
-                  <span className="text-sm font-medium">{int.name}</span>
+                  <span className="t-body-sm ink font-medium">{int.name}</span>
                   <Badge variant="outline">{int.platform}</Badge>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
+            <p className="t-body-sm ink-muted mt-3">
               No Postiz integrations found
             </p>
           )}
-        </CardContent>
-      </Card>
+        </section>
 
-      {/* Media Catalog Health */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <HardDrive className="h-4 w-4" />
-            Media Catalog
-          </CardTitle>
-          {mediaHealth && (mediaHealth.missing_file.length > 0 || mediaHealth.orphan_files > 0) && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => cleanupMutation.mutate()}
-              disabled={cleanupMutation.isPending}
-            >
-              {cleanupMutation.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Trash2 className="h-3.5 w-3.5" />
-              )}
-              Clean Up
-            </Button>
-          )}
-        </CardHeader>
-        <CardContent>
+        {/* Media catalog */}
+        <section aria-label="Media catalog" className={CARD}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <HardDrive
+                size={15}
+                strokeWidth={1.75}
+                className="text-sage-600 dark:text-sage-300"
+                aria-hidden="true"
+              />
+              <CardTitle>Media catalog</CardTitle>
+            </div>
+            {mediaIssues && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="fr gap-1.5"
+                onClick={() => cleanupMutation.mutate()}
+                disabled={cleanupMutation.isPending}
+              >
+                {cleanupMutation.isPending ? (
+                  <Loader2
+                    className="h-3.5 w-3.5 animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+                Clean up
+              </Button>
+            )}
+          </div>
           {mediaHealth ? (
-            <div className="space-y-3">
-              {/* Summary row */}
+            <div className="mt-3 space-y-3">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div className="rounded-md border px-3 py-2 text-center">
-                  <p className="text-lg font-bold">{mediaHealth.total}</p>
-                  <p className="text-xs text-muted-foreground">Total Items</p>
-                </div>
-                <div className="rounded-md border px-3 py-2 text-center">
-                  <p className="text-lg font-bold text-green-600">{mediaHealth.healthy}</p>
-                  <p className="text-xs text-muted-foreground">Healthy</p>
-                </div>
-                <div className="rounded-md border px-3 py-2 text-center">
-                  <p className="text-lg font-bold">{mediaHealth.drive_refs}</p>
-                  <p className="text-xs text-muted-foreground">Drive Refs</p>
-                </div>
-                <div className="rounded-md border px-3 py-2 text-center">
-                  <p className="text-lg font-bold">{mediaHealth.total - mediaHealth.healthy}</p>
-                  <p className="text-xs text-muted-foreground">Local Files</p>
-                </div>
+                <MediaStat value={mediaHealth.total} label="Total items" />
+                <MediaStat
+                  value={mediaHealth.healthy}
+                  label="Healthy"
+                  tone="sage"
+                />
+                <MediaStat value={mediaHealth.drive_refs} label="Drive refs" />
+                <MediaStat
+                  value={mediaHealth.total - mediaHealth.healthy}
+                  label="Local files"
+                />
               </div>
 
-              {/* Status */}
-              {mediaHealth.missing_file.length === 0 && mediaHealth.orphan_files === 0 ? (
-                <div className="flex items-center gap-2 rounded-md border border-green-200 bg-green-50 px-4 py-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  <span className="text-sm text-green-700">
+              {mediaHealth.missing_file.length === 0 &&
+              mediaHealth.orphan_files === 0 ? (
+                <div className={SAGE_BANNER}>
+                  <CheckCircle2
+                    className="h-4 w-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span className="t-body-sm">
                     All media files in sync — no issues detected
                   </span>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {mediaHealth.missing_file.length > 0 && (
-                    <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5">
-                      <AlertTriangle className="h-4 w-4 text-amber-600" />
-                      <span className="text-sm text-amber-700">
-                        {mediaHealth.missing_file.length} DB entries with missing files
+                    <div className={CREAM_BANNER}>
+                      <AlertTriangle
+                        className="h-4 w-4 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span className="t-body-sm">
+                        {mediaHealth.missing_file.length} DB entries with
+                        missing files
                       </span>
                     </div>
                   )}
                   {mediaHealth.missing_thumb.length > 0 && (
-                    <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5">
-                      <AlertTriangle className="h-4 w-4 text-amber-600" />
-                      <span className="text-sm text-amber-700">
+                    <div className={CREAM_BANNER}>
+                      <AlertTriangle
+                        className="h-4 w-4 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span className="t-body-sm">
                         {mediaHealth.missing_thumb.length} missing thumbnails
                       </span>
                     </div>
                   )}
                   {mediaHealth.orphan_files > 0 && (
-                    <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5">
-                      <AlertTriangle className="h-4 w-4 text-amber-600" />
-                      <span className="text-sm text-amber-700">
+                    <div className={CREAM_BANNER}>
+                      <AlertTriangle
+                        className="h-4 w-4 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span className="t-body-sm">
                         {mediaHealth.orphan_files} orphaned files on disk
                       </span>
                     </div>
@@ -217,17 +299,43 @@ export function HealthPage() {
               )}
 
               {cleanupMutation.isSuccess && (
-                <p className="text-sm text-green-600">
-                  Cleaned up {cleanupMutation.data.removed_entries} entries
-                  and {cleanupMutation.data.removed_orphans} orphan files
+                <p className="t-body-sm text-sage-700 dark:text-sage-300">
+                  Cleaned up {cleanupMutation.data.removed_entries} entries and{" "}
+                  {cleanupMutation.data.removed_orphans} orphan files
                 </p>
               )}
             </div>
           ) : (
-            <Skeleton className="h-20 rounded-md" />
+            <div className="mt-3">
+              <SkeletonText lines={2} />
+            </div>
           )}
-        </CardContent>
-      </Card>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function MediaStat({
+  value,
+  label,
+  tone,
+}: {
+  value: number;
+  label: string;
+  tone?: "sage";
+}) {
+  return (
+    <div className="border-hair rounded-lg px-3 py-2 text-center">
+      <p
+        className={cn(
+          "t-title font-semibold",
+          tone === "sage" ? "text-sage-700 dark:text-sage-300" : "ink",
+        )}
+      >
+        {value}
+      </p>
+      <p className="t-caption ink-muted">{label}</p>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Download, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, type AnalyticsPostRow } from "@/lib/api";
+import { api, type AnalyticsPostRow, type AnalyticsRange } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { PageHeader, PastureTabs, SegmentedControl } from "@/components/pasture";
 import { OverviewTab } from "@/components/analytics/OverviewTab";
@@ -46,7 +46,7 @@ function downloadCsv(rows: AnalyticsPostRow[], range: string) {
 /** Results (analytics) — Overview / Per post / Per pillar / Per platform / Rhythm. */
 export function AnalyticsPage() {
   const [tab, setTab] = useState("overview");
-  const [range, setRange] = useState("30d");
+  const [range, setRange] = useState<AnalyticsRange>("30d");
 
   const summaryQ = useQuery({
     queryKey: ["analytics", "summary", range],
@@ -121,7 +121,8 @@ export function AnalyticsPage() {
               aria-label="Time range"
               options={RANGE_OPTIONS}
               value={range}
-              onChange={setRange}
+              // options come straight from RANGES, whose ids are the union
+              onChange={(id) => setRange(id as AnalyticsRange)}
             />
             <Button
               variant="outline"

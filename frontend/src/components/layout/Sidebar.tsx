@@ -130,6 +130,14 @@ export function Sidebar({ onOpenPalette }: SidebarProps) {
 
 const HEALTHY_STATUSES = new Set(["ok", "healthy", "up", "connected"]);
 
+/** Backend service ids → footer display names. */
+const SERVICE_LABELS: Record<string, string> = {
+  postiz: "Postiz",
+  claude: "Claude",
+  oauth: "Claude login",
+  sheets: "Sheets",
+};
+
 function HealthFooterCard() {
   const { data } = useQuery({
     queryKey: ["health", "sidebar"],
@@ -139,9 +147,10 @@ function HealthFooterCard() {
   });
 
   const services = data?.services ?? [];
-  const healthy =
-    services.length === 0 ||
-    services.every((s) => HEALTHY_STATUSES.has(s.status.toLowerCase()));
+  const unhealthy = services.filter(
+    (s) => !HEALTHY_STATUSES.has(s.status.toLowerCase()),
+  );
+  const healthy = unhealthy.length === 0;
 
   return (
     <div className="bg-card border-hair rounded-xl p-3">
@@ -156,7 +165,11 @@ function HealthFooterCard() {
           {healthy ? "All systems healthy" : "Needs attention"}
         </span>
       </div>
-      <div className="t-caption ink-muted mt-1">Postiz · Claude · Drive</div>
+      <div className="t-caption ink-muted mt-1">
+        {healthy
+          ? "All services connected"
+          : unhealthy.map((s) => SERVICE_LABELS[s.name] ?? s.name).join(" · ")}
+      </div>
     </div>
   );
 }

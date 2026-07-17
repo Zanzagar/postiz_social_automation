@@ -35,6 +35,9 @@ export const RANGES: RangeMeta[] = [
   { id: "30d", label: "30d", noun: "month", window: "30 days" },
   { id: "90d", label: "90d", noun: "quarter", window: "90 days" },
   { id: "365d", label: "Year", noun: "year", window: "year" },
+  // "all" = no lower time bound. Captions built from noun/window special-case
+  // this id where "this all time"/"your last period" would read wrong.
+  { id: "all", label: "All time", noun: "all time", window: "period" },
 ];
 
 export function rangeMeta(range: string): RangeMeta {

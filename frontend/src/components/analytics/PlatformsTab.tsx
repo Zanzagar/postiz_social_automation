@@ -84,7 +84,10 @@ export function PlatformsTab({
             </div>
           </div>
           <div className="t-caption ink-muted">
-            From your last {meta.window} · based on {heatmap.sample_size} posts
+            {range === "all"
+              ? "From your full posting history"
+              : `From your last ${meta.window}`}{" "}
+            · based on {heatmap.sample_size} posts
           </div>
         </div>
         {heatmap.sample_size === 0 ? (
