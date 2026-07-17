@@ -6,6 +6,7 @@ import {
   formatDelta,
   formatRate,
   rangeMeta,
+  rangeSubtitle,
   shortDate,
 } from "./format";
 
@@ -38,6 +39,18 @@ describe("analytics format helpers", () => {
     expect(rangeMeta("7d").noun).toBe("week");
     expect(rangeMeta("365d").label).toBe("Year");
     expect(rangeMeta("bogus").noun).toBe("month");
+  });
+
+  it("builds a range-aware header subtitle with honest all-time phrasing", () => {
+    expect(rangeSubtitle("7d")).toBe("How your pasture fed the feed this week.");
+    expect(rangeSubtitle("30d")).toBe("How your pasture fed the feed this month.");
+    expect(rangeSubtitle("90d")).toBe("How your pasture fed the feed this quarter.");
+    expect(rangeSubtitle("365d")).toBe("How your pasture fed the feed this year.");
+    expect(rangeSubtitle("all")).toBe(
+      "How your pasture fed the feed across your whole history.",
+    );
+    // unknown ranges fall back with rangeMeta to the 30d phrasing
+    expect(rangeSubtitle("bogus")).toBe("How your pasture fed the feed this month.");
   });
 
   it("builds a CSV with escaped fields and honest blanks", () => {

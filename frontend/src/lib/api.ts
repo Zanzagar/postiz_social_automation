@@ -98,6 +98,8 @@ export interface ContentRow {
   require_review: boolean;
   held_at: string | null;
   alt_text: string | null;
+  /** Media catalog attachments (Phase 3) — media can exist without media_url. */
+  media_catalog_ids?: number[] | null;
 }
 
 export interface CalendarEntry {
@@ -269,7 +271,33 @@ export interface PublishConfigResponse {
   platforms: PlatformPublishConfig[];
 }
 
+// --- Publish Now Types ---
+
+export interface PlatformPublishResult {
+  platform: string;
+  status: "posted" | "scheduled" | "failed";
+  postiz_id: string | null;
+  error: string | null;
+  link: string | null;
+  /** True when this platform was already posted before this request. */
+  already_published?: boolean;
+}
+
+export interface PublishNowResponse {
+  row_id: number;
+  results: PlatformPublishResult[];
+  /** The row's new status after the publish attempt. */
+  status: string;
+  posted_at: string | null;
+}
+
 // --- Analytics Types ---
+
+/**
+ * Accepted values for the unified analytics `range` param.
+ * "all" = no lower time bound (full history).
+ */
+export type AnalyticsRange = "7d" | "30d" | "90d" | "365d" | "all";
 
 export interface AnalyticsOverview {
   total_posts: number;
@@ -308,6 +336,13 @@ export interface KpiStat {
   series: number[];
 }
 
+/** KPI whose value can be unknowable (e.g. avg rate with no rate data). */
+export interface NullableKpiStat {
+  value: number | null;
+  delta_pct: number | null;
+  series: number[];
+}
+
 export interface Insight {
   tone: "sage" | "terra";
   title: string;
@@ -332,7 +367,7 @@ export interface AnalyticsSummary {
   kpis: {
     posts: KpiStat;
     engagement: KpiStat;
-    avg_rate: KpiStat;
+    avg_rate: NullableKpiStat;
     reach: KpiStat;
   };
   engagement_by_day: {
@@ -715,6 +750,18 @@ export const api = {
     });
   },
 
+  /**
+   * Manual publish — posts the row's remaining platforms through Postiz
+   * right now (or schedules them when the row's date is in the future).
+   * 422 detail "alt_text_required" and the 429 budget message surface via
+   * ApiError.
+   */
+  publishNow(rowId: number) {
+    return request<PublishNowResponse>(`/api/content/${rowId}/publish-now`, {
+      method: "POST",
+    });
+  },
+
   // Auto-publish hold / release controls
   holdContent(id: number) {
     return request<ContentRow>(`/api/content/${id}/hold`, { method: "POST" });
@@ -916,13 +963,13 @@ export const api = {
   },
 
   // Analytics v2 (Phase 2)
-  getAnalyticsSummary(range = "30d") {
+  getAnalyticsSummary(range: AnalyticsRange = "30d") {
     return request<AnalyticsSummary>(
       `/api/analytics/summary?range=${encodeURIComponent(range)}`,
     );
   },
 
-  getAnalyticsPosts(range = "30d", limit = 20, offset = 0) {
+  getAnalyticsPosts(range: AnalyticsRange = "30d", limit = 20, offset = 0) {
     const params = new URLSearchParams({
       range,
       limit: String(limit),
@@ -933,19 +980,19 @@ export const api = {
     );
   },
 
-  getAnalyticsPillarInsights(range = "30d") {
+  getAnalyticsPillarInsights(range: AnalyticsRange = "30d") {
     return request<{ pillars: PillarInsightRow[]; insights: Insight[] }>(
       `/api/analytics/pillar-insights?range=${encodeURIComponent(range)}`,
     );
   },
 
-  getAnalyticsPlatforms(range = "30d") {
+  getAnalyticsPlatforms(range: AnalyticsRange = "30d") {
     return request<{ platforms: PlatformStatRow[]; heatmap: AnalyticsHeatmap }>(
       `/api/analytics/platforms?range=${encodeURIComponent(range)}`,
     );
   },
 
-  getAnalyticsRhythm(range = "30d") {
+  getAnalyticsRhythm(range: AnalyticsRange = "30d") {
     return request<{ weeks: RhythmWeek[]; festivals: FestivalLift[]; season: SeasonSummary }>(
       `/api/analytics/rhythm?range=${encodeURIComponent(range)}`,
     );

@@ -23,7 +23,7 @@ router = APIRouter(
 
 _DEFAULT_DB_PATH = str(Path("data/gvsa.db"))
 
-RangeParam = Literal["7d", "30d", "90d", "365d"]
+RangeParam = Literal["7d", "30d", "90d", "365d", "all"]
 
 
 def get_db_path() -> str:

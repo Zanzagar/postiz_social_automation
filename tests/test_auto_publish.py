@@ -19,9 +19,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.models import Base, ContentRow, PublishConfig
 from api.services.auto_publish import (
+    acquire_row_claim,
     compute_auto_publish_at,
     no_alt_block,
     release_due_rows,
+    release_row_claim,
 )
 from content_engine.postiz import PostizAPIError
 
@@ -553,6 +555,16 @@ def _reset_request_budget():
     auto_publish._request_times.clear()
 
 
+@pytest.fixture(autouse=True)
+def _reset_row_claims():
+    """In-flight row claims are module-level state; isolate tests."""
+    from api.services import auto_publish
+
+    auto_publish._in_flight_rows.clear()
+    yield
+    auto_publish._in_flight_rows.clear()
+
+
 @pytest_asyncio.fixture
 async def release_configs(repo):
     """Enabled publish configs for both fake integrations (release-time
@@ -935,6 +947,68 @@ class TestRequestBudget:
         ids = json.loads(updated.postiz_ids)
         assert set(ids.keys()) == {"instagram", "facebook"}
         assert len(fake.publish_calls) == 2  # instagram was never re-published
+
+
+# --- Row claim (regression: B1, loop vs publish-now double-publish race) ---
+
+
+@pytest.mark.asyncio
+class TestRowClaim:
+    async def test_acquire_blocks_second_acquire_until_released(self):
+        assert await acquire_row_claim(1) is True
+        assert await acquire_row_claim(1) is False  # already in flight
+        assert await acquire_row_claim(2) is True  # other rows unaffected
+        await release_row_claim(1)
+        assert await acquire_row_claim(1) is True
+
+    async def test_release_unclaimed_row_is_safe(self):
+        await release_row_claim(999)  # must not raise
+
+    async def test_loop_skips_claimed_row_and_picks_it_up_next_cycle(
+        self, db_session, repo, release_configs
+    ):
+        row = await seed_due_row(repo)
+        fake = FakePostiz()
+
+        assert await acquire_row_claim(row.id)  # e.g. publish-now is mid-flight
+        try:
+            summary = await release_due_rows(db_session, NOW, fake)
+        finally:
+            await release_row_claim(row.id)
+
+        # Claimed row skipped: nothing published, row untouched.
+        assert fake.publish_calls == []
+        assert summary["published"] == 0
+        assert summary["deferred"] == 1
+        untouched = await repo.get_content_row(row.id)
+        assert untouched.status == "approved"
+        assert untouched.auto_publish_at is not None
+        assert untouched.postiz_ids is None
+
+        # Next cycle (claim released) picks the row up.
+        summary = await release_due_rows(db_session, NOW, fake)
+        assert summary["published"] == 1
+        assert len(fake.publish_calls) == 1
+
+    async def test_loop_releases_claims_after_cycle(self, db_session, repo, release_configs):
+        from api.services import auto_publish
+
+        await seed_due_row(repo)
+        summary = await release_due_rows(db_session, NOW, FakePostiz())
+        assert summary["published"] == 1
+        assert auto_publish._in_flight_rows == set()
+
+    async def test_loop_releases_claim_on_publish_crash(self, db_session, repo, release_configs):
+        """The claim must be released on ANY exit path (try/finally), even a
+        crash-level BaseException escaping the publish core."""
+        from api.services import auto_publish
+
+        await seed_due_row(repo)
+        fake = CrashingPostiz(crash_after=0)
+
+        with pytest.raises(CrashError):
+            await release_due_rows(db_session, NOW, fake)
+        assert auto_publish._in_flight_rows == set()
 
 
 # --- Pillar response contract ---

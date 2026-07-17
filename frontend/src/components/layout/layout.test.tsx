@@ -169,6 +169,51 @@ describe("AppShell layout", () => {
     expect(await screen.findByText("Needs attention")).toBeInTheDocument();
   });
 
+  it("shows 'All services connected' under the healthy footer", async () => {
+    renderShell();
+    expect(await screen.findByText("All services connected")).toBeInTheDocument();
+    expect(screen.queryByText("Postiz · Claude · Drive")).not.toBeInTheDocument();
+  });
+
+  it("shows Checking… with a neutral dot while health loads — never 'All services connected'", async () => {
+    mockGetHealth.mockReturnValue(new Promise(() => {}));
+    renderShell();
+    expect(await screen.findByText("Checking…")).toBeInTheDocument();
+    expect(screen.queryByText("All services connected")).not.toBeInTheDocument();
+    expect(screen.queryByText("All systems healthy")).not.toBeInTheDocument();
+    expect(screen.getByTestId("health-dot")).toHaveClass(
+      "bg-[var(--ink-muted)]",
+    );
+  });
+
+  it("shows Health unavailable with the terra dot when the health query errors", async () => {
+    mockGetHealth.mockRejectedValue(new Error("network down"));
+    renderShell();
+    expect(await screen.findByText("Health unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Needs attention")).toBeInTheDocument();
+    expect(screen.queryByText("All services connected")).not.toBeInTheDocument();
+    expect(screen.queryByText("All systems healthy")).not.toBeInTheDocument();
+    expect(screen.getByTestId("health-dot")).toHaveClass("bg-terra-500");
+  });
+
+  it("names the unhealthy services in the footer subtitle", async () => {
+    mockGetHealth.mockResolvedValue({
+      services: [
+        { name: "postiz", status: "ok", message: "", last_checked: "" },
+        { name: "claude", status: "error", message: "CLI not found", last_checked: "" },
+        { name: "oauth", status: "error", message: "token expired", last_checked: "" },
+        { name: "sheets", status: "error", message: "unreachable", last_checked: "" },
+      ],
+      errors: [],
+    });
+    renderShell();
+    expect(await screen.findByText("Needs attention")).toBeInTheDocument();
+    expect(
+      screen.getByText("Claude · Claude login · Sheets"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Postiz · Claude · Drive")).not.toBeInTheDocument();
+  });
+
   it("links to the Postiz admin", () => {
     renderShell();
     const link = screen.getAllByRole("link", { name: /postiz admin/i })[0];

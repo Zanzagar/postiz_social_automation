@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Download, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, type AnalyticsPostRow } from "@/lib/api";
+import { api, type AnalyticsPostRow, type AnalyticsRange } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { PageHeader, PastureTabs, SegmentedControl } from "@/components/pasture";
 import { OverviewTab } from "@/components/analytics/OverviewTab";
@@ -11,7 +11,7 @@ import { PostsTab } from "@/components/analytics/PostsTab";
 import { PillarsTab } from "@/components/analytics/PillarsTab";
 import { PlatformsTab } from "@/components/analytics/PlatformsTab";
 import { RhythmTab } from "@/components/analytics/RhythmTab";
-import { RANGES, buildResultsCsv } from "@/components/analytics/format";
+import { RANGES, buildResultsCsv, rangeSubtitle } from "@/components/analytics/format";
 
 const POSTS_PAGE_SIZE = 20;
 /** Page size for export fetches — the backend caps `limit` at 100. */
@@ -46,7 +46,7 @@ function downloadCsv(rows: AnalyticsPostRow[], range: string) {
 /** Results (analytics) — Overview / Per post / Per pillar / Per platform / Rhythm. */
 export function AnalyticsPage() {
   const [tab, setTab] = useState("overview");
-  const [range, setRange] = useState("30d");
+  const [range, setRange] = useState<AnalyticsRange>("30d");
 
   const summaryQ = useQuery({
     queryKey: ["analytics", "summary", range],
@@ -113,7 +113,7 @@ export function AnalyticsPage() {
       <PageHeader
         greeting={greeting}
         title="Results"
-        subtitle="How your pasture fed the feed this month."
+        subtitle={rangeSubtitle(range)}
         icon={TrendingUp}
         right={
           <>
@@ -121,7 +121,8 @@ export function AnalyticsPage() {
               aria-label="Time range"
               options={RANGE_OPTIONS}
               value={range}
-              onChange={setRange}
+              // options come straight from RANGES, whose ids are the union
+              onChange={(id) => setRange(id as AnalyticsRange)}
             />
             <Button
               variant="outline"

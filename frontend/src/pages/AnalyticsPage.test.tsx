@@ -302,6 +302,53 @@ describe("AnalyticsPage", () => {
     await waitFor(() => expect(mockSummary).toHaveBeenCalledWith("7d"));
   });
 
+  it("keeps the header subtitle honest about the selected range", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("Posts published");
+    expect(
+      screen.getByText("How your pasture fed the feed this month."),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "7d" }));
+    expect(
+      screen.getByText("How your pasture fed the feed this week."),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "All time" }));
+    expect(
+      screen.getByText("How your pasture fed the feed across your whole history."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/fed the feed this month/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers an All time range that passes 'all' to the api", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    // default stays 30d
+    await screen.findByText("Posts published");
+    expect(mockSummary).toHaveBeenCalledWith("30d");
+    await user.click(screen.getByRole("radio", { name: "All time" }));
+    await waitFor(() => expect(mockSummary).toHaveBeenCalledWith("all"));
+  });
+
+  it("keeps window captions honest on the all-time range", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("Posts published");
+    await user.click(screen.getByRole("radio", { name: "All time" }));
+    await user.click(screen.getByRole("tab", { name: /per platform/i }));
+    await screen.findByText(/from your full posting history · based on 22 posts/i);
+    expect(mockPlatforms).toHaveBeenCalledWith("all");
+    expect(screen.queryByText(/from your last/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /rhythm/i }));
+    await screen.findByText(/you've published 13 posts in all\./i);
+    expect(mockRhythm).toHaveBeenCalledWith("all");
+    expect(screen.queryByText(/posts this month\./i)).not.toBeInTheDocument();
+  });
+
   it("only fetches a tab's data when the tab activates", async () => {
     const user = userEvent.setup();
     renderPage();

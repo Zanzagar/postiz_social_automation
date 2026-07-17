@@ -394,3 +394,56 @@ class TestLegacyEndpointsUnchanged:
             resp = await client.get("/api/analytics/top-posts")
         assert resp.status_code == 200
         assert resp.json() == {"posts": []}
+
+
+@pytest.mark.asyncio
+class TestAllRangeRoutes:
+    """range=all accepted by all 5 v2 endpoints — no lower time bound."""
+
+    @pytest.fixture
+    def old_history_db(self, tmp_path):
+        """history_only_db data plus a 2022 row outside every fixed range."""
+        return _make_db(
+            tmp_path / "old_history.db",
+            """
+            INSERT INTO social_history (platform, external_id, post_text, hashtags, posted_at,
+                                        likes, comments, shares, reach, pillar)
+            VALUES ('facebook', 'fb_1', 'Morning kirtan by the barn', '["GitaValley"]',
+                    '2026-07-07T18:30:00+0000', 40, 6, 4, 400, 'Community');
+            INSERT INTO social_history (platform, external_id, post_text, hashtags, posted_at,
+                                        likes, comments, shares, reach, pillar)
+            VALUES ('facebook', 'fb_2', 'Hay harvest complete', '[]',
+                    '2026-07-10T09:15:00+0000', 20, 2, 2, 300, NULL);
+            INSERT INTO social_history (platform, external_id, post_text, hashtags, posted_at,
+                                        likes, comments, shares, reach, pillar)
+            VALUES ('facebook', 'fb_old', 'Old post from 2022', '[]',
+                    '2022-05-25T17:12:15+0000', 100, 10, 10, 1000, NULL);
+            """,
+        )
+
+    async def test_all_accepted_on_all_five_endpoints(self, client_for, empty_db):
+        async with client_for(empty_db) as client:
+            for path in ("summary", "posts", "pillar-insights", "platforms", "rhythm"):
+                resp = await client.get(f"/api/analytics/{path}?range=all")
+                assert resp.status_code == 200, path
+
+    async def test_old_rows_appear_at_all_absent_at_30d(self, client_for, old_history_db):
+        async with client_for(old_history_db) as client:
+            all_resp = await client.get("/api/analytics/summary?range=all")
+            d30_resp = await client.get("/api/analytics/summary?range=30d")
+        assert all_resp.status_code == 200
+        assert all_resp.json()["range"] == "all"
+        assert all_resp.json()["kpis"]["posts"]["value"] == 3
+        assert d30_resp.json()["kpis"]["posts"]["value"] == 2
+
+    async def test_posts_endpoint_returns_old_rows_at_all(self, client_for, old_history_db):
+        async with client_for(old_history_db) as client:
+            resp = await client.get("/api/analytics/posts?range=all")
+        data = resp.json()
+        assert data["total"] == 3
+        assert any(p["engagement"] == 120 for p in data["posts"])  # fb_old
+
+    async def test_invalid_range_still_rejected(self, client_for, empty_db):
+        async with client_for(empty_db) as client:
+            resp = await client.get("/api/analytics/summary?range=everything")
+        assert resp.status_code == 422

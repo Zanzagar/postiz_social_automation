@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CreateDraft } from "@/hooks/useLocalDraft";
-import { api } from "@/lib/api";
+import { api, type ContentRow } from "@/lib/api";
 import { RefineStage } from "./RefineStage";
 
 vi.mock("@/lib/api", () => ({
@@ -13,11 +13,36 @@ vi.mock("@/lib/api", () => ({
     getHashtagSuggestions: vi.fn(),
     iterate: vi.fn(),
     revertCaption: vi.fn(),
+    editDraft: vi.fn(),
+    setAltText: vi.fn(),
   },
 }));
 
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+import { toast } from "sonner";
+
 vi.mock("./PreviewRail", () => ({
   PreviewRail: () => <div data-testid="preview-rail" />,
+}));
+
+vi.mock("@/components/publish/PublishModal", () => ({
+  PublishModal: ({
+    rowId,
+    platforms,
+    onClose,
+  }: {
+    rowId: number;
+    platforms: string[];
+    onClose: () => void;
+  }) => (
+    <div data-testid="publish-modal">
+      Publishing row {rowId} to {platforms.join(",")}
+      <button onClick={onClose}>Close publish modal</button>
+    </div>
+  ),
 }));
 
 const SUGGESTIONS = {
@@ -32,6 +57,8 @@ const SUGGESTIONS = {
 function seedMocks() {
   vi.mocked(api.getIterations).mockResolvedValue([]);
   vi.mocked(api.getHashtagSuggestions).mockResolvedValue(SUGGESTIONS);
+  vi.mocked(api.editDraft).mockResolvedValue({} as ContentRow);
+  vi.mocked(api.setAltText).mockResolvedValue({} as ContentRow);
 }
 
 beforeEach(() => {
@@ -228,5 +255,118 @@ describe("RefineStage suggested hashtags", () => {
 
     expect(await screen.findByText("Suggested tags")).toBeInTheDocument();
     expect(screen.queryByText("From your post history")).not.toBeInTheDocument();
+  });
+});
+
+describe("RefineStage publish now", () => {
+  it("renders a primary Publish now button beside a secondary Send to Postiz", () => {
+    renderStage();
+    const publish = screen.getByRole("button", { name: /publish now/i });
+    const send = screen.getByRole("button", { name: /send to postiz/i });
+    expect(publish).toBeInTheDocument();
+    expect(send).toBeInTheDocument();
+    expect(publish).toHaveAttribute("data-variant", "default");
+    expect(send).toHaveAttribute("data-variant", "secondary");
+  });
+
+  it("opens the PublishModal for the current row and enabled platforms", async () => {
+    const user = userEvent.setup();
+    renderStage();
+
+    await user.click(screen.getByRole("button", { name: /publish now/i }));
+
+    expect(screen.getByTestId("publish-modal")).toHaveTextContent(
+      "Publishing row 12 to instagram,facebook,youtube",
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /close publish modal/i }),
+    );
+    expect(screen.queryByTestId("publish-modal")).not.toBeInTheDocument();
+  });
+
+  it("is disabled when alt text is missing", () => {
+    renderStage(draft({ mediaUrl: "https://example.com/cow.jpg", altText: "" }));
+    expect(screen.getByRole("button", { name: /publish now/i })).toBeDisabled();
+  });
+
+  it("is disabled when the draft has no saved row", () => {
+    renderStage(draft({ rowId: null }));
+    expect(screen.getByRole("button", { name: /publish now/i })).toBeDisabled();
+  });
+
+  it("explains the no-row disabled state via aria-describedby (Save to drafts first)", () => {
+    renderStage(draft({ rowId: null }));
+    const publish = screen.getByRole("button", { name: /publish now/i });
+    expect(publish).toBeDisabled();
+    const describedBy = publish.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    const hint = describedBy!
+      .split(" ")
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" ");
+    expect(hint).toMatch(/save to drafts first/i);
+  });
+});
+
+describe("RefineStage publish now persists local edits first", () => {
+  it("persists edited captions, the platform dict, and alt text before opening the modal", async () => {
+    const user = userEvent.setup();
+    renderStage(
+      draft({ mediaUrl: "https://example.com/cow.jpg", altText: "A cow at dawn" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: /publish now/i }));
+
+    expect(api.editDraft).toHaveBeenCalledWith(
+      12,
+      { instagram: "IG caption", facebook: "FB caption", youtube: "YT caption" },
+      { instagram: true, facebook: true, youtube: true },
+    );
+    expect(api.setAltText).toHaveBeenCalledWith(12, "A cow at dawn");
+    expect(screen.getByTestId("publish-modal")).toHaveTextContent(
+      "Publishing row 12 to instagram,facebook,youtube",
+    );
+  });
+
+  it("skips setAltText when the draft has no alt text", async () => {
+    const user = userEvent.setup();
+    renderStage();
+
+    await user.click(screen.getByRole("button", { name: /publish now/i }));
+
+    expect(api.editDraft).toHaveBeenCalledTimes(1);
+    expect(api.setAltText).not.toHaveBeenCalled();
+    expect(screen.getByTestId("publish-modal")).toBeInTheDocument();
+  });
+
+  it("shows an aria-busy Saving… state and keeps the modal closed while persisting", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.editDraft).mockImplementation(
+      () => new Promise<never>(() => undefined),
+    );
+    renderStage();
+
+    await user.click(screen.getByRole("button", { name: /publish now/i }));
+
+    const saving = screen.getByRole("button", { name: /saving…/i });
+    expect(saving).toHaveAttribute("aria-busy", "true");
+    expect(saving).toBeDisabled();
+    expect(screen.queryByTestId("publish-modal")).not.toBeInTheDocument();
+  });
+
+  it("toasts and does NOT open the modal when persisting fails", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.editDraft).mockRejectedValue(new Error("Save failed"));
+    renderStage();
+
+    await user.click(screen.getByRole("button", { name: /publish now/i }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(screen.queryByTestId("publish-modal")).not.toBeInTheDocument();
+    // Button recovers so the farmer can retry
+    expect(
+      screen.getByRole("button", { name: /publish now/i }),
+    ).toBeEnabled();
   });
 });

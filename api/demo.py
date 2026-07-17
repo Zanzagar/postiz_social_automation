@@ -167,7 +167,8 @@ class DemoPostizClient:
             {"id": "demo-fb", "identifier": "facebook", "name": "Gita Valley FB"},
         ]
 
-    def create_draft_post(self, content, platform_ids):
+    def create_draft_post(self, content, platform_ids, media_url=None, scheduled_at=None):
+        """Fake draft — kwargs parity with PostizClient.create_draft_post."""
         return {"id": "demo-draft-001"}
 
     def publish_post(self, content, platform_ids, media_url=None, scheduled_at=None):

@@ -35,10 +35,22 @@ export const RANGES: RangeMeta[] = [
   { id: "30d", label: "30d", noun: "month", window: "30 days" },
   { id: "90d", label: "90d", noun: "quarter", window: "90 days" },
   { id: "365d", label: "Year", noun: "year", window: "year" },
+  // "all" = no lower time bound. Captions built from noun/window special-case
+  // this id where "this all time"/"your last period" would read wrong.
+  { id: "all", label: "All time", noun: "all time", window: "period" },
 ];
 
 export function rangeMeta(range: string): RangeMeta {
   return RANGES.find((r) => r.id === range) ?? RANGES[1];
+}
+
+/** Range-aware Results header subtitle — honest about the selected window. */
+export function rangeSubtitle(range: string): string {
+  const meta = rangeMeta(range);
+  if (meta.id === "all") {
+    return "How your pasture fed the feed across your whole history.";
+  }
+  return `How your pasture fed the feed this ${meta.noun}.`;
 }
 
 /** Parse date-only strings as local dates (avoids UTC-midnight day shifts). */

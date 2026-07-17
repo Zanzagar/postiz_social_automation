@@ -1,10 +1,22 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Loader2, PenLine, Save, Send, Sparkles, Undo2 } from "lucide-react";
+import {
+  Copy,
+  Loader2,
+  Megaphone,
+  PenLine,
+  Save,
+  Send,
+  Sparkles,
+  Undo2,
+} from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Chip, PlatformDot } from "@/components/pasture";
+import { draftTitle } from "@/components/content/draft-utils";
+import { PublishModal } from "@/components/publish/PublishModal";
 import { api } from "@/lib/api";
 import { platformBy } from "@/lib/platforms";
 import { cn } from "@/lib/utils";
@@ -36,6 +48,8 @@ export function RefineStage({
   const platforms = draft.platforms.length > 0 ? draft.platforms : Object.keys(draft.captions);
   const [active, setActive] = useState(platforms[0] ?? "instagram");
   const [instruction, setInstruction] = useState("");
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishSaving, setPublishSaving] = useState(false);
   const queryClient = useQueryClient();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -120,6 +134,38 @@ export function RefineStage({
   const platformIterations = iterations.filter((i) => i.platform === active);
   const missingAlt = !!draft.mediaUrl && !draft.altText.trim();
   const canIterate = rowId !== null;
+  const publishDescribedBy =
+    [missingAlt ? "no-alt-message" : null, !canIterate ? "save-first-message" : null]
+      .filter(Boolean)
+      .join(" ") || undefined;
+
+  /**
+   * Persist the LOCAL edits (captions, enabled platforms, alt text) to the
+   * row before publishing — otherwise publish-now would post the row's stale
+   * stored captions while the toasts show the edited text. Mirrors the
+   * persist sequence of CreatePage.saveRefinedToDrafts.
+   */
+  async function persistThenPublish() {
+    if (rowId === null) return;
+    setPublishSaving(true);
+    try {
+      await api.editDraft(
+        rowId,
+        draft.captions,
+        Object.fromEntries(platforms.map((p) => [p, true])),
+      );
+      if (draft.altText.trim()) {
+        await api.setAltText(rowId, draft.altText.trim());
+      }
+      setPublishOpen(true);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Couldn't save before publishing",
+      );
+    } finally {
+      setPublishSaving(false);
+    }
+  }
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -394,6 +440,7 @@ export function RefineStage({
               </span>
             )}
             <Button
+              variant="secondary"
               size="lg"
               className="flex-1"
               onClick={onSend}
@@ -407,17 +454,59 @@ export function RefineStage({
               )}
               Send to Postiz
             </Button>
+            <Button
+              size="lg"
+              className="flex-1"
+              onClick={() => void persistThenPublish()}
+              disabled={missingAlt || !canIterate || publishSaving}
+              aria-busy={publishSaving || undefined}
+              aria-describedby={publishDescribedBy}
+            >
+              {publishSaving ? (
+                <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Megaphone size={14} strokeWidth={1.75} aria-hidden="true" />
+              )}
+              {publishSaving ? "Saving…" : "Publish now"}
+            </Button>
           </div>
           {missingAlt && (
             <p id="no-alt-message" className="t-caption text-terra-700 dark:text-terra-300">
               Add alt text to your image before publishing
             </p>
           )}
+          {!canIterate && (
+            <span id="save-first-message" className="sr-only">
+              Save to drafts first
+            </span>
+          )}
         </div>
       </div>
 
       {/* RIGHT: Live preview */}
       <PreviewRail platform={active} caption={cap} mediaUrl={draft.mediaUrl || null} />
+
+      {publishOpen && rowId !== null && (
+        <PublishModal
+          rowId={rowId}
+          platforms={platforms}
+          title={draftTitle(draft.seed)}
+          captions={draft.captions}
+          scheduledFor={
+            draft.scheduledDate
+              ? draft.scheduledTime
+                ? `${draft.scheduledDate}T${draft.scheduledTime}`
+                : draft.scheduledDate
+              : null
+          }
+          onClose={() => {
+            setPublishOpen(false);
+            // Refresh row state — status/postiz_ids changed server-side.
+            void queryClient.invalidateQueries({ queryKey: ["drafts"] });
+            void queryClient.invalidateQueries({ queryKey: ["iterations", rowId] });
+          }}
+        />
+      )}
     </div>
   );
 }

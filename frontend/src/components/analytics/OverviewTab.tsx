@@ -63,6 +63,12 @@ export function OverviewTab({ data, isLoading, isError, range }: OverviewTabProp
   const { kpis, engagement_by_day: byDay, top_post: topPost, insights, sources } = data;
   const hasChart =
     byDay.current.length >= 2 && byDay.current.some((p) => p.value > 0);
+  // "All time" has no prior period — hide the legend entry and drop the
+  // comparison claim from the chart's aria-label.
+  const isAllTime = meta.id === "all";
+  // Reach comes only from imported platform analytics — 0/null means "not
+  // imported yet", never "nobody was reached".
+  const reachMissing = !kpis.reach.value;
 
   return (
     <div className="space-y-6">
@@ -88,13 +94,15 @@ export function OverviewTab({ data, isLoading, isError, range }: OverviewTabProp
           series={kpis.avg_rate.series}
           accent="terra"
         />
-        <KpiCard
-          label="Total reach"
-          value={compactNumber(kpis.reach.value)}
-          delta={formatDelta(kpis.reach.delta_pct)}
-          series={kpis.reach.series}
-          accent="cream"
-        />
+        <div title={reachMissing ? "No reach data imported yet" : undefined}>
+          <KpiCard
+            label="Total reach"
+            value={reachMissing ? "—" : compactNumber(kpis.reach.value)}
+            delta={formatDelta(kpis.reach.delta_pct)}
+            series={kpis.reach.series}
+            accent="cream"
+          />
+        </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -117,18 +125,24 @@ export function OverviewTab({ data, isLoading, isError, range }: OverviewTabProp
                 />
                 This period
               </span>
-              <span className="flex items-center gap-1.5">
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ background: CHART_PRIOR }}
-                  aria-hidden="true"
-                />
-                Prior {meta.window}
-              </span>
+              {!isAllTime && (
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ background: CHART_PRIOR }}
+                    aria-hidden="true"
+                  />
+                  Prior {meta.window}
+                </span>
+              )}
             </div>
           </div>
           {hasChart ? (
-            <AreaChart current={byDay.current} previous={byDay.previous} />
+            <AreaChart
+              current={byDay.current}
+              previous={byDay.previous}
+              ariaLabel={isAllTime ? "Engagement by day" : undefined}
+            />
           ) : (
             <EmptyState
               icon={Leaf}

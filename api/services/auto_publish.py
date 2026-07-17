@@ -19,6 +19,7 @@ Staff-entered ``row.date`` values follow the same convention.
 import asyncio
 import json
 import logging
+import re
 from collections import deque
 from datetime import UTC, datetime, timedelta
 
@@ -26,8 +27,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models import ContentRow, PublishConfig
+from api.schemas import PlatformPublishResult
+from api.services.media_public import resolve_public_media_url
 
 logger = logging.getLogger(__name__)
+
+BUDGET_EXHAUSTED_MESSAGE = "Postiz hourly request budget exhausted — try again in a few minutes"
 
 # Cap rows examined per 30s cycle so one backlog burst can't starve others.
 MAX_ROWS_PER_CYCLE = 5
@@ -43,6 +48,34 @@ LOOP_INTERVAL_SECONDS = 30.0
 REQUEST_BUDGET_PER_HOUR = 20
 _request_times: deque[datetime] = deque()
 
+# --- In-process row claim (double-publish guard) ---
+#
+# Without coordination, the release loop and POST /content/{id}/publish-now
+# (or two concurrent publish-now calls) can each read the same row's pending
+# platforms before either commits, and both publish them (double-post). A
+# publisher must claim the row id here BEFORE reading pending platforms and
+# release it AFTER its commit. Like the request budget above, this
+# in-process claim is correct only for the current single-process deploy
+# (documented assumption); a multi-worker deploy needs a real distributed
+# lock / row-claim mechanism.
+_in_flight_rows: set[int] = set()
+_claim_lock = asyncio.Lock()
+
+
+async def acquire_row_claim(row_id: int) -> bool:
+    """Try to claim a row for publishing. False when already in flight."""
+    async with _claim_lock:
+        if row_id in _in_flight_rows:
+            return False
+        _in_flight_rows.add(row_id)
+        return True
+
+
+async def release_row_claim(row_id: int) -> None:
+    """Release a row claim (safe to call for ids that are not claimed)."""
+    async with _claim_lock:
+        _in_flight_rows.discard(row_id)
+
 
 def _budget_remaining(now: datetime, budget: int = REQUEST_BUDGET_PER_HOUR) -> int:
     """Requests still available in the rolling one-hour window ending at now."""
@@ -54,6 +87,34 @@ def _budget_remaining(now: datetime, budget: int = REQUEST_BUDGET_PER_HOUR) -> i
 
 def _record_request(now: datetime) -> None:
     _request_times.append(now)
+
+
+def publish_budget_remaining(now: datetime, budget: int = REQUEST_BUDGET_PER_HOUR) -> int:
+    """Public read of the rolling publish-request budget (endpoints use this
+    to fail fast with 429 instead of starting a doomed publish)."""
+    return _budget_remaining(now, budget)
+
+
+# Failure notes written by the release core, e.g.
+# "[auto-publish 2026-07-06T12:00:00+00:00] failed for instagram: boom; row held"
+_FAILED_NOTE_RE = re.compile(r"^\[auto-publish [^\]]*\] failed for (.+?)(?:; row held)?$")
+
+
+def parse_last_publish_failure(feedback: str | None) -> str | None:
+    """Extract the human part of the LAST publish-failure note in feedback.
+
+    Returns e.g. "instagram: boom" (the text after "failed for ", without
+    the mechanical "; row held" suffix), or None when no failure note
+    exists. Used to populate ContentRowResponse.error_msg.
+    """
+    if not feedback:
+        return None
+    last: str | None = None
+    for line in feedback.splitlines():
+        match = _FAILED_NOTE_RE.match(line.strip())
+        if match:
+            last = match.group(1).strip()
+    return last or None
 
 
 def _parse_json_dict(value: str | None) -> dict:
@@ -160,7 +221,136 @@ def _as_utc(dt: datetime | None) -> datetime | None:
     return dt
 
 
+async def release_row_platforms(
+    session,
+    row: ContentRow,
+    platforms_to_publish: list[str],
+    now: datetime,
+    postiz,
+    platform_map: dict[str, str],
+    request_budget: int = REQUEST_BUDGET_PER_HOUR,
+    *,
+    manual: bool,
+) -> tuple[list[PlatformPublishResult], str]:
+    """Shared per-platform publish core for the release loop AND publish-now.
+
+    Publishes one Postiz post per platform in ``platforms_to_publish``
+    (callers pre-filter: the loop passes only auto-eligible pending
+    platforms; manual passes ALL pending platforms). Applies the same row
+    mutations in both modes: successful ids merged into row.postiz_ids,
+    held_at + feedback note on failure, status/posted_at on full success.
+
+    Mode differences:
+    - manual=False (loop): stop at the first failure (byte-identical to the
+      historical loop behavior); budget exhaustion defers silently.
+    - manual=True: attempt every platform so the caller can report a
+      per-platform result; budget exhaustion mid-row marks the remaining
+      platforms failed with the budget message but does NOT hold the row.
+
+    Returns (results, outcome) with outcome in "published" | "held" |
+    "deferred".
+    """
+    captions = _parse_json_dict(row.captions)
+    postiz_ids = _parse_json_dict(row.postiz_ids)
+
+    # Schedule at the row's planned date when it is still in the future,
+    # otherwise publish immediately.
+    row_date = _as_utc(row.date)
+    scheduled_at = row_date.isoformat() if row_date and row_date > now else None
+    success_status = "scheduled" if scheduled_at else "posted"
+
+    results: list[PlatformPublishResult] = []
+    failures: list[str] = []  # real failures only — these hold the row
+    deferred = False
+    media_resolved = False
+    media_url: str | None = None
+    media_error: str | None = None
+
+    def fail(platform: str, error: str, *, holds_row: bool = True) -> None:
+        results.append(PlatformPublishResult(platform=platform, status="failed", error=error))
+        if holds_row:
+            failures.append(f"{platform}: {error}")
+
+    for platform in platforms_to_publish:
+        caption = captions.get(platform)
+        integration_id = platform_map.get(platform)
+        if not caption or not integration_id:
+            fail(platform, f"missing {'caption' if not caption else 'Postiz integration'}")
+            if not manual:
+                break
+            continue
+        if deferred or _budget_remaining(now, request_budget) <= 0:
+            deferred = True
+            if not manual:
+                break
+            fail(platform, BUDGET_EXHAUSTED_MESSAGE, holds_row=False)
+            continue
+        if not media_resolved:
+            # Resolve once per row; every platform shares the same media.
+            media_resolved = True
+            try:
+                media_url = await resolve_public_media_url(session, row)
+            except Exception as e:  # MediaNotPublicError or Drive error
+                media_error = str(e)
+        if media_error is not None:
+            fail(platform, media_error)
+            if not manual:
+                break
+            continue
+        _record_request(now)
+        try:
+            result = await asyncio.to_thread(
+                postiz.publish_post,
+                caption,
+                [integration_id],
+                media_url,
+                scheduled_at,
+            )
+            postiz_id = result.get("id", "")
+            link = result.get("releaseURL") or None  # never fabricated
+        except Exception as e:  # PostizAPIError or transport error
+            fail(platform, str(e))
+            if not manual:
+                break
+            continue
+        postiz_ids[platform] = postiz_id
+        results.append(
+            PlatformPublishResult(
+                platform=platform, status=success_status, postiz_id=postiz_id, link=link
+            )
+        )
+
+    row.postiz_ids = json.dumps(postiz_ids) if postiz_ids else row.postiz_ids
+
+    if failures:
+        # Partial failure: hold the row so remaining platforms don't retry
+        # blindly; a human resumes after fixing the cause.
+        row.held_at = now
+        failure = "; ".join(failures)
+        note = f"[auto-publish {now.isoformat()}] failed for {failure}; row held"
+        row.feedback = f"{row.feedback}\n{note}" if row.feedback else note
+        logger.warning("Auto-publish partial failure on row %d: %s", row.id, failure)
+        return results, "held"
+
+    if deferred:
+        # Budget exhausted: leave status/auto_publish_at untouched; published
+        # platforms are recorded in postiz_ids so the next cycle resumes.
+        logger.info(
+            "Auto-publish row %d: hourly request budget exhausted; deferring to next cycle",
+            row.id,
+        )
+        return results, "deferred"
+
+    if scheduled_at:
+        row.status = "scheduled"
+    else:
+        row.status = "posted"
+        row.posted_at = now
+    return results, "published"
+
+
 async def _release_row(
+    session,
     row: ContentRow,
     now: datetime,
     postiz,
@@ -181,7 +371,6 @@ async def _release_row(
     - "skipped": no auto-eligible platforms; row returned to manual release
     """
     platforms = _parse_json_dict(row.platforms)
-    captions = _parse_json_dict(row.captions)
     postiz_ids = _parse_json_dict(row.postiz_ids)
 
     enabled = [p for p, on in platforms.items() if on]
@@ -208,62 +397,10 @@ async def _release_row(
         row.feedback = f"{row.feedback}\n{note}" if row.feedback else note
         return "skipped"
 
-    # Schedule at the row's planned date when it is still in the future,
-    # otherwise publish immediately.
-    row_date = _as_utc(row.date)
-    scheduled_at = row_date.isoformat() if row_date and row_date > now else None
-
-    failure: str | None = None
-    deferred = False
-    for platform in eligible:
-        caption = captions.get(platform)
-        integration_id = platform_map.get(platform)
-        if not caption or not integration_id:
-            failure = f"{platform}: missing {'caption' if not caption else 'Postiz integration'}"
-            break
-        if _budget_remaining(now, request_budget) <= 0:
-            deferred = True
-            break
-        _record_request(now)
-        try:
-            result = await asyncio.to_thread(
-                postiz.publish_post,
-                caption,
-                [integration_id],
-                row.media_url,
-                scheduled_at,
-            )
-            postiz_ids[platform] = result.get("id", "")
-        except Exception as e:  # PostizAPIError or transport error
-            failure = f"{platform}: {e}"
-            break
-
-    row.postiz_ids = json.dumps(postiz_ids) if postiz_ids else row.postiz_ids
-
-    if failure is not None:
-        # Partial failure: hold the row so remaining platforms don't retry
-        # blindly; a human resumes after fixing the cause.
-        row.held_at = now
-        note = f"[auto-publish {now.isoformat()}] failed for {failure}; row held"
-        row.feedback = f"{row.feedback}\n{note}" if row.feedback else note
-        logger.warning("Auto-publish partial failure on row %d: %s", row.id, failure)
-        return "held"
-
-    if deferred:
-        # Budget exhausted: leave status/auto_publish_at untouched; published
-        # platforms are recorded in postiz_ids so the next cycle resumes.
-        logger.info(
-            "Auto-publish row %d: hourly request budget exhausted; deferring to next cycle",
-            row.id,
-        )
-        return "deferred"
-
-    if scheduled_at:
-        row.status = "scheduled"
-    else:
-        row.status = "posted"
-        row.posted_at = now
-    return "published"
+    _, outcome = await release_row_platforms(
+        session, row, eligible, now, postiz, platform_map, request_budget, manual=False
+    )
+    return outcome
 
 
 async def release_due_rows(
@@ -330,13 +467,26 @@ async def release_due_rows(
                 remaining,
             )
             break
-        outcome = await _release_row(
-            row, now, postiz, platform_map, configs_by_platform, request_budget
-        )
-        summary[outcome] += 1
-        # Commit per row: a crash later in the batch must not lose this
-        # row's postiz_ids/status (re-publishing it would double-post).
-        await session.commit()
+        if not await acquire_row_claim(row.id):
+            # Row is mid-publish elsewhere (publish-now); skip it rather
+            # than race to a double-post — it is reconsidered next cycle.
+            summary["deferred"] += 1
+            logger.info(
+                "Auto-publish row %d: already being published elsewhere; skipping this cycle",
+                row.id,
+            )
+            continue
+        try:
+            outcome = await _release_row(
+                session, row, now, postiz, platform_map, configs_by_platform, request_budget
+            )
+            summary[outcome] += 1
+            # Commit per row: a crash later in the batch must not lose this
+            # row's postiz_ids/status (re-publishing it would double-post).
+            await session.commit()
+        finally:
+            # Claim is released on every exit path, including exceptions.
+            await release_row_claim(row.id)
 
     return summary
 

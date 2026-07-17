@@ -153,6 +153,33 @@ class ApproveResponse(BaseModel):
     postiz_ids: list[str]
 
 
+class PlatformPublishResult(BaseModel):
+    """Outcome of one platform's publish attempt (shared loop/manual core).
+
+    ``link`` is Postiz's releaseURL when the API returns one — never
+    fabricated our side. ``already_published`` marks platforms that were
+    published on an earlier attempt (reported from the stored postiz_ids
+    map, no new Postiz call) so the UI can render their final state instead
+    of dropping them.
+    """
+
+    platform: str
+    status: str  # "posted" | "scheduled" | "failed"
+    postiz_id: str | None = None
+    error: str | None = None
+    link: str | None = None
+    already_published: bool = False
+
+
+class PublishNowResponse(BaseModel):
+    """Result of POST /api/content/{row_id}/publish-now."""
+
+    row_id: int
+    results: list[PlatformPublishResult]
+    status: str
+    posted_at: datetime | None = None
+
+
 class EditCaptionsRequest(BaseModel):
     captions: dict[str, str]
     platforms: dict[str, bool] | None = None
