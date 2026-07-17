@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { Bell, Check, Clock, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
@@ -56,49 +56,58 @@ export function PublishModal({
   captions,
   scheduledFor,
 }: PublishModalProps) {
-  const publishMutation = useMutation({
-    mutationFn: () => api.publishNow(rowId),
-    onSuccess: (res) => {
-      const posted = res.results.filter((r) => r.status === "posted");
-      const failed = res.results.filter((r) => r.status === "failed");
-      for (const r of posted) {
-        const label = platformBy(r.platform).label;
-        const caption = captions?.[r.platform] ?? "";
-        toast.success(`Posted to ${label}`, {
-          description: caption ? excerpt(caption) : undefined,
-          action: r.link
-            ? {
-                label: "View",
-                onClick: () =>
-                  window.open(r.link ?? "", "_blank", "noopener,noreferrer"),
-              }
-            : undefined,
-        });
-      }
-      if (failed.length > 0) {
-        const names = failed.map((r) => platformBy(r.platform).label).join(", ");
-        toast.warning(
-          `Published to ${posted.length} of ${res.results.length} — ${names} failed`,
-        );
-      }
-      onDone?.(res);
-    },
+  // One-shot fetch. A mutation fired from a mount effect never delivers its
+  // result under React StrictMode (the simulated remount detaches the
+  // observer), so this is modeled as a non-retrying, non-cached query — the
+  // StrictMode-safe way to run exactly one request on mount. gcTime 0 means
+  // reopening the modal publishes again (a fresh explicit user action).
+  const publishQuery = useQuery({
+    queryKey: ["publish-now", rowId],
+    queryFn: () => api.publishNow(rowId),
+    retry: false,
+    gcTime: 0,
+    staleTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
-  // Fire exactly once on mount (ref guards StrictMode's double effect).
-  const firedRef = useRef(false);
-  const { mutate } = publishMutation;
+  // Toasts + onDone fire once per response (ref guards re-renders).
+  const notifiedRef = useRef(false);
+  const res = publishQuery.data;
   useEffect(() => {
-    if (firedRef.current) return;
-    firedRef.current = true;
-    mutate();
-  }, [mutate]);
+    if (!res || notifiedRef.current) return;
+    notifiedRef.current = true;
+    const posted = res.results.filter((r) => r.status === "posted");
+    const failed = res.results.filter((r) => r.status === "failed");
+    for (const r of posted) {
+      const label = platformBy(r.platform).label;
+      const caption = captions?.[r.platform] ?? "";
+      toast.success(`Posted to ${label}`, {
+        description: caption ? excerpt(caption) : undefined,
+        action: r.link
+          ? {
+              label: "View",
+              onClick: () =>
+                window.open(r.link ?? "", "_blank", "noopener,noreferrer"),
+            }
+          : undefined,
+      });
+    }
+    if (failed.length > 0) {
+      const names = failed.map((r) => platformBy(r.platform).label).join(", ");
+      toast.warning(
+        `Published to ${posted.length} of ${res.results.length} — ${names} failed`,
+      );
+    }
+    onDone?.(res);
+  }, [res, captions, onDone]);
 
-  const response = publishMutation.data ?? null;
+  const response = publishQuery.data ?? null;
   const requestError =
-    publishMutation.error instanceof Error
-      ? publishMutation.error.message
-      : publishMutation.isError
+    publishQuery.error instanceof Error && publishQuery.error.message
+      ? publishQuery.error.message
+      : publishQuery.isError
         ? "Publishing failed"
         : null;
 
