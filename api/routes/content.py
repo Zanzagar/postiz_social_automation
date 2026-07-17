@@ -1,5 +1,6 @@
 """Content reading and action endpoints."""
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime
@@ -19,9 +20,17 @@ from api.schemas import (
     CalendarResponse,
     ContentRowResponse,
     EditCaptionsRequest,
+    PublishNowResponse,
     RequireReviewRequest,
 )
-from api.services.auto_publish import compute_auto_publish_at, no_alt_block
+from api.services.auto_publish import (
+    BUDGET_EXHAUSTED_MESSAGE,
+    compute_auto_publish_at,
+    no_alt_block,
+    parse_last_publish_failure,
+    publish_budget_remaining,
+    release_row_platforms,
+)
 from content_engine.postiz import PostizAPIError
 
 logger = logging.getLogger(__name__)
@@ -56,7 +65,7 @@ def _row_to_response(row) -> ContentRowResponse:
         feedback=row.feedback,
         postiz_ids=row.postiz_ids,
         posted_at=row.posted_at,
-        error_msg=None,
+        error_msg=parse_last_publish_failure(row.feedback),
         source=row.source or "manual",
         auto_publish_at=row.auto_publish_at,
         require_review=bool(row.require_review),
@@ -194,6 +203,65 @@ async def approve_draft(
 
 
 # --- Auto-publish workflow actions ---
+
+
+@router.post("/content/{row_id}/publish-now", response_model=PublishNowResponse)
+async def publish_now(
+    row_id: int,
+    repo: ContentRepository = Depends(get_content_repo),
+    postiz=Depends(get_postiz_client),
+):
+    """Manually publish a row's pending platforms right now.
+
+    Manual semantics: an explicit human click overrides the
+    auto-release-only gates (require_review, pillar exceptions, held_at —
+    the hold is cleared first), but NO-ALT is a hard block and the shared
+    hourly Postiz request budget still applies. Platforms already in
+    postiz_ids are skipped (idempotent). Row status/postiz_ids updates
+    are identical to the release loop's.
+    """
+    row = await repo.get_content_row(row_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Row {row_id} not found.")
+    if no_alt_block(row):
+        raise HTTPException(status_code=422, detail="alt_text_required")
+
+    platforms = _parse_json_field(row.platforms)
+    postiz_ids = _parse_json_field(row.postiz_ids)
+    enabled = [p for p, on in platforms.items() if on]
+    pending = [p for p in enabled if p not in postiz_ids]
+
+    now = datetime.now(UTC)
+    if pending and publish_budget_remaining(now) <= 0:
+        raise HTTPException(status_code=429, detail=BUDGET_EXHAUSTED_MESSAGE)
+
+    if not pending:
+        # Everything already published — the click just clears any hold.
+        if row.held_at is not None:
+            row.held_at = None
+            await repo.session.commit()
+        return PublishNowResponse(
+            row_id=row.id, results=[], status=row.status or "draft", posted_at=row.posted_at
+        )
+
+    try:
+        integrations = await asyncio.to_thread(postiz.list_integrations)
+    except Exception as e:  # PostizAPIError or transport error
+        raise HTTPException(status_code=502, detail=f"Postiz error: {e}")
+    platform_map = {i.get("identifier", "").lower(): i["id"] for i in integrations}
+
+    # An explicit human click clears/overrides any hold before publishing.
+    row.held_at = None
+    results, _outcome = await release_row_platforms(
+        repo.session, row, pending, now, postiz, platform_map, manual=True
+    )
+    await repo.session.commit()
+    return PublishNowResponse(
+        row_id=row.id,
+        results=results,
+        status=row.status or "draft",
+        posted_at=row.posted_at,
+    )
 
 
 @router.post("/content/{row_id}/hold", response_model=ContentRowResponse)
