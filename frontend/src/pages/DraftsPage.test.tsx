@@ -48,6 +48,25 @@ vi.mock("@/components/content/ContentEditorSheet", () => ({
     ),
 }));
 
+vi.mock("@/components/publish/PublishModal", () => ({
+  PublishModal: ({
+    rowId,
+    title,
+    platforms,
+    onClose,
+  }: {
+    rowId: number;
+    title: string;
+    platforms: string[];
+    onClose: () => void;
+  }) => (
+    <div data-testid="publish-modal">
+      Publishing row {rowId} ({title}) to {platforms.join(",")}
+      <button onClick={onClose}>Close publish modal</button>
+    </div>
+  ),
+}));
+
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -342,5 +361,157 @@ describe("DraftsPage", () => {
       expect(screen.getByText("Create page stub")).toBeInTheDocument();
     });
     expect(screen.queryByText("The workbench")).not.toBeInTheDocument();
+  });
+});
+
+// --- Video-readiness wave: publish now trigger + held-failure banner ---
+
+describe("DraftsPage publish now", () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("opens the PublishModal for an approved row via the row action", async () => {
+    const user = userEvent.setup();
+    mockGetDrafts.mockResolvedValue([
+      row({
+        row_number: 9,
+        raw_text: "Sunrise over the barn",
+        status: "approved",
+        platforms: { instagram: true, facebook: true },
+      }),
+    ]);
+    renderDrafts();
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: /sunrise over the barn/i }),
+      ).toBeInTheDocument();
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /publish sunrise over the barn now/i }),
+    );
+
+    expect(screen.getByTestId("publish-modal")).toHaveTextContent(
+      "Publishing row 9 (Sunrise over the barn) to instagram,facebook",
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /close publish modal/i }),
+    );
+    expect(screen.queryByTestId("publish-modal")).not.toBeInTheDocument();
+  });
+
+  it("disables Publish now for NO-ALT rows with the alt-text description", async () => {
+    mockGetDrafts.mockResolvedValue([
+      row({
+        row_number: 10,
+        raw_text: "Calf portrait",
+        status: "approved",
+        media_url: "https://example.com/calf.jpg",
+        alt_text: null,
+      }),
+    ]);
+    renderDrafts();
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: /calf portrait/i }),
+      ).toBeInTheDocument();
+    });
+
+    const publish = screen.getByRole("button", {
+      name: /publish calf portrait now/i,
+    });
+    expect(publish).toBeDisabled();
+    const describedBy = publish.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)).toHaveTextContent(
+      "Add alt text before publishing",
+    );
+  });
+});
+
+describe("DraftsPage held-failure banner", () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  const failedRow = row({
+    row_number: 21,
+    raw_text: "Rama Navami — feast tomorrow",
+    status: "approved",
+    held_at: "2026-07-15T11:04:00",
+    error_msg:
+      "Media isn't publicly reachable — import it to Google Drive first, then reattach",
+  });
+
+  it("renders the Failed · retry banner with title and real error text", async () => {
+    mockGetDrafts.mockResolvedValue([failedRow]);
+    renderDrafts();
+
+    await waitFor(() => {
+      expect(screen.getByText("Failed · retry")).toBeInTheDocument();
+    });
+    const banner = screen.getByRole("alert");
+    expect(banner).toHaveTextContent("Rama Navami — feast tomorrow");
+    expect(banner).toHaveTextContent(/Media isn't publicly reachable/);
+  });
+
+  it("does not render a banner for held rows without an error", async () => {
+    mockGetDrafts.mockResolvedValue([
+      row({
+        row_number: 22,
+        raw_text: "Brisham naps by the barn",
+        status: "approved",
+        held_at: "2026-07-15T11:04:00",
+        error_msg: null,
+      }),
+    ]);
+    renderDrafts();
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: /brisham naps by the barn/i }),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Failed · retry")).not.toBeInTheDocument();
+  });
+
+  it("retries via resumeContent and confirms with a toast", async () => {
+    const user = userEvent.setup();
+    mockGetDrafts.mockResolvedValue([failedRow]);
+    mockResumeContent.mockResolvedValue({ ...failedRow, held_at: null });
+    renderDrafts();
+
+    await waitFor(() => {
+      expect(screen.getByText("Failed · retry")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => {
+      expect(mockResumeContent).toHaveBeenCalledWith(21);
+    });
+    expect(toast.success).toHaveBeenCalledWith(
+      "Retrying — releases on the next cycle",
+    );
+  });
+
+  it("opens the editor sheet in refine mode from Edit post", async () => {
+    const user = userEvent.setup();
+    mockGetDrafts.mockResolvedValue([failedRow]);
+    renderDrafts();
+
+    await waitFor(() => {
+      expect(screen.getByText("Failed · retry")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Edit post" }));
+
+    expect(screen.getByTestId("editor-sheet")).toHaveTextContent(
+      "Editing row 21 in refine mode",
+    );
   });
 });

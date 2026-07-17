@@ -20,6 +20,23 @@ vi.mock("./PreviewRail", () => ({
   PreviewRail: () => <div data-testid="preview-rail" />,
 }));
 
+vi.mock("@/components/publish/PublishModal", () => ({
+  PublishModal: ({
+    rowId,
+    platforms,
+    onClose,
+  }: {
+    rowId: number;
+    platforms: string[];
+    onClose: () => void;
+  }) => (
+    <div data-testid="publish-modal">
+      Publishing row {rowId} to {platforms.join(",")}
+      <button onClick={onClose}>Close publish modal</button>
+    </div>
+  ),
+}));
+
 const SUGGESTIONS = {
   hashtags: [
     { hashtag: "gitavalley", avg_engagement: 12.4, times_used: 9, trend: "rising" },
@@ -228,5 +245,43 @@ describe("RefineStage suggested hashtags", () => {
 
     expect(await screen.findByText("Suggested tags")).toBeInTheDocument();
     expect(screen.queryByText("From your post history")).not.toBeInTheDocument();
+  });
+});
+
+describe("RefineStage publish now", () => {
+  it("renders a primary Publish now button beside a secondary Send to Postiz", () => {
+    renderStage();
+    const publish = screen.getByRole("button", { name: /publish now/i });
+    const send = screen.getByRole("button", { name: /send to postiz/i });
+    expect(publish).toBeInTheDocument();
+    expect(send).toBeInTheDocument();
+    expect(publish).toHaveAttribute("data-variant", "default");
+    expect(send).toHaveAttribute("data-variant", "secondary");
+  });
+
+  it("opens the PublishModal for the current row and enabled platforms", async () => {
+    const user = userEvent.setup();
+    renderStage();
+
+    await user.click(screen.getByRole("button", { name: /publish now/i }));
+
+    expect(screen.getByTestId("publish-modal")).toHaveTextContent(
+      "Publishing row 12 to instagram,facebook,youtube",
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /close publish modal/i }),
+    );
+    expect(screen.queryByTestId("publish-modal")).not.toBeInTheDocument();
+  });
+
+  it("is disabled when alt text is missing", () => {
+    renderStage(draft({ mediaUrl: "https://example.com/cow.jpg", altText: "" }));
+    expect(screen.getByRole("button", { name: /publish now/i })).toBeDisabled();
+  });
+
+  it("is disabled when the draft has no saved row", () => {
+    renderStage(draft({ rowId: null }));
+    expect(screen.getByRole("button", { name: /publish now/i })).toBeDisabled();
   });
 });

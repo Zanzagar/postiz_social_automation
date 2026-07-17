@@ -13,6 +13,8 @@ import {
   type GenerateFromTemplateRequest,
   type PlatformPublishConfig,
   type PublishConfigResponse,
+  type PublishNowResponse,
+  type AnalyticsRange,
 } from "./api";
 
 // Mock fetch globally
@@ -918,5 +920,105 @@ describe("festival endpoints", () => {
     expect(mockFetch.mock.calls[0][0]).toBe(
       "/api/festivals?from=2026-07-01&to=2026-08-01",
     );
+  });
+});
+
+// --- Video-readiness wave: publish now ---
+
+describe("api.publishNow", () => {
+  beforeEach(() => {
+    setToken("jwt");
+  });
+
+  it("POSTs to /api/content/{id}/publish-now and returns the results", async () => {
+    const body: PublishNowResponse = {
+      row_id: 12,
+      results: [
+        {
+          platform: "instagram",
+          status: "posted",
+          postiz_id: "pz-1",
+          error: null,
+          link: "https://instagram.com/p/abc",
+        },
+        {
+          platform: "tiktok",
+          status: "failed",
+          postiz_id: null,
+          error: "video too short",
+          link: null,
+        },
+      ],
+      status: "posted",
+      posted_at: "2026-07-16T11:04:00",
+    };
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(body),
+    });
+
+    const result = await api.publishNow(12);
+
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/content/12/publish-now");
+    expect(mockFetch.mock.calls[0][1].method).toBe("POST");
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].status).toBe("posted");
+    expect(result.posted_at).toBe("2026-07-16T11:04:00");
+  });
+
+  it("surfaces the 422 no-alt detail via ApiError", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 422,
+      statusText: "Unprocessable Entity",
+      json: () => Promise.resolve({ detail: "alt_text_required" }),
+    });
+
+    const err = await api.publishNow(3).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(422);
+    expect((err as ApiError).detail).toBe("alt_text_required");
+  });
+
+  it("surfaces the 429 budget detail via ApiError", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      statusText: "Too Many Requests",
+      json: () =>
+        Promise.resolve({
+          detail:
+            "Postiz hourly request budget exhausted — try again in a few minutes",
+        }),
+    });
+
+    const err = await api.publishNow(3).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(429);
+    expect((err as ApiError).detail).toMatch(/budget exhausted/);
+  });
+});
+
+describe("analytics range union (W4 contract)", () => {
+  it('accepts "all" on every unified analytics endpoint', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+    });
+    const all: AnalyticsRange = "all";
+    await api.getAnalyticsSummary(all);
+    await api.getAnalyticsPosts(all);
+    await api.getAnalyticsPillarInsights(all);
+    await api.getAnalyticsPlatforms(all);
+    await api.getAnalyticsRhythm(all);
+    expect(mockFetch.mock.calls.map((c) => c[0])).toEqual([
+      "/api/analytics/summary?range=all",
+      "/api/analytics/posts?range=all&limit=20&offset=0",
+      "/api/analytics/pillar-insights?range=all",
+      "/api/analytics/platforms?range=all",
+      "/api/analytics/rhythm?range=all",
+    ]);
   });
 });

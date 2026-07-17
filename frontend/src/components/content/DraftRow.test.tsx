@@ -93,3 +93,108 @@ describe("DraftRow keyboard accessibility", () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 });
+
+describe("DraftRow publish now action", () => {
+  it("shows Publish now for draft rows and calls onPublish (not onOpen)", async () => {
+    const user = userEvent.setup();
+    const onOpen = vi.fn();
+    const onPublish = vi.fn();
+    render(
+      <DraftRow
+        draft={row({ status: "draft" })}
+        onOpen={onOpen}
+        onPublish={onPublish}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: /publish sample text now/i }),
+    );
+    expect(onPublish).toHaveBeenCalledTimes(1);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("shows Publish now for approved rows", () => {
+    render(
+      <DraftRow
+        draft={row({ status: "approved" })}
+        onOpen={() => {}}
+        onPublish={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /publish sample text now/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides Publish now for posted and pending_approval rows", () => {
+    const { rerender } = render(
+      <DraftRow
+        draft={row({ status: "posted" })}
+        onOpen={() => {}}
+        onPublish={() => {}}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: /publish sample text now/i }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <DraftRow
+        draft={row({ status: "pending_approval" })}
+        onOpen={() => {}}
+        onPublish={() => {}}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: /publish sample text now/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides Publish now when no onPublish handler is wired", () => {
+    render(<DraftRow draft={row({ status: "draft" })} onOpen={() => {}} />);
+    expect(
+      screen.queryByRole("button", { name: /publish sample text now/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("disables Publish now with an alt-text description when media has no alt", () => {
+    render(
+      <DraftRow
+        draft={row({
+          status: "approved",
+          media_url: "https://example.com/cow.jpg",
+          alt_text: null,
+        })}
+        onOpen={() => {}}
+        onPublish={() => {}}
+      />,
+    );
+    const publish = screen.getByRole("button", {
+      name: /publish sample text now/i,
+    });
+    expect(publish).toBeDisabled();
+    const describedBy = publish.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    const description = document.getElementById(describedBy!);
+    expect(description).toHaveTextContent("Add alt text before publishing");
+    expect(screen.getByText("NO ALT")).toBeInTheDocument();
+  });
+
+  it("keeps Publish now enabled when media has alt text", () => {
+    render(
+      <DraftRow
+        draft={row({
+          status: "approved",
+          media_url: "https://example.com/cow.jpg",
+          alt_text: "A cow at dawn",
+        })}
+        onOpen={() => {}}
+        onPublish={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /publish sample text now/i }),
+    ).toBeEnabled();
+    expect(screen.queryByText("NO ALT")).not.toBeInTheDocument();
+  });
+});

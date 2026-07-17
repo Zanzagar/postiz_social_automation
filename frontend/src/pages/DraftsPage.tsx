@@ -1,12 +1,15 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { format, parseISO } from "date-fns";
 import {
+  Bell,
   CheckCircle2,
   ClipboardCheck,
   Filter,
   Loader2,
   Plus,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { ContentEditorSheet } from "@/components/content/ContentEditorSheet";
 import { DraftRow } from "@/components/content/DraftRow";
 import { draftTitle } from "@/components/content/draft-utils";
+import { PublishModal } from "@/components/publish/PublishModal";
 
 const FILTERS = [
   { id: "all", label: "All", statuses: null },
@@ -61,6 +65,13 @@ export function DraftsPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [isApproving, setIsApproving] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
+  const [publishRow, setPublishRow] = useState<ContentRow | null>(null);
+
+  /** Rows the auto-publisher held after a real failure (design State 4A). */
+  const failedRows = useMemo(
+    () => drafts.filter((d) => d.held_at != null && !!d.error_msg),
+    [drafts],
+  );
 
   const counts = useMemo(() => {
     const c: Record<FilterId, number> = {
@@ -123,6 +134,17 @@ export function DraftsPage() {
       if (ctx?.prev) queryClient.setQueryData(["drafts"], ctx.prev);
       toast.error("Couldn't resume auto-release");
     },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["drafts"] }),
+  });
+
+  // Retry from the failed banner — clears the hold so the next auto-publish
+  // cycle picks the row up again.
+  const retryMutation = useMutation({
+    mutationFn: (id: number) => api.resumeContent(id),
+    onSuccess: () => {
+      toast.success("Retrying — releases on the next cycle");
+    },
+    onError: () => toast.error("Couldn't retry this post"),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["drafts"] }),
   });
 
@@ -221,6 +243,68 @@ export function DraftsPage() {
       </div>
 
       <div className="flex-1 px-8 py-5 pb-24">
+        {failedRows.length > 0 && (
+          <div className="mb-4 space-y-2.5">
+            {failedRows.map((d) => (
+              <div
+                key={d.row_number}
+                role="alert"
+                className="bg-card flex items-start gap-3 rounded-xl border border-terra-300 p-4 dark:border-terra-600"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-terra-200 bg-terra-50 dark:border-terra-600 dark:bg-terra-700/20">
+                  <Bell
+                    size={15}
+                    strokeWidth={1.75}
+                    className="text-terra-600 dark:text-terra-300"
+                    aria-hidden="true"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="t-micro font-semibold tracking-wider text-terra-700 uppercase dark:text-terra-300">
+                      Failed · retry
+                    </span>
+                    {d.held_at && (
+                      <span className="t-micro ink-muted">
+                        held {format(parseISO(d.held_at), "MMM d · h:mm a")}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="t-title-sm mt-0.5 truncate font-serif text-sage-800 dark:text-sage-100">
+                    {draftTitle(d.raw_text)}
+                  </h3>
+                  <p
+                    className="t-caption mt-0.5 truncate text-terra-700 dark:text-terra-300"
+                    title={d.error_msg ?? undefined}
+                  >
+                    {d.error_msg}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="fr"
+                    onClick={() => setOpenId(d.row_number)}
+                  >
+                    Edit post
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="fr"
+                    disabled={retryMutation.isPending}
+                    onClick={() => retryMutation.mutate(d.row_number)}
+                  >
+                    <RefreshCw size={12} strokeWidth={1.75} aria-hidden="true" />
+                    Retry
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {isLoading ? (
           <div
             role="status"
@@ -268,6 +352,7 @@ export function DraftsPage() {
                 onOpen={() => setOpenId(d.row_number)}
                 onHold={() => holdMutation.mutate(d.row_number)}
                 onResume={() => resumeMutation.mutate(d.row_number)}
+                onPublish={() => setPublishRow(d)}
               />
             ))}
           </div>
@@ -283,6 +368,22 @@ export function DraftsPage() {
           setOpenId(null);
         }}
       />
+
+      {publishRow && (
+        <PublishModal
+          rowId={publishRow.row_number}
+          platforms={Object.entries(publishRow.platforms)
+            .filter(([, on]) => on)
+            .map(([id]) => id)}
+          title={draftTitle(publishRow.raw_text)}
+          captions={publishRow.captions}
+          scheduledFor={publishRow.date}
+          onClose={() => {
+            setPublishRow(null);
+            void queryClient.invalidateQueries({ queryKey: ["drafts"] });
+          }}
+        />
+      )}
 
       {selected.size > 0 && (
         <div className="bg-card border-hair fixed inset-x-0 bottom-0 z-40 px-8 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-lg md:left-60 md:pb-3">

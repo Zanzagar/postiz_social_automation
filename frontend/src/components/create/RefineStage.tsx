@@ -1,10 +1,21 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Loader2, PenLine, Save, Send, Sparkles, Undo2 } from "lucide-react";
+import {
+  Copy,
+  Loader2,
+  Megaphone,
+  PenLine,
+  Save,
+  Send,
+  Sparkles,
+  Undo2,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Chip, PlatformDot } from "@/components/pasture";
+import { draftTitle } from "@/components/content/draft-utils";
+import { PublishModal } from "@/components/publish/PublishModal";
 import { api } from "@/lib/api";
 import { platformBy } from "@/lib/platforms";
 import { cn } from "@/lib/utils";
@@ -36,6 +47,7 @@ export function RefineStage({
   const platforms = draft.platforms.length > 0 ? draft.platforms : Object.keys(draft.captions);
   const [active, setActive] = useState(platforms[0] ?? "instagram");
   const [instruction, setInstruction] = useState("");
+  const [publishOpen, setPublishOpen] = useState(false);
   const queryClient = useQueryClient();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -394,6 +406,7 @@ export function RefineStage({
               </span>
             )}
             <Button
+              variant="secondary"
               size="lg"
               className="flex-1"
               onClick={onSend}
@@ -407,6 +420,16 @@ export function RefineStage({
               )}
               Send to Postiz
             </Button>
+            <Button
+              size="lg"
+              className="flex-1"
+              onClick={() => setPublishOpen(true)}
+              disabled={missingAlt || !canIterate}
+              aria-describedby={missingAlt ? "no-alt-message" : undefined}
+            >
+              <Megaphone size={14} strokeWidth={1.75} aria-hidden="true" />
+              Publish now
+            </Button>
           </div>
           {missingAlt && (
             <p id="no-alt-message" className="t-caption text-terra-700 dark:text-terra-300">
@@ -418,6 +441,28 @@ export function RefineStage({
 
       {/* RIGHT: Live preview */}
       <PreviewRail platform={active} caption={cap} mediaUrl={draft.mediaUrl || null} />
+
+      {publishOpen && rowId !== null && (
+        <PublishModal
+          rowId={rowId}
+          platforms={platforms}
+          title={draftTitle(draft.seed)}
+          captions={draft.captions}
+          scheduledFor={
+            draft.scheduledDate
+              ? draft.scheduledTime
+                ? `${draft.scheduledDate}T${draft.scheduledTime}`
+                : draft.scheduledDate
+              : null
+          }
+          onClose={() => {
+            setPublishOpen(false);
+            // Refresh row state — status/postiz_ids changed server-side.
+            void queryClient.invalidateQueries({ queryKey: ["drafts"] });
+            void queryClient.invalidateQueries({ queryKey: ["iterations", rowId] });
+          }}
+        />
+      )}
     </div>
   );
 }

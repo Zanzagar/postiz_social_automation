@@ -7,6 +7,7 @@ import type { ContentRow } from "@/lib/api";
 import { PLATFORMS } from "@/lib/platforms";
 import { pillarColor, type PillarLike } from "@/lib/pillars";
 import {
+  Chip,
   CountdownChip,
   PillarChip,
   PlatformDots,
@@ -39,6 +40,8 @@ interface DraftRowProps {
   onOpen: () => void;
   onHold?: () => void;
   onResume?: () => void;
+  /** Publish-now trigger — the button renders only for approved|draft rows. */
+  onPublish?: () => void;
 }
 
 /**
@@ -55,8 +58,14 @@ export function DraftRow({
   onOpen,
   onHold,
   onResume,
+  onPublish,
 }: DraftRowProps) {
   const title = draftTitle(draft.raw_text);
+  const publishable =
+    onPublish !== undefined &&
+    (draft.status === "approved" || draft.status === "draft");
+  const needsAlt = !!draft.media_url && !(draft.alt_text ?? "").trim();
+  const noAltId = `no-alt-${draft.row_number}`;
   const color = pillarColor(pillar ?? draft.content_pillar ?? "");
   const platformIds = PLATFORMS.map((p) => p.id).filter(
     (id) => draft.platforms[id],
@@ -185,6 +194,34 @@ export function DraftRow({
         >
           <MoreHorizontal size={13} strokeWidth={1.75} aria-hidden="true" />
         </Button>
+        {publishable && (
+          <>
+            {needsAlt && (
+              <>
+                <span onClick={(e) => e.stopPropagation()} title="Add alt text before publishing">
+                  <Chip tone="cream">NO ALT</Chip>
+                </span>
+                <span id={noAltId} className="sr-only">
+                  Add alt text before publishing
+                </span>
+              </>
+            )}
+            <Button
+              size="sm"
+              variant="secondary"
+              className="fr"
+              aria-label={`Publish ${title} now`}
+              disabled={needsAlt}
+              aria-describedby={needsAlt ? noAltId : undefined}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPublish?.();
+              }}
+            >
+              Publish now
+            </Button>
+          </>
+        )}
         <Button
           size="sm"
           variant="default"
