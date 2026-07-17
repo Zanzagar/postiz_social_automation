@@ -42,6 +42,11 @@ async def system_health(
     settings = get_settings()
     services = []
 
+    # Sheets is optional — SQLite is the source of truth. A missing/empty/
+    # placeholder spreadsheet_id means "intentionally not set up": report it
+    # honestly without ever calling the Sheets API.
+    sheets_configured = (settings.spreadsheet_id or "").strip().lower() not in ("", "placeholder")
+
     if settings.demo_mode:
         for name, msg in [
             ("sheets", "Demo mode — Google Sheets connected"),
@@ -60,11 +65,15 @@ async def system_health(
             oauth_result = _oauth_cache["result"]
 
         loop = asyncio.get_event_loop()
-        checks_to_run = [
-            ("sheets", partial(check_sheets_health, sheets)),
-            ("postiz", partial(check_postiz_health, postiz)),
-            ("claude", check_claude_health),
-        ]
+        checks_to_run = []
+        if sheets_configured:
+            checks_to_run.append(("sheets", partial(check_sheets_health, sheets)))
+        checks_to_run.extend(
+            [
+                ("postiz", partial(check_postiz_health, postiz)),
+                ("claude", check_claude_health),
+            ]
+        )
         if oauth_result is None:
             checks_to_run.append(("oauth", check_oauth_health))
 
@@ -83,6 +92,18 @@ async def system_health(
                 )
             )
 
+        if not sheets_configured:
+            # Keep the sheets entry first so the services list order is stable.
+            services.insert(
+                0,
+                ServiceHealth(
+                    name="sheets",
+                    status="ok",
+                    message="Not configured (SQLite is the source of truth)",
+                    last_checked=checked_at,
+                ),
+            )
+
         # Append cached OAuth if we didn't re-check it
         if oauth_result is not None:
             ok, msg = oauth_result
@@ -95,12 +116,13 @@ async def system_health(
                 )
             )
 
-    # Fetch recent errors
+    # Fetch recent errors (skipped when Sheets isn't configured — no API call)
     errors = []
-    try:
-        errors = sheets.get_recent_errors(limit=10)
-    except Exception:
-        pass
+    if settings.demo_mode or sheets_configured:
+        try:
+            errors = sheets.get_recent_errors(limit=10)
+        except Exception:
+            pass
 
     response = HealthResponse(services=services, errors=errors)
     _health_cache["data"] = response

@@ -767,3 +767,110 @@ class TestGetHashtags:
         assert len(result["hashtags"]) == 3
         # Sorted by avg engagement desc
         assert result["hashtags"][0]["hashtag"] == "tag9"
+
+
+# ---------------------------------------------------------------------------
+# range="all" — no lower time bound (video-readiness W2)
+# ---------------------------------------------------------------------------
+
+
+def _rec(date, **kw):
+    defaults = dict(
+        id=1,
+        source="history",
+        text="",
+        pillar=None,
+        platform="facebook",
+        likes=0,
+        comments=0,
+        shares=0,
+        reach=0,
+    )
+    defaults.update(kw)
+    return PlatformRecord(date=date, **defaults)
+
+
+class TestResolveDays:
+    def test_all_spans_to_earliest_record(self):
+        recs = [_rec(datetime(2026, 7, 1, 9, 0)), _rec(datetime(2026, 6, 30, 9, 0), id=2)]
+        # 2026-06-30 → 2026-07-14 inclusive = 15 days
+        assert unified.resolve_days("all", recs, FROZEN_NOW) == 15
+
+    def test_all_without_dated_records_uses_default(self):
+        assert unified.resolve_days("all", [], FROZEN_NOW) == 30
+        assert unified.resolve_days("all", [_rec(None)], FROZEN_NOW) == 30
+
+    def test_fixed_ranges_pass_through(self):
+        assert unified.resolve_days("7d", [], FROZEN_NOW) == 7
+        assert unified.resolve_days("365d", [_rec(datetime(2022, 1, 1))], FROZEN_NOW) == 365
+        assert unified.resolve_days(None, [], FROZEN_NOW) == 30
+
+
+class TestAllRange:
+    def test_summary_all_includes_old_history(self, seeded_db):
+        result = unified.get_summary(seeded_db, "all", now=FROZEN_NOW)
+        assert result["range"] == "all"
+        # All 6 posts: app 1-3 + fb_1, fb_2, fb_old (2022)
+        assert result["kpis"]["posts"]["value"] == 6
+        assert result["sources"] == {"app": 3, "history": 3}
+
+    def test_summary_30d_still_excludes_old_history(self, seeded_db):
+        result = unified.get_summary(seeded_db, "30d", now=FROZEN_NOW)
+        assert result["kpis"]["posts"]["value"] == 4
+        assert result["sources"] == {"app": 2, "history": 2}
+
+    def test_summary_all_has_no_previous_window(self, seeded_db):
+        result = unified.get_summary(seeded_db, "all", now=FROZEN_NOW)
+        for kpi in result["kpis"].values():
+            assert kpi["delta_pct"] is None
+        assert result["engagement_by_day"]["previous"] == []
+        cur = result["engagement_by_day"]["current"]
+        assert cur[0]["date"] == "2022-05-25"  # earliest record (fb_old)
+        assert cur[-1]["date"] == "2026-07-14"
+
+    def test_summary_all_series_still_downsampled(self, seeded_db):
+        result = unified.get_summary(seeded_db, "all", now=FROZEN_NOW)
+        for kpi in result["kpis"].values():
+            assert len(kpi["series"]) <= 14
+
+    def test_summary_all_empty_db_well_formed(self, empty_db):
+        result = unified.get_summary(empty_db, "all", now=FROZEN_NOW)
+        assert result["kpis"]["posts"]["value"] == 0
+        assert len(result["engagement_by_day"]["current"]) == 30  # default span
+        assert result["engagement_by_day"]["previous"] == []
+        assert result["top_post"] is None
+
+    def test_posts_all_includes_old_history(self, seeded_db):
+        result = unified.get_posts(seeded_db, "all", now=FROZEN_NOW)
+        assert result["total"] == 6
+        engagements = {p["engagement"] for p in result["posts"]}
+        assert 120 in engagements  # fb_old (100+10+10), only visible at range=all
+
+    def test_posts_30d_excludes_old_history(self, seeded_db):
+        result = unified.get_posts(seeded_db, "30d", now=FROZEN_NOW)
+        assert result["total"] == 4
+
+    def test_pillar_insights_all_counts_old_posts(self, seeded_db):
+        result = unified.get_pillar_insights(seeded_db, "all", now=FROZEN_NOW)
+        by_name = {p["pillar"]: p for p in result["pillars"]}
+        assert by_name["Cow Life"]["posts"] == 2  # app posts 1 and 3
+        assert by_name["Community"]["posts"] == 2  # app post 2 + fb_1
+
+    def test_platforms_all_vs_30d(self, seeded_db):
+        fb_all = next(
+            p
+            for p in unified.get_platforms(seeded_db, "all", now=FROZEN_NOW)["platforms"]
+            if p["platform"] == "facebook"
+        )
+        fb_30 = next(
+            p
+            for p in unified.get_platforms(seeded_db, "30d", now=FROZEN_NOW)["platforms"]
+            if p["platform"] == "facebook"
+        )
+        assert fb_all["posts"] == 4  # app1-fb + fb_1 + fb_2 + fb_old
+        assert fb_30["posts"] == 3
+
+    def test_rhythm_all_spans_full_history(self, seeded_db):
+        result = unified.get_rhythm(seeded_db, "all", now=FROZEN_NOW)
+        assert result["season"]["total_posts"] == 6
+        assert len(result["weeks"]) > 52  # spans back to 2022

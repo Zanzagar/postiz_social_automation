@@ -36,6 +36,7 @@ from zoneinfo import ZoneInfo
 logger = logging.getLogger(__name__)
 
 RANGE_DAYS = {"7d": 7, "30d": 30, "90d": 90, "365d": 365}
+ALL_RANGE = "all"  # no lower time bound — window starts at the earliest record
 DEFAULT_RANGE = "30d"
 MAX_SERIES_BUCKETS = 14
 
@@ -301,6 +302,21 @@ def aggregate_posts(records: list[PlatformRecord]) -> list[UnifiedPost]:
 def resolve_range(range_key: str | None) -> int:
     """Map a range query param to its day count (default 30d)."""
     return RANGE_DAYS.get(range_key or DEFAULT_RANGE, RANGE_DAYS[DEFAULT_RANGE])
+
+
+def resolve_days(range_key: str | None, records: list[PlatformRecord], now: datetime) -> int:
+    """Day count for a range key, given the loaded records.
+
+    "all" has no lower time bound: the window spans from the earliest
+    dated record through today, inclusive (default range when no record
+    has a parseable date). Fixed keys pass through to resolve_range.
+    """
+    if range_key == ALL_RANGE:
+        dated = [r.date for r in records if r.date is not None]
+        if not dated:
+            return RANGE_DAYS[DEFAULT_RANGE]
+        return max((now.date() - min(dated).date()).days + 1, 1)
+    return resolve_range(range_key)
 
 
 def window_dates(now: datetime, days: int) -> tuple[date, date]:
@@ -614,14 +630,21 @@ def compute_heatmap(records: list[PlatformRecord]) -> dict:
 def get_summary(db_path: str, range_key: str = DEFAULT_RANGE, now: datetime | None = None) -> dict:
     """GET /api/analytics/summary payload."""
     now = now or utcnow()
-    days = resolve_range(range_key)
-    start, end = window_dates(now, days)
-    prev_start, prev_end = previous_window_dates(now, days)
-
     records = fetch_platform_records(db_path)
     posts = aggregate_posts(records)
+    days = resolve_days(range_key, records, now)
+    start, end = window_dates(now, days)
+    is_all = range_key == ALL_RANGE
+
     current = posts_in_window(posts, start, end)
-    previous = posts_in_window(posts, prev_start, prev_end)
+    if is_all:
+        # "all" spans everything — there is no previous window to compare
+        # against, so deltas stay None and the previous series is empty.
+        prev_start = start
+        previous: list[UnifiedPost] = []
+    else:
+        prev_start, prev_end = previous_window_dates(now, days)
+        previous = posts_in_window(posts, prev_start, prev_end)
     current_records = records_in_window(records, start, end)
 
     cur_engagement = sum(p.engagement for p in current)
@@ -661,7 +684,9 @@ def get_summary(db_path: str, range_key: str = DEFAULT_RANGE, now: datetime | No
             {"date": (start + timedelta(days=i)).isoformat(), "value": int(cur_daily[i])}
             for i in range(days)
         ],
-        "previous": [
+        "previous": []
+        if is_all
+        else [
             {"date": (prev_start + timedelta(days=i)).isoformat(), "value": int(prev_daily[i])}
             for i in range(days)
         ],
@@ -707,10 +732,11 @@ def get_posts(
 ) -> dict:
     """GET /api/analytics/posts payload (sorted by engagement desc)."""
     now = now or utcnow()
-    days = resolve_range(range_key)
+    records = fetch_platform_records(db_path)
+    days = resolve_days(range_key, records, now)
     start, end = window_dates(now, days)
 
-    posts = aggregate_posts(fetch_platform_records(db_path))
+    posts = aggregate_posts(records)
     current = posts_in_window(posts, start, end)
     current.sort(key=lambda p: p.engagement, reverse=True)
 
@@ -768,10 +794,11 @@ def get_pillar_insights(
 ) -> dict:
     """GET /api/analytics/pillar-insights payload."""
     now = now or utcnow()
-    days = resolve_range(range_key)
+    records = fetch_platform_records(db_path)
+    days = resolve_days(range_key, records, now)
     start, end = window_dates(now, days)
 
-    posts = aggregate_posts(fetch_platform_records(db_path))
+    posts = aggregate_posts(records)
     current = posts_in_window(posts, start, end)
     total_posts = len(current)
     meta = _load_pillar_meta(db_path)
@@ -827,10 +854,11 @@ def get_platforms(
 ) -> dict:
     """GET /api/analytics/platforms payload."""
     now = now or utcnow()
-    days = resolve_range(range_key)
+    all_records = fetch_platform_records(db_path)
+    days = resolve_days(range_key, all_records, now)
     start, end = window_dates(now, days)
 
-    records = records_in_window(fetch_platform_records(db_path), start, end)
+    records = records_in_window(all_records, start, end)
 
     groups: dict[str, list[PlatformRecord]] = {}
     for r in records:
@@ -879,12 +907,12 @@ def get_rhythm(
 ) -> dict:
     """GET /api/analytics/rhythm payload."""
     now = now or utcnow()
-    days = resolve_range(range_key)
-    start, end = window_dates(now, days)
     calendar_path = calendar_path or _DEFAULT_CALENDAR_PATH
 
     records = fetch_platform_records(db_path)
     posts = aggregate_posts(records)
+    days = resolve_days(range_key, records, now)
+    start, end = window_dates(now, days)
     current = posts_in_window(posts, start, end)
 
     # Weeks: Monday-start calendar weeks covering the window.
