@@ -235,6 +235,140 @@ describe("PublishModal request-level failure", () => {
       screen.getByText("0 of 2 platforms published"),
     ).toBeInTheDocument();
   });
+
+  it("maps alt_text_required to friendly copy with the raw detail as title", async () => {
+    mockPublishNow.mockRejectedValue(new ApiError(422, "alt_text_required"));
+    renderModal();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Add alt text to the image before publishing.",
+    );
+    expect(alert).toHaveAttribute("title", "alt_text_required");
+  });
+
+  it("maps a 502 to the Postiz connection message, keeping internals in title", async () => {
+    mockPublishNow.mockRejectedValue(
+      new ApiError(502, "HTTPError 502 at http://sethpc.xyz:5000/api/public/v1/posts"),
+    );
+    renderModal();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Couldn't reach Postiz — check the connection on the Health page.",
+    );
+    expect(alert).toHaveAttribute(
+      "title",
+      "HTTPError 502 at http://sethpc.xyz:5000/api/public/v1/posts",
+    );
+  });
+
+  it("maps details starting with 'Postiz error' to the connection message", async () => {
+    mockPublishNow.mockRejectedValue(new ApiError(500, "Postiz error: 401"));
+    renderModal();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Couldn't reach Postiz — check the connection on the Health page.",
+    );
+    expect(alert).toHaveAttribute("title", "Postiz error: 401");
+  });
+
+  it("maps anything else to a generic retry message with the raw detail as title", async () => {
+    mockPublishNow.mockRejectedValue(
+      new ApiError(500, "IntegrityError: UNIQUE constraint failed content.id"),
+    );
+    renderModal();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Publishing failed — try again.");
+    expect(alert).toHaveAttribute(
+      "title",
+      "IntegrityError: UNIQUE constraint failed content.id",
+    );
+  });
+
+  it("maps non-Api errors (network) to the generic retry message", async () => {
+    mockPublishNow.mockRejectedValue(new TypeError("Failed to fetch"));
+    renderModal();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Publishing failed — try again.");
+    expect(alert).toHaveAttribute("title", "Failed to fetch");
+  });
+});
+
+describe("PublishModal already-published rows", () => {
+  it("renders 'Posted earlier' without a success toast for the flagged row in a mixed response", async () => {
+    mockPublishNow.mockResolvedValue(
+      response({
+        results: [
+          {
+            platform: "instagram",
+            status: "posted",
+            postiz_id: "pz-1",
+            error: null,
+            link: null,
+          },
+          {
+            platform: "facebook",
+            status: "posted",
+            postiz_id: "pz-0",
+            error: null,
+            link: null,
+            already_published: true,
+          },
+        ],
+      }),
+    );
+    renderModal();
+
+    expect(await screen.findByText("Posted earlier")).toBeInTheDocument();
+    // Freshly posted row keeps its time; earlier row shows no time
+    expect(screen.getByText("Posted · 11:04 AM")).toBeInTheDocument();
+    // Footer counts the earlier row as published
+    expect(screen.getByText("2 of 2 platforms published")).toBeInTheDocument();
+    // Only the freshly posted platform toasts
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledWith(
+      "Posted to Instagram",
+      expect.anything(),
+    );
+    expect(toast.warning).not.toHaveBeenCalled();
+  });
+
+  it("shows all rows, a full footer count, and zero toasts when everything was already published", async () => {
+    mockPublishNow.mockResolvedValue(
+      response({
+        results: [
+          {
+            platform: "instagram",
+            status: "posted",
+            postiz_id: "pz-1",
+            error: null,
+            link: null,
+            already_published: true,
+          },
+          {
+            platform: "facebook",
+            status: "posted",
+            postiz_id: "pz-2",
+            error: null,
+            link: null,
+            already_published: true,
+          },
+        ],
+      }),
+    );
+    renderModal();
+
+    expect(await screen.findAllByText("Posted earlier")).toHaveLength(2);
+    expect(screen.getByText("Instagram")).toBeInTheDocument();
+    expect(screen.getByText("Facebook")).toBeInTheDocument();
+    expect(screen.getByText("2 of 2 platforms published")).toBeInTheDocument();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.warning).not.toHaveBeenCalled();
+  });
 });
 
 describe("PublishModal close", () => {

@@ -479,10 +479,9 @@ describe("DraftsPage held-failure banner", () => {
     expect(screen.queryByText("Failed · retry")).not.toBeInTheDocument();
   });
 
-  it("retries via resumeContent and confirms with a toast", async () => {
+  it("opens the PublishModal from Retry — a deterministic manual publish, no resume, no toast", async () => {
     const user = userEvent.setup();
     mockGetDrafts.mockResolvedValue([failedRow]);
-    mockResumeContent.mockResolvedValue({ ...failedRow, held_at: null });
     renderDrafts();
 
     await waitFor(() => {
@@ -491,12 +490,18 @@ describe("DraftsPage held-failure banner", () => {
 
     await user.click(screen.getByRole("button", { name: "Retry" }));
 
-    await waitFor(() => {
-      expect(mockResumeContent).toHaveBeenCalledWith(21);
-    });
-    expect(toast.success).toHaveBeenCalledWith(
-      "Retrying — releases on the next cycle",
+    // Manual publish gives immediate per-platform results — the modal IS the
+    // feedback, so no "releases on the next cycle" promise is made.
+    expect(screen.getByTestId("publish-modal")).toHaveTextContent(
+      "Publishing row 21 (Rama Navami — feast tomorrow) to instagram",
     );
+    expect(mockResumeContent).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+
+    await user.click(
+      screen.getByRole("button", { name: /close publish modal/i }),
+    );
+    expect(screen.queryByTestId("publish-modal")).not.toBeInTheDocument();
   });
 
   it("opens the editor sheet in refine mode from Edit post", async () => {

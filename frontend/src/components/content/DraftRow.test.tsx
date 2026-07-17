@@ -180,6 +180,50 @@ describe("DraftRow publish now action", () => {
     expect(screen.getByText("NO ALT")).toBeInTheDocument();
   });
 
+  it("disables Publish now for catalog-only media without alt text", () => {
+    render(
+      <DraftRow
+        draft={row({
+          status: "approved",
+          media_url: null,
+          media_catalog_ids: [7],
+          alt_text: null,
+        })}
+        onOpen={() => {}}
+        onPublish={() => {}}
+      />,
+    );
+    const publish = screen.getByRole("button", {
+      name: /publish sample text now/i,
+    });
+    expect(publish).toBeDisabled();
+    const describedBy = publish.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)).toHaveTextContent(
+      "Add alt text before publishing",
+    );
+    expect(screen.getByText("NO ALT")).toBeInTheDocument();
+  });
+
+  it("keeps Publish now enabled for catalog media with alt text", () => {
+    render(
+      <DraftRow
+        draft={row({
+          status: "approved",
+          media_url: null,
+          media_catalog_ids: [7],
+          alt_text: "Calves grazing at dusk",
+        })}
+        onOpen={() => {}}
+        onPublish={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /publish sample text now/i }),
+    ).toBeEnabled();
+    expect(screen.queryByText("NO ALT")).not.toBeInTheDocument();
+  });
+
   it("keeps Publish now enabled when media has alt text", () => {
     render(
       <DraftRow

@@ -44,6 +44,15 @@ export function rangeMeta(range: string): RangeMeta {
   return RANGES.find((r) => r.id === range) ?? RANGES[1];
 }
 
+/** Range-aware Results header subtitle — honest about the selected window. */
+export function rangeSubtitle(range: string): string {
+  const meta = rangeMeta(range);
+  if (meta.id === "all") {
+    return "How your pasture fed the feed across your whole history.";
+  }
+  return `How your pasture fed the feed this ${meta.noun}.`;
+}
+
 /** Parse date-only strings as local dates (avoids UTC-midnight day shifts). */
 export function parseDate(value: string): Date {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);

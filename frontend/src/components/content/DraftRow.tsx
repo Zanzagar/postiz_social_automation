@@ -64,7 +64,11 @@ export function DraftRow({
   const publishable =
     onPublish !== undefined &&
     (draft.status === "approved" || draft.status === "draft");
-  const needsAlt = !!draft.media_url && !(draft.alt_text ?? "").trim();
+  // Media can be a direct URL or catalog attachments — the backend's
+  // alt-text gate blocks both, so the button must match.
+  const hasMedia =
+    !!draft.media_url || (draft.media_catalog_ids?.length ?? 0) > 0;
+  const needsAlt = hasMedia && !(draft.alt_text ?? "").trim();
   const noAltId = `no-alt-${draft.row_number}`;
   const color = pillarColor(pillar ?? draft.content_pillar ?? "");
   const platformIds = PLATFORMS.map((p) => p.id).filter(

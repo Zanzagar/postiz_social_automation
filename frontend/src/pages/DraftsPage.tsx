@@ -137,17 +137,6 @@ export function DraftsPage() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["drafts"] }),
   });
 
-  // Retry from the failed banner — clears the hold so the next auto-publish
-  // cycle picks the row up again.
-  const retryMutation = useMutation({
-    mutationFn: (id: number) => api.resumeContent(id),
-    onSuccess: () => {
-      toast.success("Retrying — releases on the next cycle");
-    },
-    onError: () => toast.error("Couldn't retry this post"),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ["drafts"] }),
-  });
-
   // --- Batch approve ---
 
   function toggleSelect(id: number) {
@@ -289,12 +278,14 @@ export function DraftsPage() {
                   >
                     Edit post
                   </Button>
+                  {/* Manual publish — deterministic, immediate, per-platform
+                      results. The auto-publish loop may never release a held
+                      row, so resuming it would be a false promise. */}
                   <Button
                     size="sm"
                     variant="secondary"
                     className="fr"
-                    disabled={retryMutation.isPending}
-                    onClick={() => retryMutation.mutate(d.row_number)}
+                    onClick={() => setPublishRow(d)}
                   >
                     <RefreshCw size={12} strokeWidth={1.75} aria-hidden="true" />
                     Retry

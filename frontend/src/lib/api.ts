@@ -98,6 +98,8 @@ export interface ContentRow {
   require_review: boolean;
   held_at: string | null;
   alt_text: string | null;
+  /** Media catalog attachments (Phase 3) — media can exist without media_url. */
+  media_catalog_ids?: number[] | null;
 }
 
 export interface CalendarEntry {
@@ -277,6 +279,8 @@ export interface PlatformPublishResult {
   postiz_id: string | null;
   error: string | null;
   link: string | null;
+  /** True when this platform was already posted before this request. */
+  already_published?: boolean;
 }
 
 export interface PublishNowResponse {
@@ -332,6 +336,13 @@ export interface KpiStat {
   series: number[];
 }
 
+/** KPI whose value can be unknowable (e.g. avg rate with no rate data). */
+export interface NullableKpiStat {
+  value: number | null;
+  delta_pct: number | null;
+  series: number[];
+}
+
 export interface Insight {
   tone: "sage" | "terra";
   title: string;
@@ -356,7 +367,7 @@ export interface AnalyticsSummary {
   kpis: {
     posts: KpiStat;
     engagement: KpiStat;
-    avg_rate: KpiStat;
+    avg_rate: NullableKpiStat;
     reach: KpiStat;
   };
   engagement_by_day: {

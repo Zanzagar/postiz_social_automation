@@ -139,7 +139,7 @@ const SERVICE_LABELS: Record<string, string> = {
 };
 
 function HealthFooterCard() {
-  const { data } = useQuery({
+  const { data, isPending, isError } = useQuery({
     queryKey: ["health", "sidebar"],
     queryFn: () => api.getHealth(),
     staleTime: 60_000,
@@ -150,26 +150,39 @@ function HealthFooterCard() {
   const unhealthy = services.filter(
     (s) => !HEALTHY_STATUSES.has(s.status.toLowerCase()),
   );
-  const healthy = unhealthy.length === 0;
+  // Only claim health once the query has actually answered.
+  const healthy = !isPending && !isError && unhealthy.length === 0;
+
+  const headline = isPending
+    ? "Checking…"
+    : healthy
+      ? "All systems healthy"
+      : "Needs attention";
+  const subtitle = isPending
+    ? null
+    : isError
+      ? "Health unavailable"
+      : healthy
+        ? "All services connected"
+        : unhealthy.map((s) => SERVICE_LABELS[s.name] ?? s.name).join(" · ");
 
   return (
     <div className="bg-card border-hair rounded-xl p-3">
       <div className="flex items-center gap-2">
         <span
+          data-testid="health-dot"
           className={cn(
             "pulse-dot h-2 w-2 rounded-full",
-            healthy ? "bg-sage-500" : "bg-terra-500",
+            isPending
+              ? "bg-[var(--ink-muted)]"
+              : healthy
+                ? "bg-sage-500"
+                : "bg-terra-500",
           )}
         />
-        <span className="t-body-sm ink font-medium">
-          {healthy ? "All systems healthy" : "Needs attention"}
-        </span>
+        <span className="t-body-sm ink font-medium">{headline}</span>
       </div>
-      <div className="t-caption ink-muted mt-1">
-        {healthy
-          ? "All services connected"
-          : unhealthy.map((s) => SERVICE_LABELS[s.name] ?? s.name).join(" · ")}
-      </div>
+      {subtitle && <div className="t-caption ink-muted mt-1">{subtitle}</div>}
     </div>
   );
 }

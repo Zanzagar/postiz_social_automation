@@ -24,7 +24,12 @@ describe("PublishModal under React StrictMode (regression: result must deliver)"
         </QueryClientProvider>
       </StrictMode>,
     );
-    expect(await screen.findByRole("alert")).toHaveTextContent("Postiz error: 401");
+    const alert = await screen.findByRole("alert");
+    // Friendly copy in the banner; the raw backend detail lives in title.
+    expect(alert).toHaveTextContent(
+      "Couldn't reach Postiz — check the connection on the Health page.",
+    );
+    expect(alert).toHaveAttribute("title", "Postiz error: 401");
     expect(api.publishNow).toHaveBeenCalledTimes(1);
   });
 });

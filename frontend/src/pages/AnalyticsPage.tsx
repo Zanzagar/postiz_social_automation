@@ -11,7 +11,7 @@ import { PostsTab } from "@/components/analytics/PostsTab";
 import { PillarsTab } from "@/components/analytics/PillarsTab";
 import { PlatformsTab } from "@/components/analytics/PlatformsTab";
 import { RhythmTab } from "@/components/analytics/RhythmTab";
-import { RANGES, buildResultsCsv } from "@/components/analytics/format";
+import { RANGES, buildResultsCsv, rangeSubtitle } from "@/components/analytics/format";
 
 const POSTS_PAGE_SIZE = 20;
 /** Page size for export fetches — the backend caps `limit` at 100. */
@@ -113,7 +113,7 @@ export function AnalyticsPage() {
       <PageHeader
         greeting={greeting}
         title="Results"
-        subtitle="How your pasture fed the feed this month."
+        subtitle={rangeSubtitle(range)}
         icon={TrendingUp}
         right={
           <>

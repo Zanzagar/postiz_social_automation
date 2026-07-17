@@ -302,6 +302,28 @@ describe("AnalyticsPage", () => {
     await waitFor(() => expect(mockSummary).toHaveBeenCalledWith("7d"));
   });
 
+  it("keeps the header subtitle honest about the selected range", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("Posts published");
+    expect(
+      screen.getByText("How your pasture fed the feed this month."),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "7d" }));
+    expect(
+      screen.getByText("How your pasture fed the feed this week."),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "All time" }));
+    expect(
+      screen.getByText("How your pasture fed the feed across your whole history."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/fed the feed this month/i),
+    ).not.toBeInTheDocument();
+  });
+
   it("offers an All time range that passes 'all' to the api", async () => {
     const user = userEvent.setup();
     renderPage();

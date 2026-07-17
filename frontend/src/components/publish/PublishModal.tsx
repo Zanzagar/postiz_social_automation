@@ -6,7 +6,12 @@ import { toast } from "sonner";
 
 import { GVSheet, PlatformDot } from "@/components/pasture";
 import { Button } from "@/components/ui/button";
-import { api, type PlatformPublishResult, type PublishNowResponse } from "@/lib/api";
+import {
+  ApiError,
+  api,
+  type PlatformPublishResult,
+  type PublishNowResponse,
+} from "@/lib/api";
 import { platformBy } from "@/lib/platforms";
 
 interface PublishModalProps {
@@ -39,6 +44,34 @@ function fmtScheduledFor(value: string | null | undefined): string | null {
   const d = parseISO(value);
   if (Number.isNaN(d.getTime())) return null;
   return value.includes("T") ? format(d, "MMM d · h:mm a") : format(d, "MMM d");
+}
+
+/**
+ * Map a request-level failure to friendly banner copy. The raw backend detail
+ * is preserved separately so it can live in the banner's title attribute.
+ */
+function friendlyRequestError(err: unknown): { message: string; detail: string } {
+  const detail =
+    err instanceof Error && err.message ? err.message : "Publishing failed";
+  if (err instanceof ApiError) {
+    if (err.detail === "alt_text_required") {
+      return {
+        message: "Add alt text to the image before publishing.",
+        detail,
+      };
+    }
+    if (err.status === 429) {
+      // The budget message is already written for humans — show as-is.
+      return { message: err.detail, detail };
+    }
+    if (err.status === 502 || err.detail.startsWith("Postiz error")) {
+      return {
+        message: "Couldn't reach Postiz — check the connection on the Health page.",
+        detail,
+      };
+    }
+  }
+  return { message: "Publishing failed — try again.", detail };
 }
 
 /**
@@ -80,7 +113,10 @@ export function PublishModal({
     notifiedRef.current = true;
     const posted = res.results.filter((r) => r.status === "posted");
     const failed = res.results.filter((r) => r.status === "failed");
-    for (const r of posted) {
+    // Rows the backend flagged as already published are facts, not news —
+    // render them, count them, but never toast for them.
+    const newlyPosted = posted.filter((r) => !r.already_published);
+    for (const r of newlyPosted) {
       const label = platformBy(r.platform).label;
       const caption = captions?.[r.platform] ?? "";
       toast.success(`Posted to ${label}`, {
@@ -104,12 +140,9 @@ export function PublishModal({
   }, [res, captions, onDone]);
 
   const response = publishQuery.data ?? null;
-  const requestError =
-    publishQuery.error instanceof Error && publishQuery.error.message
-      ? publishQuery.error.message
-      : publishQuery.isError
-        ? "Publishing failed"
-        : null;
+  const requestError = publishQuery.isError
+    ? friendlyRequestError(publishQuery.error)
+    : null;
 
   const results = response?.results ?? null;
   const rowCount = results ? results.length : platforms.length;
@@ -145,9 +178,10 @@ export function PublishModal({
       {requestError && (
         <div
           role="alert"
+          title={requestError.detail}
           className="t-body-sm mb-3 rounded-lg border border-terra-200 bg-terra-50 px-3 py-2 text-terra-700 dark:border-terra-600 dark:bg-terra-700/20 dark:text-terra-200"
         >
-          {requestError}
+          {requestError.message}
         </div>
       )}
 
@@ -252,7 +286,11 @@ function PubRow({
   return (
     <RowShell platform={result.platform}>
       <span className="t-caption ink-muted min-w-0 flex-1 truncate">
-        {postedTime ? `Posted · ${postedTime}` : "Posted"}
+        {result.already_published
+          ? "Posted earlier"
+          : postedTime
+            ? `Posted · ${postedTime}`
+            : "Posted"}
       </span>
       <span className="t-caption flex shrink-0 items-center gap-1 font-medium text-sage-700 dark:text-sage-300">
         <span className="flex h-4 w-4 items-center justify-center rounded-full bg-sage-500 text-white">
