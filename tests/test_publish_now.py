@@ -10,15 +10,17 @@ identical to the release loop.
 
 import asyncio
 import json
+import threading
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.models import Base
-from api.services.auto_publish import parse_last_publish_failure
+from api.services.auto_publish import parse_last_publish_failure, release_due_rows
 from content_engine.postiz import PostizAPIError
 
 # --- Fixtures (pattern from test_auto_publish.py) ---
@@ -41,6 +43,16 @@ def _reset_request_budget():
     auto_publish._request_times.clear()
     yield
     auto_publish._request_times.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_row_claims():
+    """In-flight row claims are module-level state; isolate tests."""
+    from api.services import auto_publish
+
+    auto_publish._in_flight_rows.clear()
+    yield
+    auto_publish._in_flight_rows.clear()
 
 
 @pytest.fixture
@@ -72,7 +84,8 @@ def repo(db_session):
 
 
 class FakePostiz:
-    """Fake Postiz client with optional per-integration failures and releaseURL."""
+    """Fake Postiz client with optional per-integration failures, releaseURL,
+    and an optional block inside publish_post (for row-claim race tests)."""
 
     INTEGRATIONS = [
         {"id": "ig-1", "identifier": "instagram", "name": "IG"},
@@ -85,12 +98,20 @@ class FakePostiz:
         self.publish_calls = []
         self.list_calls = 0
         self._counter = 0
+        # When set, publish_post blocks (in its worker thread) until the
+        # event fires — lets tests overlap a second publisher mid-publish.
+        self.block_publish: threading.Event | None = None
+        self.entered_publish = threading.Event()
 
     def list_integrations(self):
         self.list_calls += 1
         return self.INTEGRATIONS
 
     def publish_post(self, content, platform_ids, media_url=None, scheduled_at=None):
+        if self.block_publish is not None:
+            self.entered_publish.set()
+            if not self.block_publish.wait(timeout=5):
+                raise TimeoutError("blocked publish_post was never released")
         self.publish_calls.append(
             {
                 "content": content,
@@ -132,11 +153,35 @@ def client(_env_vars, db_session, repo, fake_postiz):
     app.dependency_overrides.clear()
 
 
+@pytest_asyncio.fixture
+async def async_client(_env_vars, db_session, repo, fake_postiz):
+    """ASGI-transport client for concurrency tests: requests run as tasks on
+    THIS test's event loop (like production), so a request can overlap the
+    release loop or another request mid-publish."""
+    from api.auth import get_current_user
+    from api.dependencies import get_content_repo, get_db, get_postiz_client
+    from api.main import app
+
+    async def override_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_content_repo] = lambda: repo
+    app.dependency_overrides[get_current_user] = lambda: {"sub": "testuser"}
+    app.dependency_overrides[get_postiz_client] = lambda: fake_postiz
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+    app.dependency_overrides.clear()
+
+
 def run(coro):
     return asyncio.get_event_loop().run_until_complete(coro)
 
 
-def seed_row(repo, **overrides):
+def _row_data(**overrides):
     data = {
         "raw_text": "Morning milking",
         "status": "approved",
@@ -147,12 +192,21 @@ def seed_row(repo, **overrides):
         "source": "manual",
     }
     data.update(overrides)
+    return data
 
+
+def seed_row(repo, **overrides):
     async def seed():
-        row = await repo.create_content_row(data)
+        row = await repo.create_content_row(_row_data(**overrides))
         return row.id
 
     return run(seed())
+
+
+async def aseed_row(repo, **overrides):
+    """seed_row for async tests (run() cannot nest in a running loop)."""
+    row = await repo.create_content_row(_row_data(**overrides))
+    return row.id
 
 
 def get_row(repo, row_id):
@@ -210,6 +264,7 @@ class TestPublishNowSuccess:
                 "postiz_id": "pub-1",
                 "error": None,
                 "link": None,
+                "already_published": False,
             }
         ]
         row = get_row(repo, row_id)
@@ -281,7 +336,12 @@ class TestPublishNowSuccess:
 
 
 class TestPublishNowIdempotency:
-    def test_skips_platforms_already_in_postiz_ids(self, client, repo, fake_postiz):
+    def test_mixed_row_reports_already_published_and_publishes_pending(
+        self, client, repo, fake_postiz
+    ):
+        """Regression (B3): already-published platforms are reported (not
+        dropped) so the UI never shows them stuck on 'Sending…'; only the
+        pending platform hits Postiz."""
         row_id = seed_row(
             repo,
             platforms=json.dumps({"instagram": True, "facebook": True}),
@@ -290,24 +350,49 @@ class TestPublishNowIdempotency:
         )
         resp = client.post(f"/api/content/{row_id}/publish-now")
         body = resp.json()
-        assert [r["platform"] for r in body["results"]] == ["facebook"]
+        by_platform = {r["platform"]: r for r in body["results"]}
+        assert set(by_platform) == {"instagram", "facebook"}
+        assert by_platform["instagram"] == {
+            "platform": "instagram",
+            "status": "posted",
+            "postiz_id": "already-1",
+            "error": None,
+            "link": None,
+            "already_published": True,
+        }
+        assert by_platform["facebook"]["status"] == "posted"
+        assert by_platform["facebook"]["postiz_id"] == "pub-1"
+        assert by_platform["facebook"]["already_published"] is False
+        # Only the pending platform was published.
         assert [c["platform_ids"] for c in fake_postiz.publish_calls] == [["fb-1"]]
         ids = json.loads(get_row(repo, row_id).postiz_ids)
         assert ids == {"instagram": "already-1", "facebook": "pub-1"}
 
-    def test_fully_published_row_returns_empty_results(self, client, repo, fake_postiz):
+    def test_fully_published_row_reports_all_already_published(self, client, repo, fake_postiz):
+        """Regression (B3): a fully-published row must report every enabled
+        platform as already_published (was: empty results → '0 of 0')."""
         row_id = seed_row(
             repo,
             status="posted",
-            postiz_ids=json.dumps({"instagram": "pub-old"}),
+            platforms=json.dumps({"instagram": True, "facebook": True}),
+            captions=json.dumps({"instagram": "IG cap", "facebook": "FB cap"}),
+            postiz_ids=json.dumps({"instagram": "pub-old", "facebook": "pub-old-2"}),
             posted_at=datetime(2026, 7, 1, 12, 0, 0),
         )
         resp = client.post(f"/api/content/{row_id}/publish-now")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["results"] == []
         assert body["status"] == "posted"
-        assert fake_postiz.publish_calls == []
+        by_platform = {r["platform"]: r for r in body["results"]}
+        assert set(by_platform) == {"instagram", "facebook"}
+        for result in body["results"]:
+            assert result["already_published"] is True
+            assert result["status"] == "posted"
+            assert result["error"] is None
+            assert result["link"] is None
+        assert by_platform["instagram"]["postiz_id"] == "pub-old"
+        assert by_platform["facebook"]["postiz_id"] == "pub-old-2"
+        assert fake_postiz.publish_calls == []  # zero Postiz publish calls
         assert fake_postiz.list_calls == 0  # no Postiz request spent
 
     def test_fully_published_held_row_click_clears_hold(self, client, repo):
@@ -320,6 +405,103 @@ class TestPublishNowIdempotency:
         resp = client.post(f"/api/content/{row_id}/publish-now")
         assert resp.status_code == 200
         assert get_row(repo, row_id).held_at is None
+
+
+# --- Row claim / double-publish race (regression: B1) ---
+
+CLAIM_409_DETAIL = "This post is already being published — try again in a moment."
+
+
+@pytest.mark.asyncio
+class TestPublishNowClaim:
+    async def test_concurrent_publish_now_one_wins_one_409(self, async_client, repo, fake_postiz):
+        """Reviewer interleaving: request 1 is blocked inside Postiz's
+        publish_post when request 2 arrives — exactly one publish happens."""
+        row_id = await aseed_row(repo)
+        fake_postiz.block_publish = threading.Event()
+
+        first = asyncio.create_task(async_client.post(f"/api/content/{row_id}/publish-now"))
+        # Wait (off the event loop) until request 1 is inside publish_post.
+        assert await asyncio.to_thread(fake_postiz.entered_publish.wait, 5)
+
+        second = await async_client.post(f"/api/content/{row_id}/publish-now")
+        assert second.status_code == 409
+        assert second.json()["detail"] == CLAIM_409_DETAIL
+
+        fake_postiz.block_publish.set()
+        resp1 = await first
+        assert resp1.status_code == 200
+        assert len(fake_postiz.publish_calls) == 1  # single publish — no double-post
+
+        row = await repo.get_content_row(row_id)
+        assert json.loads(row.postiz_ids) == {"instagram": "pub-1"}
+
+    async def test_loop_and_publish_now_publish_once(
+        self, async_client, db_session, repo, fake_postiz
+    ):
+        """Reviewer interleaving: the release loop is mid-publish (blocked
+        inside Postiz) when a publish-now click arrives for the same row."""
+        await repo.upsert_publish_config(
+            platform="instagram",
+            data={"enabled": True, "delay_hours": 2, "pillar_overrides": "{}"},
+        )
+        now = datetime.now(UTC)
+        row_id = await aseed_row(repo, auto_publish_at=now - timedelta(minutes=5))
+        fake_postiz.block_publish = threading.Event()
+
+        loop_task = asyncio.create_task(release_due_rows(db_session, now, fake_postiz))
+        assert await asyncio.to_thread(fake_postiz.entered_publish.wait, 5)
+
+        resp = await async_client.post(f"/api/content/{row_id}/publish-now")
+        assert resp.status_code == 409
+        assert resp.json()["detail"] == CLAIM_409_DETAIL
+
+        fake_postiz.block_publish.set()
+        summary = await loop_task
+        assert summary["published"] == 1
+        assert len(fake_postiz.publish_calls) == 1  # single publish — no double-post
+
+        row = await repo.get_content_row(row_id)
+        assert row.status == "posted"
+        assert json.loads(row.postiz_ids) == {"instagram": "pub-1"}
+
+    async def test_claim_released_after_successful_publish(self, async_client, repo, fake_postiz):
+        from api.services import auto_publish
+
+        row_id = await aseed_row(repo)
+        resp = await async_client.post(f"/api/content/{row_id}/publish-now")
+        assert resp.status_code == 200
+        assert auto_publish._in_flight_rows == set()
+
+    async def test_claim_released_on_integration_listing_error(
+        self, async_client, repo, fake_postiz
+    ):
+        """Claim must be released on the 502 exception path — a failed
+        attempt must not lock the row out of publishing forever."""
+        from api.services import auto_publish
+
+        def boom():
+            raise PostizAPIError("postiz down")
+
+        fake_postiz.list_integrations = boom
+        row_id = await aseed_row(repo)
+        resp = await async_client.post(f"/api/content/{row_id}/publish-now")
+        assert resp.status_code == 502
+        assert auto_publish._in_flight_rows == set()
+
+        # A retry succeeds once Postiz recovers.
+        fake_postiz.list_integrations = lambda: FakePostiz.INTEGRATIONS
+        resp = await async_client.post(f"/api/content/{row_id}/publish-now")
+        assert resp.status_code == 200
+
+    async def test_claim_released_on_budget_429(self, async_client, repo, fake_postiz):
+        from api.services import auto_publish
+
+        row_id = await aseed_row(repo)
+        exhaust_budget()
+        resp = await async_client.post(f"/api/content/{row_id}/publish-now")
+        assert resp.status_code == 429
+        assert auto_publish._in_flight_rows == set()
 
 
 # --- Failure paths ---

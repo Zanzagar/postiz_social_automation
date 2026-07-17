@@ -115,11 +115,59 @@ class TestMain:
         assert url.endswith("/fb_1/insights")
         params = mock_get.call_args[1]["params"]
         assert params["metric"] == "post_impressions,post_impressions_unique"
-        assert params["access_token"] == "test-token"
 
         result = _reach_by_ext(db)
         assert result["fb_1"] == 250  # post_impressions_unique
         assert result["fb_2"] == 500  # untouched
+
+    def test_token_sent_via_authorization_header_not_query_param(self, db, monkeypatch):
+        """Regression (B2): the access token must never travel as a query
+        param — httpx exception messages embed the full URL."""
+        monkeypatch.setenv("META_PAGE_ACCESS_TOKEN", "test-token")
+        _seed(db, [("fb_1", 0)])
+
+        with patch.object(
+            script.httpx, "get", return_value=_graph_response(unique=250)
+        ) as mock_get:
+            script.main([])
+
+        kwargs = mock_get.call_args[1]
+        assert kwargs["headers"]["Authorization"] == "Bearer test-token"
+        assert "access_token" not in kwargs["params"]
+        assert "test-token" not in mock_get.call_args[0][0]  # not in the URL
+
+    def test_token_never_appears_in_logs_on_http_error(self, db, monkeypatch, caplog):
+        """Regression (B2): even if an exception message embeds the token
+        (httpx puts the full request URL in error text), the logged text
+        must have it redacted."""
+        token = "sekret-token-123"
+        monkeypatch.setenv("META_PAGE_ACCESS_TOKEN", token)
+        _seed(db, [("fb_bad", 0)])
+
+        def boom(url, **kwargs):
+            raise script.httpx.HTTPError(
+                "Client error '400 Bad Request' for url "
+                f"'{script.GRAPH_API_BASE}/fb_bad/insights?access_token={token}'"
+            )
+
+        with patch.object(script.httpx, "get", side_effect=boom):
+            script.main([])  # must not raise
+
+        assert token not in caplog.text
+        assert "***" in caplog.text
+        assert _reach_by_ext(db)["fb_bad"] == 0  # row skipped
+
+    def test_redact_replaces_token_everywhere(self, monkeypatch):
+        script._redact_token = "tok-abc"
+        try:
+            assert script.redact("x tok-abc y tok-abc") == "x *** y ***"
+            assert script.redact("no secret here") == "no secret here"
+        finally:
+            script._redact_token = ""
+
+    def test_redact_is_noop_without_token(self):
+        script._redact_token = ""
+        assert script.redact("anything tok-abc") == "anything tok-abc"
 
     def test_per_post_error_skipped_and_counted(self, db, monkeypatch, caplog):
         monkeypatch.setenv("META_PAGE_ACCESS_TOKEN", "test-token")

@@ -28,6 +28,23 @@ METRICS = "post_impressions,post_impressions_unique"
 HTTP_TIMEOUT = 30  # seconds
 COMMIT_EVERY = 25  # rows
 
+# Set by main() to the live access token so redact() can scrub it from any
+# text that reaches the logs (defense-in-depth against token leaks).
+_redact_token = ""
+
+
+def redact(msg: str) -> str:
+    """Replace any occurrence of the access token in loggable text with "***".
+
+    httpx exception messages embed the full request URL (including query
+    params), so ALL exception text must pass through here before logging —
+    even with the token sent via the Authorization header, never assume an
+    error message is token-free.
+    """
+    if _redact_token:
+        return msg.replace(_redact_token, "***")
+    return msg
+
 
 def get_db_path() -> str:
     return os.environ.get("DATABASE_PATH", "data/gvsa.db")
@@ -44,7 +61,11 @@ def fetch_post_insights(post_id: str, access_token: str) -> dict[str, int]:
     url = f"{GRAPH_API_BASE}/{post_id}/insights"
     resp = httpx.get(
         url,
-        params={"metric": METRICS, "access_token": access_token},
+        params={"metric": METRICS},
+        # Token goes in the Authorization header (Graph API supports Bearer
+        # auth) so it can never leak via the URL embedded in httpx exception
+        # messages or server access logs.
+        headers={"Authorization": f"Bearer {access_token}"},
         timeout=HTTP_TIMEOUT,
     )
     resp.raise_for_status()
@@ -67,6 +88,8 @@ def main(argv: list[str] | None = None) -> None:
     if not access_token:
         logger.error("META_PAGE_ACCESS_TOKEN env var required — set it and re-run")
         return
+    global _redact_token
+    _redact_token = access_token
 
     conn = sqlite3.connect(get_db_path())
     try:
@@ -92,7 +115,10 @@ def main(argv: list[str] | None = None) -> None:
             except Exception as e:
                 skipped += 1
                 logger.warning(
-                    "Row %d (%s): insights fetch failed — skipped (%s)", row_id, external_id, e
+                    "Row %d (%s): insights fetch failed — skipped (%s)",
+                    row_id,
+                    external_id,
+                    redact(str(e)),
                 )
                 continue
 

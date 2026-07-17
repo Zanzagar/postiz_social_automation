@@ -48,6 +48,34 @@ LOOP_INTERVAL_SECONDS = 30.0
 REQUEST_BUDGET_PER_HOUR = 20
 _request_times: deque[datetime] = deque()
 
+# --- In-process row claim (double-publish guard) ---
+#
+# Without coordination, the release loop and POST /content/{id}/publish-now
+# (or two concurrent publish-now calls) can each read the same row's pending
+# platforms before either commits, and both publish them (double-post). A
+# publisher must claim the row id here BEFORE reading pending platforms and
+# release it AFTER its commit. Like the request budget above, this
+# in-process claim is correct only for the current single-process deploy
+# (documented assumption); a multi-worker deploy needs a real distributed
+# lock / row-claim mechanism.
+_in_flight_rows: set[int] = set()
+_claim_lock = asyncio.Lock()
+
+
+async def acquire_row_claim(row_id: int) -> bool:
+    """Try to claim a row for publishing. False when already in flight."""
+    async with _claim_lock:
+        if row_id in _in_flight_rows:
+            return False
+        _in_flight_rows.add(row_id)
+        return True
+
+
+async def release_row_claim(row_id: int) -> None:
+    """Release a row claim (safe to call for ids that are not claimed)."""
+    async with _claim_lock:
+        _in_flight_rows.discard(row_id)
+
 
 def _budget_remaining(now: datetime, budget: int = REQUEST_BUDGET_PER_HOUR) -> int:
     """Requests still available in the rolling one-hour window ending at now."""
@@ -439,13 +467,26 @@ async def release_due_rows(
                 remaining,
             )
             break
-        outcome = await _release_row(
-            session, row, now, postiz, platform_map, configs_by_platform, request_budget
-        )
-        summary[outcome] += 1
-        # Commit per row: a crash later in the batch must not lose this
-        # row's postiz_ids/status (re-publishing it would double-post).
-        await session.commit()
+        if not await acquire_row_claim(row.id):
+            # Row is mid-publish elsewhere (publish-now); skip it rather
+            # than race to a double-post — it is reconsidered next cycle.
+            summary["deferred"] += 1
+            logger.info(
+                "Auto-publish row %d: already being published elsewhere; skipping this cycle",
+                row.id,
+            )
+            continue
+        try:
+            outcome = await _release_row(
+                session, row, now, postiz, platform_map, configs_by_platform, request_budget
+            )
+            summary[outcome] += 1
+            # Commit per row: a crash later in the batch must not lose this
+            # row's postiz_ids/status (re-publishing it would double-post).
+            await session.commit()
+        finally:
+            # Claim is released on every exit path, including exceptions.
+            await release_row_claim(row.id)
 
     return summary
 

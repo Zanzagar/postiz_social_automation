@@ -157,7 +157,10 @@ class PlatformPublishResult(BaseModel):
     """Outcome of one platform's publish attempt (shared loop/manual core).
 
     ``link`` is Postiz's releaseURL when the API returns one — never
-    fabricated our side.
+    fabricated our side. ``already_published`` marks platforms that were
+    published on an earlier attempt (reported from the stored postiz_ids
+    map, no new Postiz call) so the UI can render their final state instead
+    of dropping them.
     """
 
     platform: str
@@ -165,6 +168,7 @@ class PlatformPublishResult(BaseModel):
     postiz_id: str | None = None
     error: str | None = None
     link: str | None = None
+    already_published: bool = False
 
 
 class PublishNowResponse(BaseModel):
