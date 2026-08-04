@@ -1,0 +1,18 @@
+[Unit]
+Description=Gita Valley Content Hub - FastAPI Backend
+After=network.target
+
+[Service]
+Type=simple
+User=cjh5690
+WorkingDirectory=/home/cjh5690/projects/ISKCON-GN/postiz_social_automation
+ExecStart=/home/cjh5690/projects/ISKCON-GN/postiz_social_automation/.venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+# ~/.local/bin must be on PATH: the backend shells out to the Claude CLI
+# (caption generation, media tagging, calendar planning), which the native
+# installer places at ~/.local/bin/claude.
+Environment=PATH=/home/cjh5690/projects/ISKCON-GN/postiz_social_automation/.venv/bin:/home/cjh5690/.local/bin:/usr/local/bin:/usr/bin
+
+[Install]
+WantedBy=multi-user.target

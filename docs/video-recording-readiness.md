@@ -33,11 +33,18 @@ Last updated: 2026-07-16 (video-readiness branch).
 
 ## Recording-day setup (in order, ~20 min)
 
-1. **Restore the backend service** (needs your sudo; a manual process is serving :8000
-   meanwhile):
+1. **Backend service** — restored and running under systemd (verified 2026-08-03).
+   One environment fix is in place as a symlink (`.venv/bin/claude → ~/.local/bin/claude`)
+   so the service can find the Claude CLI; to make it durable across venv rebuilds,
+   apply the unit override once (needs sudo):
    ```bash
-   kill $(pgrep -f "uvicorn api.main:app") && sudo systemctl start gvsa-backend
+   sudo systemctl edit gvsa-backend
+   # add:
+   # [Service]
+   # Environment=PATH=/home/cjh5690/projects/ISKCON-GN/postiz_social_automation/.venv/bin:/home/cjh5690/.local/bin:/usr/local/bin:/usr/bin
+   sudo systemctl daemon-reload && sudo systemctl restart gvsa-backend
    ```
+   (Repo reference copy: `gvsa-backend.service`.)
 2. **Rotate the Postiz API key** (the one blocking step only you can do):
    - Postiz dashboard → https://postiz.sethpc.xyz → Settings → API → generate new key,
      revoke the old one.
