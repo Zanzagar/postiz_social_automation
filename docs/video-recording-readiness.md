@@ -45,14 +45,23 @@ Last updated: 2026-07-16 (video-readiness branch).
    sudo systemctl daemon-reload && sudo systemctl restart gvsa-backend
    ```
    (Repo reference copy: `gvsa-backend.service`.)
-2. **Rotate the Postiz API key** (the one blocking step only you can do):
-   - Postiz dashboard → https://postiz.sethpc.xyz → Settings → API → generate new key,
-     revoke the old one.
-   - Put it in `.env` as `POSTIZ_API_KEY=<new key>` (repo root).
+2. **Postiz API key** — DECISION 2026-08-17: proceed with the EXISTING key (the UI on
+   our Postiz version can't regenerate, and rotation needs a one-line SQL on the
+   sethpc.xyz host — deferred until Seth is available). Risk accepted knowingly: the
+   key was once exposed in the public repo, so the exposure window is bounded by
+   **recording promptly after connecting channels and disconnecting the channels in
+   Postiz afterward** until the key is rotated (reconnecting later is a 2-min OAuth
+   click per platform; App Review approvals live in the developer portals and are
+   unaffected).
+   - Copy the current key: Postiz dashboard → https://postiz.sethpc.xyz → Settings →
+     Public API → reveal/copy.
+   - Put it in `.env` as `POSTIZ_API_KEY=<key>` (repo root — replaces "placeholder").
    - Restart the backend so it picks up the key:
      `kill -9 $(systemctl show gvsa-backend -p MainPID --value)` (respawns).
-   - Update the n8n credential too (separate host) when convenient — not needed for
-     the recordings.
+   - Rotation, when Seth is reachable:
+     `docker exec -it <postgres-container> psql -U <user> -d <db> -c 'UPDATE "Organization" SET "apiKey" = NULL;'`
+     then reload the Postiz dashboard (auto-regenerates), copy the new key into `.env`
+     + the n8n credential, restart the backend, reconnect channels if disconnected.
 3. **Connect channels in Postiz** — Postiz UI → Settings → Channels → Add Channel →
    Facebook and Instagram (works in Dev Mode for app role holders). For TikTok, finish
    the developer-portal app details first (see the verification guide §3), add the
