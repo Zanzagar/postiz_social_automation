@@ -358,15 +358,22 @@ Click "Add products" and enable:
    - Add redirect URI: `https://postiz.sethpc.xyz/integrations/social/tiktok`
 2. **Content Posting API**
    - Enable "Direct Post"
+3. **Display API** (provides the `video.list` scope Postiz requires)
 
 ### Scopes to Add
 
-Click "Add scopes" and request:
+Click "Add scopes" and request ALL SIX — this is exactly the set Postiz's TikTok
+provider requests during OAuth (verified against postiz-app source; a missing scope
+fails the connect with "Missing required permissions"):
 - `user.info.basic`
 - `user.info.profile`
-- `video.create`
+- `user.info.stats`
 - `video.upload`
 - `video.publish`
+- `video.list`
+
+(Corrected 2026-08-17: an earlier version of this guide listed `video.create`, which
+does not exist.)
 
 ### App Review Explanation (paste into the review text field)
 
