@@ -28,6 +28,15 @@ Last updated: 2026-07-16 (video-readiness branch).
 - **Test data deleted** — the 9 test drafts are gone (backup:
   `data/deleted-test-rows-backup-20260716.json`). No stock imagery or "Gita Nagari"
   branding anywhere in the UI (verified by sweep).
+- **2026-08-29 polish pass (recording-polish branch)** — the 11 stale March test
+  drafts were purged (backup: `data/deleted-test-rows-backup-20260829.json`) and two
+  clean future-dated drafts staged (hay season, Radhastami prep). Nine real farm
+  photos were imported from the Facebook page's own photo library with alt text and
+  pillars (hero candidates: `sunrise-over-the-farm.jpg`, `first-snow-at-the-temple.jpg`,
+  `prima-golden-hour.jpg`) — the Media → Photos filter now leads with them. Pillar
+  targets were rescaled to the documented fraction contract (Per pillar tab now shows
+  Target 40/25/15/10/5/5%). The 853 orphaned media files are moved to
+  `~/gvsa-orphan-backup-20260829/` (Health shows "all media files in sync").
 - **Safety** — a manual publish and the auto-release loop can no longer double-post the
   same row (row claim); publishing always persists your latest edits first.
 
@@ -66,8 +75,10 @@ Last updated: 2026-07-16 (video-readiness branch).
    Facebook and Instagram (works in Dev Mode for app role holders). For TikTok, finish
    the developer-portal app details first (see the verification guide §3), add the
    client key/secret to **Postiz's** `.env`, restart Postiz, then connect the channel.
-4. **Sanity check** — open the app (:3000), Health page: everything should be green,
-   sidebar badge "All services connected". Media library shows real farm photos.
+4. **Sanity check** — open the app (:3000) and **hard-refresh once (Ctrl+Shift+R)**
+   so the browser drops any cached pre-polish bundle. Health page: everything should
+   be green, sidebar badge "All services connected". Media library shows real farm
+   photos (Photos filter). Analytics should land on **All time** by default.
 5. *(Optional, better Recording C)* **Backfill reach data** from the Graph API:
    ```bash
    META_PAGE_ACCESS_TOKEN=<page token> python -m content_engine.scripts.backfill_history_insights
@@ -110,7 +121,8 @@ Covers `instagram_manage_comments`, `pages_manage_engagement`, `pages_read_engag
 Covers `read_insights`, `instagram_manage_insights`.
 1. **Analytics** → All time → Overview (reach KPI — real numbers if you ran the
    insights backfill; "—" otherwise, in which case lean on engagement + trends).
-2. **Per platform** tab: platform row + posting-time heatmap ("peak Saturday noon").
+2. **Per platform** tab: platform row + posting-time heatmap (the starred peak cell
+   is **Sunday noon** — narrate "weekend noon is our peak").
 3. **Rhythm** tab: weekly cadence + festival markers.
 4. End on the Dashboard for the daily-pulse view.
 

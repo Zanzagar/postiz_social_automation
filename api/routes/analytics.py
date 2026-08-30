@@ -45,7 +45,7 @@ def get_now() -> datetime | None:
 
 
 class KPI(BaseModel):
-    value: float
+    value: float | None  # None = incomputable (e.g. avg_rate with no reach data)
     delta_pct: float | None = None
     series: list[float]
 
@@ -160,6 +160,8 @@ class PlatformsResponse(BaseModel):
 
 class WeekEntry(BaseModel):
     label: str
+    # ISO Monday date; lets clients bucket weeks by month without local-clock math.
+    week_start: str | None = None
     posted: int
     target: int | None = None
 

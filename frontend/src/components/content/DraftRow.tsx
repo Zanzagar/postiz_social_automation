@@ -46,8 +46,9 @@ interface DraftRowProps {
 
 /**
  * Workbench row — pillar-gradient leaf tile, serif title, status pill,
- * italic raw-text quote, platform dots, pillar chip, scheduled date, and a
- * hover action rail. Rows with auto_publish_at surface a CountdownChip.
+ * italic raw-text quote (only when it adds beyond the title), platform dots,
+ * pillar chip, scheduled date, and a hover action rail. Rows with
+ * auto_publish_at surface a CountdownChip.
  */
 export function DraftRow({
   draft,
@@ -61,6 +62,10 @@ export function DraftRow({
   onPublish,
 }: DraftRowProps) {
   const title = draftTitle(draft.raw_text);
+  // The title derives from raw_text — quote the raw text only when it
+  // carries more than the title already shows (extra lines, truncated tail).
+  const rawText = draft.raw_text.trim();
+  const quoteRedundant = rawText === "" || title.includes(rawText);
   const publishable =
     onPublish !== undefined &&
     (draft.status === "approved" || draft.status === "draft");
@@ -139,9 +144,11 @@ export function DraftRow({
           </h3>
           <StatusPill status={draft.status} />
         </div>
-        <p className="t-body-sm ink-muted truncate italic">
-          "{draft.raw_text}"
-        </p>
+        {!quoteRedundant && (
+          <p className="t-body-sm ink-muted truncate italic">
+            "{draft.raw_text}"
+          </p>
+        )}
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <PlatformDots ids={platformIds} size={12} />
           {(pillar || draft.content_pillar) && (

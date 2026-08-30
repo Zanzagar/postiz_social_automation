@@ -166,7 +166,7 @@ export function ComposeStage({
           </div>
           <div className="t-caption ink-muted mt-1.5">
             {draft.platforms.length === PLATFORMS.length
-              ? "All 5 selected — Claude will write a version in each platform's native voice."
+              ? `All ${PLATFORMS.length} selected — Claude will write a version in each platform's native voice.`
               : `${draft.platforms.length} selected — Claude writes a version in each platform's native voice.`}
           </div>
         </div>
@@ -333,8 +333,19 @@ export function ComposeStage({
         <div className="bg-card border-hair rounded-xl px-5 py-4">
           <div className="t-label mb-1 text-sage-700/70 dark:text-sage-300/70">Ready to plant</div>
           <div className="t-body-sm ink leading-relaxed">
-            Claude will draft {draft.platforms.length} platform-specific captions from your seed —
-            usually 30–90 seconds. You'll refine each one next.
+            {draft.platforms.length === 0 ? (
+              <>
+                Pick at least one platform and Claude will draft a caption in
+                each platform's voice.
+              </>
+            ) : (
+              <>
+                Claude will draft {draft.platforms.length} platform-specific{" "}
+                {draft.platforms.length === 1 ? "caption" : "captions"} from your
+                seed — usually 30–90 seconds. You'll refine{" "}
+                {draft.platforms.length === 1 ? "it" : "each one"} next.
+              </>
+            )}
           </div>
           <Button
             size="lg"

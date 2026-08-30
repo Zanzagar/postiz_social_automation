@@ -253,7 +253,7 @@ describe("AnalyticsPage", () => {
     // honesty rule: we don't track followers — Total reach replaces the design KPI
     expect(screen.getByText("Total reach")).toBeInTheDocument();
     expect(screen.queryByText(/new followers/i)).not.toBeInTheDocument();
-    expect(mockSummary).toHaveBeenCalledWith("30d");
+    expect(mockSummary).toHaveBeenCalledWith("all");
   });
 
   it("shows the top post card, the peak callout, and Claude's insights", async () => {
@@ -307,7 +307,7 @@ describe("AnalyticsPage", () => {
     renderPage();
     await screen.findByText("Posts published");
     expect(
-      screen.getByText("How your pasture fed the feed this month."),
+      screen.getByText("How your pasture fed the feed across your whole history."),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: "7d" }));
@@ -315,30 +315,34 @@ describe("AnalyticsPage", () => {
       screen.getByText("How your pasture fed the feed this week."),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("radio", { name: "All time" }));
+    await user.click(screen.getByRole("radio", { name: "30d" }));
     expect(
-      screen.getByText("How your pasture fed the feed across your whole history."),
+      screen.getByText("How your pasture fed the feed this month."),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText(/fed the feed this month/i),
+      screen.queryByText(/across your whole history/i),
     ).not.toBeInTheDocument();
   });
 
-  it("offers an All time range that passes 'all' to the api", async () => {
+  it("defaults to All time so the imported history shows on first load", async () => {
     const user = userEvent.setup();
     renderPage();
-    // default stays 30d
+    // the imported history ends before the short windows — defaulting to
+    // "all" keeps the first paint from reading as all-zeros
     await screen.findByText("Posts published");
-    expect(mockSummary).toHaveBeenCalledWith("30d");
-    await user.click(screen.getByRole("radio", { name: "All time" }));
-    await waitFor(() => expect(mockSummary).toHaveBeenCalledWith("all"));
+    expect(screen.getByRole("radio", { name: "All time" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(mockSummary).toHaveBeenCalledWith("all");
+    await user.click(screen.getByRole("radio", { name: "30d" }));
+    await waitFor(() => expect(mockSummary).toHaveBeenCalledWith("30d"));
   });
 
   it("keeps window captions honest on the all-time range", async () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("Posts published");
-    await user.click(screen.getByRole("radio", { name: "All time" }));
     await user.click(screen.getByRole("tab", { name: /per platform/i }));
     await screen.findByText(/from your full posting history · based on 22 posts/i);
     expect(mockPlatforms).toHaveBeenCalledWith("all");
@@ -356,7 +360,7 @@ describe("AnalyticsPage", () => {
     expect(mockRhythm).not.toHaveBeenCalled();
     expect(mockPosts).not.toHaveBeenCalled();
     await user.click(screen.getByRole("tab", { name: /rhythm/i }));
-    await waitFor(() => expect(mockRhythm).toHaveBeenCalledWith("30d"));
+    await waitFor(() => expect(mockRhythm).toHaveBeenCalledWith("all"));
   });
 
   it("renders the posts table with trend cells and honest rate placeholders", async () => {
@@ -364,7 +368,7 @@ describe("AnalyticsPage", () => {
     renderPage();
     await user.click(screen.getByRole("tab", { name: /per post/i }));
     await screen.findByText("Lakshmi and her calf");
-    expect(mockPosts).toHaveBeenCalledWith("30d", 20, 0);
+    expect(mockPosts).toHaveBeenCalledWith("all", 20, 0);
     expect(screen.getByText(/showing 3 of 3/i)).toBeInTheDocument();
     expect(screen.getByText("vs avg")).toBeInTheDocument();
     expect(screen.getByText("below")).toBeInTheDocument();
@@ -399,7 +403,7 @@ describe("AnalyticsPage", () => {
     await screen.findByText(/showing 20 of 25/i);
     await user.click(screen.getByRole("button", { name: /show more/i }));
     await screen.findByText(/showing 25 of 25/i);
-    expect(mockPosts).toHaveBeenCalledWith("30d", 20, 20);
+    expect(mockPosts).toHaveBeenCalledWith("all", 20, 20);
     expect(screen.getByText("Post number 25")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /show more/i })).not.toBeInTheDocument();
   });
@@ -523,7 +527,7 @@ describe("AnalyticsPage", () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(screen.getByRole("tab", { name: /rhythm/i }));
-    await screen.findByText(/you've published 13 posts this month\./i);
+    await screen.findByText(/you've published 13 posts in all\./i);
     expect(screen.getByText("Tuesday 9a")).toBeInTheDocument();
     expect(screen.getByText("3.4 days")).toBeInTheDocument();
     // consistency row omitted while on_target_weeks is null
@@ -540,7 +544,7 @@ describe("AnalyticsPage", () => {
     await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
     // export refetches within the backend's 100-row limit — it never reuses
     // the tab's (possibly truncated) rows
-    expect(mockPosts).toHaveBeenCalledWith("30d", 100, 0);
+    expect(mockPosts).toHaveBeenCalledWith("all", 100, 0);
     const blob = createObjectURL.mock.calls[0][0] as Blob;
     expect(blob).toBeInstanceOf(Blob);
     expect(blob.type).toContain("text/csv");
@@ -567,8 +571,8 @@ describe("AnalyticsPage", () => {
     expect(mockPosts).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: /export csv/i }));
     await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
-    expect(mockPosts).toHaveBeenNthCalledWith(1, "30d", 100, 0);
-    expect(mockPosts).toHaveBeenNthCalledWith(2, "30d", 100, 100);
+    expect(mockPosts).toHaveBeenNthCalledWith(1, "all", 100, 0);
+    expect(mockPosts).toHaveBeenNthCalledWith(2, "all", 100, 100);
     expect(mockPosts).toHaveBeenCalledTimes(2);
     const blob = createObjectURL.mock.calls[0][0] as Blob;
     const text = await blob.text();

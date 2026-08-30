@@ -124,7 +124,7 @@ function toTimelineItem(
     kind === "posted"
       ? `live on ${n} platform${n === 1 ? "" : "s"}`
       : kind === "review"
-        ? "awaiting review"
+        ? "ready for your blessing"
         : held
           ? "held for review"
           : autoPublishAt

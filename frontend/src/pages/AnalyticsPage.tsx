@@ -46,7 +46,9 @@ function downloadCsv(rows: AnalyticsPostRow[], range: string) {
 /** Results (analytics) — Overview / Per post / Per pillar / Per platform / Rhythm. */
 export function AnalyticsPage() {
   const [tab, setTab] = useState("overview");
-  const [range, setRange] = useState<AnalyticsRange>("30d");
+  // Default to "all": the imported history ends before the short windows,
+  // so any bounded default would render an all-zeros first paint.
+  const [range, setRange] = useState<AnalyticsRange>("all");
 
   const summaryQ = useQuery({
     queryKey: ["analytics", "summary", range],

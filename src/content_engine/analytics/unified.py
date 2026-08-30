@@ -403,10 +403,11 @@ def _delta_pct(current: float, previous: float) -> float | None:
     return None
 
 
-def _mean_rate(posts: list[UnifiedPost]) -> float:
+def _mean_rate(posts: list[UnifiedPost]) -> float | None:
+    """Mean of per-post rates; None when no post has a computable rate."""
     rates = [p.rate for p in posts if p.rate is not None]
     if not rates:
-        return 0.0
+        return None
     return sum(rates) / len(rates)
 
 
@@ -666,8 +667,10 @@ def get_summary(db_path: str, range_key: str = DEFAULT_RANGE, now: datetime | No
             "series": _downsample_sum(_daily_values(current, start, days, "engagement")),
         },
         "avg_rate": {
-            "value": round(cur_rate, 2),
-            "delta_pct": _delta_pct(cur_rate, prev_rate),
+            "value": round(cur_rate, 2) if cur_rate is not None else None,
+            "delta_pct": _delta_pct(cur_rate, prev_rate)
+            if cur_rate is not None and prev_rate is not None
+            else None,
             "series": _rate_series(current, start, days),
         },
         "reach": {
@@ -926,6 +929,9 @@ def get_rhythm(
         weeks.append(
             {
                 "label": _week_label(week_start, week_end),
+                # ISO Monday date so clients can bucket by calendar month
+                # without re-deriving dates from their own (non-UTC) clock.
+                "week_start": week_start.isoformat(),
                 "posted": posted,
                 # No cadence setting exists today — target is null, never invented.
                 "target": None,

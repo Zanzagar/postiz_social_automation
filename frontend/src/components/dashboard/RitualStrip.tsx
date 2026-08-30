@@ -22,7 +22,7 @@ export function RitualStrip({ stats, isLoading }: RitualStripProps) {
     {
       key: "review",
       value: stats.awaitingReview,
-      label: "awaiting your review",
+      label: "ready for your blessing",
       sub:
         stats.awaitingReview > 0
           ? `across ${stats.pendingPlatformCount} platform${stats.pendingPlatformCount === 1 ? "" : "s"}`
