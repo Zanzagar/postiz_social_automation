@@ -260,6 +260,10 @@ class TestRhythmRoute:
         data = resp.json()
         assert len(data["weeks"]) >= 4
         assert all(w["target"] is None for w in data["weeks"])
+        # week_start must survive route serialization — clients bucket by it.
+        assert all(
+            isinstance(w["week_start"], str) and len(w["week_start"]) == 10 for w in data["weeks"]
+        )
         assert data["season"]["total_posts"] == 0
         assert data["season"]["best_slot"] is None
         assert data["season"]["consistency"]["on_target_weeks"] is None

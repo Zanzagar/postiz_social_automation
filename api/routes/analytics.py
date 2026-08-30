@@ -160,6 +160,8 @@ class PlatformsResponse(BaseModel):
 
 class WeekEntry(BaseModel):
     label: str
+    # ISO Monday date; lets clients bucket weeks by month without local-clock math.
+    week_start: str | None = None
     posted: int
     target: int | None = None
 
