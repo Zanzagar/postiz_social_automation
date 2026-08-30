@@ -929,6 +929,9 @@ def get_rhythm(
         weeks.append(
             {
                 "label": _week_label(week_start, week_end),
+                # ISO Monday date so clients can bucket by calendar month
+                # without re-deriving dates from their own (non-UTC) clock.
+                "week_start": week_start.isoformat(),
                 "posted": posted,
                 # No cadence setting exists today — target is null, never invented.
                 "target": None,

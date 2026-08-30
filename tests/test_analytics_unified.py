@@ -697,6 +697,10 @@ class TestGetRhythm:
         assert len(result["weeks"]) == 5
         assert result["weeks"][0]["label"] == "Jun 15–21"
         assert result["weeks"][-1]["label"] == "Jul 13–19"
+        # Each week carries its Monday as an ISO date so clients never have to
+        # re-derive dates from their own (possibly non-UTC) clock.
+        assert result["weeks"][0]["week_start"] == "2026-06-15"
+        assert result["weeks"][-1]["week_start"] == "2026-07-13"
         # Posts: Jul 1 (wk3), Jul 7+8 (wk4), Jul 10 (wk4)
         assert result["weeks"][2]["posted"] == 1
         assert result["weeks"][3]["posted"] == 3

@@ -419,6 +419,8 @@ export interface AnalyticsHeatmap {
 
 export interface RhythmWeek {
   label: string;
+  /** ISO Monday date of the week (optional for older cached payloads). */
+  week_start?: string;
   posted: number;
   target: number | null;
 }

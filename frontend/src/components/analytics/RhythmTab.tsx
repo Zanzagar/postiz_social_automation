@@ -26,9 +26,10 @@ interface CadenceRow {
 
 /**
  * Collapse consecutive Monday-start weeks into calendar-month buckets.
- * The payload carries only week labels, so each week is dated by anchoring
- * the last one on the Monday of the current week — the backend always ends
- * its window at "now" — and walking backward 7 days at a time.
+ * Each week is dated by its `week_start` ISO date (authoritative — computed
+ * by the backend in UTC). Older payloads without it fall back to anchoring
+ * the last week on the Monday of the current local week and walking backward,
+ * which can drift near the Sunday→Monday UTC boundary.
  */
 function monthlyBuckets(weeks: RhythmWeek[]): CadenceRow[] {
   const today = new Date();
@@ -38,8 +39,14 @@ function monthlyBuckets(weeks: RhythmWeek[]): CadenceRow[] {
   const buckets: CadenceRow[] = [];
   let currentKey = "";
   weeks.forEach((w, i) => {
-    const monday = new Date(lastMonday);
-    monday.setDate(monday.getDate() - 7 * (weeks.length - 1 - i));
+    let monday: Date;
+    if (w.week_start) {
+      const [y, m, d] = w.week_start.split("-").map(Number);
+      monday = new Date(y, m - 1, d);
+    } else {
+      monday = new Date(lastMonday);
+      monday.setDate(monday.getDate() - 7 * (weeks.length - 1 - i));
+    }
     const key = `${monday.getFullYear()}-${monday.getMonth()}`;
     if (key !== currentKey) {
       currentKey = key;

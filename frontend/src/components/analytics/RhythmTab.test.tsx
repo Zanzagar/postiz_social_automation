@@ -95,4 +95,21 @@ describe("RhythmTab cadence aggregation", () => {
 
     expect(screen.getByText("3 of 4 weeks on target")).toBeInTheDocument();
   });
+
+  it("buckets by week_start when present, ignoring the local clock", () => {
+    // Same 31 weeks, but the payload says they end a week LATER than the
+    // frozen local clock would infer (the Sunday→Monday UTC drift case).
+    // Weeks run Dec 22 2025 → Jul 20 2026: Dec 2025 holds 2, Jul 2026 holds 3.
+    const start = new Date(2025, 11, 22);
+    const weeks = makeWeeks(31).map((w, i) => {
+      const monday = new Date(start);
+      monday.setDate(monday.getDate() + 7 * i);
+      const iso = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
+      return { ...w, week_start: iso };
+    });
+    renderTab(weeks);
+
+    expect(within(cadenceRow("Dec 2025")).getByText("2")).toBeInTheDocument();
+    expect(within(cadenceRow("Jul 2026")).getByText("3")).toBeInTheDocument();
+  });
 });
