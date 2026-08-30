@@ -33,7 +33,11 @@ function PlatformCard({ p }: { p: PlatformStatRow }) {
         </div>
         <div className="flex justify-between gap-2">
           <span>Reach</span>
-          <span className="ink font-mono">{p.reach.toLocaleString()}</span>
+          {/* 0 means "reach not imported", never "nobody reached" — match
+              the Overview tile's em dash */}
+          <span className="ink font-mono">
+            {p.reach ? p.reach.toLocaleString() : "—"}
+          </span>
         </div>
         <div className="flex justify-between gap-2">
           <span>Engagement</span>

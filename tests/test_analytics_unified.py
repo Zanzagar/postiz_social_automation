@@ -476,7 +476,7 @@ class TestGetSummary:
         assert result["range"] == "30d"
         assert result["kpis"]["posts"]["value"] == 0
         assert result["kpis"]["engagement"]["value"] == 0
-        assert result["kpis"]["avg_rate"]["value"] == 0.0
+        assert result["kpis"]["avg_rate"]["value"] is None
         assert result["kpis"]["reach"]["value"] == 0
         assert result["kpis"]["posts"]["delta_pct"] is None
         assert result["top_post"] is None
@@ -526,6 +526,44 @@ class TestGetSummary:
         result = unified.get_summary(seeded_db, "7d", now=FROZEN_NOW)
         # 7d window = Jul 8–14: app post 2 (Jul 8), fb_2 (Jul 10) → 2 posts
         assert result["kpis"]["posts"]["value"] == 2
+
+    def test_avg_rate_none_when_no_post_has_reach(self, tmp_path):
+        """Engagement without reach data → rate incomputable → honest null, not 0%."""
+        db_path = tmp_path / "no_reach.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript(SCHEMA)
+        conn.executescript("""
+            INSERT INTO social_history (platform, external_id, post_text, hashtags,
+                                        posted_at, likes, comments, shares, reach, pillar)
+            VALUES ('facebook', 'fb_nr1', 'Likes but reach never imported', '[]',
+                    '2026-07-05T10:00:00+0000', 40, 6, 4, 0, NULL);
+            INSERT INTO social_history (platform, external_id, post_text, hashtags,
+                                        posted_at, likes, comments, shares, reach, pillar)
+            VALUES ('facebook', 'fb_nr2', 'Another reachless post', '[]',
+                    '2026-07-10T09:00:00+0000', 20, 2, 2, 0, NULL);
+        """)
+        conn.commit()
+        conn.close()
+        result = unified.get_summary(str(db_path), "30d", now=FROZEN_NOW)
+        assert result["kpis"]["engagement"]["value"] == 74
+        assert result["kpis"]["avg_rate"]["value"] is None
+        assert result["kpis"]["avg_rate"]["delta_pct"] is None
+
+    def test_avg_rate_zero_when_reach_but_no_engagement(self, tmp_path):
+        """Reach present with zero engagement → genuine 0.0 rate, not null."""
+        db_path = tmp_path / "zero_rate.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript(SCHEMA)
+        conn.executescript("""
+            INSERT INTO social_history (platform, external_id, post_text, hashtags,
+                                        posted_at, likes, comments, shares, reach, pillar)
+            VALUES ('facebook', 'fb_z', 'Reached but ignored', '[]',
+                    '2026-07-05T10:00:00+0000', 0, 0, 0, 500, NULL);
+        """)
+        conn.commit()
+        conn.close()
+        result = unified.get_summary(str(db_path), "30d", now=FROZEN_NOW)
+        assert result["kpis"]["avg_rate"]["value"] == 0.0
 
 
 class TestGetPosts:

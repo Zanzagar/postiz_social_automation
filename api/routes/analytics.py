@@ -45,7 +45,7 @@ def get_now() -> datetime | None:
 
 
 class KPI(BaseModel):
-    value: float
+    value: float | None  # None = incomputable (e.g. avg_rate with no reach data)
     delta_pct: float | None = None
     series: list[float]
 

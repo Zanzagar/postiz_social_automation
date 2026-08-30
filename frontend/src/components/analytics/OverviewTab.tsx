@@ -69,6 +69,9 @@ export function OverviewTab({ data, isLoading, isError, range }: OverviewTabProp
   // Reach comes only from imported platform analytics — 0/null means "not
   // imported yet", never "nobody was reached".
   const reachMissing = !kpis.reach.value;
+  // Avg rate needs that reach to compute — null means "unknowable", never
+  // "0% engagement".
+  const rateMissing = kpis.avg_rate.value == null;
 
   return (
     <div className="space-y-6">
@@ -87,13 +90,15 @@ export function OverviewTab({ data, isLoading, isError, range }: OverviewTabProp
           series={kpis.engagement.series}
           accent="sage"
         />
-        <KpiCard
-          label="Avg. engagement rate"
-          value={formatRate(kpis.avg_rate.value)}
-          delta={formatDelta(kpis.avg_rate.delta_pct)}
-          series={kpis.avg_rate.series}
-          accent="terra"
-        />
+        <div title={rateMissing ? "Needs reach data to compute" : undefined}>
+          <KpiCard
+            label="Avg. engagement rate"
+            value={rateMissing ? "—" : formatRate(kpis.avg_rate.value)}
+            delta={formatDelta(kpis.avg_rate.delta_pct)}
+            series={kpis.avg_rate.series}
+            accent="terra"
+          />
+        </div>
         <div title={reachMissing ? "No reach data imported yet" : undefined}>
           <KpiCard
             label="Total reach"

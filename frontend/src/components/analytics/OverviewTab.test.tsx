@@ -77,6 +77,16 @@ describe("OverviewTab honest KPI tiles", () => {
     expect(within(kpiCard("Avg. engagement rate")).getByText("—")).toBeInTheDocument();
   });
 
+  it("explains the missing rate with a tooltip, like the reach tile", () => {
+    const data = summary();
+    data.kpis.avg_rate = { value: null, delta_pct: null, series: [] };
+    renderTab(data);
+
+    const rateTile = screen.getByTitle("Needs reach data to compute");
+    expect(within(rateTile).getByText("Avg. engagement rate")).toBeInTheDocument();
+    expect(within(rateTile).getByText("—")).toBeInTheDocument();
+  });
+
   it("renders — with an explanatory title for Total reach when reach is 0", () => {
     const data = summary();
     data.kpis.reach = { value: 0, delta_pct: null, series: [] };
@@ -93,5 +103,8 @@ describe("OverviewTab honest KPI tiles", () => {
     expect(within(kpiCard("Total reach")).getByText("48.2k")).toBeInTheDocument();
     expect(within(kpiCard("Avg. engagement rate")).getByText("4.8%")).toBeInTheDocument();
     expect(screen.queryByTitle("No reach data imported yet")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTitle("Needs reach data to compute"),
+    ).not.toBeInTheDocument();
   });
 });
