@@ -256,8 +256,8 @@ export function PublishingSection() {
             })}
           </div>
           <p className="t-micro ink-muted mt-3">
-            Spiritual and Support posts carry the farm's voice furthest — a person
-            signs off on every one.
+            These pillars carry the farm's voice furthest — a person signs off
+            on every one.
           </p>
         </div>
       </div>

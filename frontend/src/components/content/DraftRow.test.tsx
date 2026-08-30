@@ -94,6 +94,40 @@ describe("DraftRow keyboard accessibility", () => {
   });
 });
 
+describe("DraftRow raw-text quote", () => {
+  it("hides the quote when the title already shows the whole raw text", () => {
+    render(
+      <DraftRow
+        draft={row({ raw_text: "Sunday feast recap with photos" })}
+        onOpen={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("heading", { name: "Sunday feast recap with photos" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('"Sunday feast recap with photos"'),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the quote when the raw text carries more than the title", () => {
+    render(
+      <DraftRow
+        draft={row({
+          raw_text: "Sunday feast recap\nwith photos from the barn",
+        })}
+        onOpen={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("heading", { name: "Sunday feast recap" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/with photos from the barn/),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("DraftRow publish now action", () => {
   it("shows Publish now for draft rows and calls onPublish (not onOpen)", async () => {
     const user = userEvent.setup();

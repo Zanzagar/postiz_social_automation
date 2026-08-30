@@ -60,7 +60,6 @@ function TimelineRow({
         <div className="flex min-w-0 items-center gap-2">
           <span className="t-body ink min-w-0 truncate font-medium">{item.title}</span>
           {item.kind === "posted" && <Chip tone="sage">Live</Chip>}
-          {item.kind === "review" && <Chip tone="cream">Review</Chip>}
           {item.kind === "upcoming" && <Chip tone="neutral">Queued</Chip>}
         </div>
         <div className="mt-1 flex min-w-0 items-center gap-2">
