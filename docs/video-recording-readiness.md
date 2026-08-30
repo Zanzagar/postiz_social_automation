@@ -75,8 +75,10 @@ Last updated: 2026-07-16 (video-readiness branch).
    Facebook and Instagram (works in Dev Mode for app role holders). For TikTok, finish
    the developer-portal app details first (see the verification guide §3), add the
    client key/secret to **Postiz's** `.env`, restart Postiz, then connect the channel.
-4. **Sanity check** — open the app (:3000), Health page: everything should be green,
-   sidebar badge "All services connected". Media library shows real farm photos.
+4. **Sanity check** — open the app (:3000) and **hard-refresh once (Ctrl+Shift+R)**
+   so the browser drops any cached pre-polish bundle. Health page: everything should
+   be green, sidebar badge "All services connected". Media library shows real farm
+   photos (Photos filter). Analytics should land on **All time** by default.
 5. *(Optional, better Recording C)* **Backfill reach data** from the Graph API:
    ```bash
    META_PAGE_ACCESS_TOKEN=<page token> python -m content_engine.scripts.backfill_history_insights
