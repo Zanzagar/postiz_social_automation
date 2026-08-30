@@ -15,14 +15,59 @@ interface RhythmTabProps {
   range: string;
 }
 
+/** Above this many weeks the cadence bars collapse into monthly buckets. */
+const MONTHLY_AFTER_WEEKS = 30;
+
+interface CadenceRow {
+  label: string;
+  posted: number;
+  target: number | null;
+}
+
+/**
+ * Collapse consecutive Monday-start weeks into calendar-month buckets.
+ * The payload carries only week labels, so each week is dated by anchoring
+ * the last one on the Monday of the current week — the backend always ends
+ * its window at "now" — and walking backward 7 days at a time.
+ */
+function monthlyBuckets(weeks: RhythmWeek[]): CadenceRow[] {
+  const today = new Date();
+  const lastMonday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  lastMonday.setDate(lastMonday.getDate() - ((lastMonday.getDay() + 6) % 7));
+
+  const buckets: CadenceRow[] = [];
+  let currentKey = "";
+  weeks.forEach((w, i) => {
+    const monday = new Date(lastMonday);
+    monday.setDate(monday.getDate() - 7 * (weeks.length - 1 - i));
+    const key = `${monday.getFullYear()}-${monday.getMonth()}`;
+    if (key !== currentKey) {
+      currentKey = key;
+      buckets.push({
+        label: monday.toLocaleDateString(undefined, { month: "short", year: "numeric" }),
+        posted: 0,
+        target: null,
+      });
+    }
+    const bucket = buckets[buckets.length - 1];
+    bucket.posted += w.posted;
+    if (w.target !== null) bucket.target = (bucket.target ?? 0) + w.target;
+  });
+  return buckets;
+}
+
 function CadenceCard({ weeks }: { weeks: RhythmWeek[] }) {
-  const hasTargets = weeks.some((w) => w.target !== null);
-  const scale = Math.max(...weeks.map((w) => w.posted), ...weeks.map((w) => w.target ?? 0), 1);
+  // "All time" spans hundreds of weeks — collapse the display to months so
+  // the card stays readable. Shorter windows render week rows unchanged.
+  const monthly = weeks.length > MONTHLY_AFTER_WEEKS;
+  const rows: CadenceRow[] = monthly ? monthlyBuckets(weeks) : weeks;
+  const hasTargets = rows.some((r) => r.target !== null);
+  const scale = Math.max(...rows.map((r) => r.posted), ...rows.map((r) => r.target ?? 0), 1);
   return (
     <div className="bg-card border-hair shadow-card rounded-xl p-5">
       <div className="t-label text-sage-600 dark:text-sage-300">Cadence</div>
       <div className="t-h2 mt-0.5 mb-4 text-sage-800 dark:text-sage-100">
-        Your posting rhythm, week-by-week
+        Your posting rhythm, {monthly ? "month-by-month" : "week-by-week"}
       </div>
       {weeks.length === 0 ? (
         <EmptyState
@@ -33,7 +78,7 @@ function CadenceCard({ weeks }: { weeks: RhythmWeek[] }) {
       ) : (
         <>
           <div className="space-y-2">
-            {weeks.map((w) => (
+            {rows.map((w) => (
               <div key={w.label} className="flex items-center gap-3">
                 <span className="t-caption ink-muted w-20 shrink-0">{w.label}</span>
                 <div className="relative h-5 flex-1 overflow-hidden rounded-md bg-sage-50 dark:bg-sage-800">
@@ -65,9 +110,10 @@ function CadenceCard({ weeks }: { weeks: RhythmWeek[] }) {
                   className="h-3 w-0 border-r-2 border-dashed border-terra-400"
                   aria-hidden="true"
                 />
-                Weekly target
+                {monthly ? "Monthly target" : "Weekly target"}
               </span>
             )}
+            {monthly && <span>Shown monthly across the full history</span>}
           </div>
         </>
       )}
