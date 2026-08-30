@@ -50,3 +50,8 @@ htmlcov/
 # Task files
 # tasks.json
 # tasks/ 
+
+# Runtime media uploads + local data backups (never commit)
+media/
+data/gvsa.db.backup-*
+data/deleted-test-rows-backup-*.json
