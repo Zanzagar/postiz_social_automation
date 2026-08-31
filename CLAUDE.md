@@ -50,44 +50,9 @@ ruff check . --fix
 - **Content mix**: 70% value-add, 20% engagement, 10% promotional
 - **Rebranding in progress** — "Gita Nagari" → "Gita Valley" across all platforms
 
-## Taskmaster Workflows
+## Task Tracking
 
-### Workflow Rules (MANDATORY)
-
-1. **PRD first**: ALWAYS create a PRD before generating tasks. Never use `add-task` to build a task list from scratch — write a PRD in `.taskmaster/docs/`, then parse it.
-2. **New tag per phase**: Each workflow phase gets its own tag (e.g., `postiz-mvp`, `feature-automation`). Never pollute the `master` tag with phase-specific work.
-3. **Switch tags**: Always `task-master tags use <name>` before running set-status, show, or list — operations target the active tag.
-4. **Expand after parse**: Always run `task-master expand --id=<id>` on complex tasks after parse-prd to generate actionable subtasks.
-5. **Float task count**: Use `--num-tasks 0` with parse-prd to let the AI determine the right number of tasks. Don't hardcode counts.
-
-### Commands
-
-```bash
-# List tasks (current tag)
-task-master list                        # Default view
-task-master list all                    # Include subtasks
-task-master list --ready                # Only actionable tasks (deps satisfied)
-task-master list --ready --blocking     # Highest-impact tasks to work on next
-task-master list -c                     # Compact one-line output (fewer tokens)
-
-# Show / navigate
-task-master show <id>                   # Task details
-task-master next                        # Next recommended task
-
-# Status updates (positional syntax)
-task-master set-status <id> <status>    # e.g., set-status 3 done
-
-# Task decomposition
-task-master expand --id=<id>            # Break task into subtasks
-task-master analyze-complexity          # Complexity report (run before expand)
-
-# PRD → tasks
-task-master parse-prd --input=<file> --num-tasks=0
-
-# Tag management
-task-master tags use <tag-name>         # Switch active tag
-task-master tags list --ready           # Tags with actionable task counts
-```
+Task Master is retired (2026-08-31). Historical PRDs and task data live in `.taskmaster/` as an archive. Phase work is tracked in Current Focus below; new multi-step efforts use `.scratch/` ticket files or a tasks.md.
 
 ## Current Focus
 
