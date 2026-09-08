@@ -1,7 +1,7 @@
 # Where the Social Hub Should Live — Decision Brief for the Temple President
 
 **Prepared by:** Corey Hoydic · **Date:** 2026-09-07 · **Decision needed by:** before the next social media publishing push
-**Companion documents:** `docs/infrastructure-migration-plan.md` (the technical runbook), `docs/research/postiz-hosting-migration.md`, `docs/research/platform-oauth-domain-requirements.md` (sources for every figure below).
+**Companion documents:** `docs/hub-hosting-plan.md` (hosting the hub itself), `docs/infrastructure-migration-plan.md` (the scheduling-engine runbook), `docs/research/postiz-hosting-migration.md`, `docs/research/platform-oauth-domain-requirements.md` (sources for every figure below).
 
 ---
 
@@ -9,9 +9,20 @@
 
 Gita Valley's social media hub is software we built ourselves. Staff write a sentence, the hub drafts a caption for each platform in the farm's voice, a person approves it, and the hub sends it to Facebook, Instagram, YouTube and TikTok. The hub keeps our content, photos, analytics and knowledge base on our own equipment.
 
-The one piece we did not build is the **scheduling engine** that actually delivers posts to the platforms, an open-source product called **Postiz**. Since February it has run on a **volunteer's home computer and home internet connection**. We cannot reach that volunteer reliably, and the platform connections, secret keys and settings all live on his machine. Every publishing task is currently waiting on him. The engine must move.
+There are two hosting questions, not one. First, **the hub itself currently runs on Corey's laptop**, which means it is available only when that laptop is on and effectively only to Corey, and its caption writing runs on Corey's personal Claude subscription, an arrangement Anthropic's terms do not allow us to share with other staff or run on a server. Second, the one piece we did not build is the **scheduling engine** that actually delivers posts to the platforms, an open-source product called **Postiz**. Since February it has run on a **volunteer's home computer and home internet connection**. We cannot reach that volunteer reliably, and the platform connections, secret keys and settings all live on his machine. Every publishing task is currently waiting on him. The engine must move.
 
-## 2. Two ways forward
+## 2. Hosting the hub itself (recommended: yes, now)
+
+| | **Move the hub to a small AWS server at social.gitavalley.org** | **Leave it on Corey's laptop** |
+|---|---|---|
+| Availability | Always on, reachable by any staff member from anywhere, with daily backups | Only when the laptop is on; effectively one user; no backups beyond Corey's own |
+| Annual cost | **$144** hosting (AWS Lightsail 2 GB, $12/month) + about **$60** for AI writing on a temple-owned Anthropic account (≈ $5/month at planned volume, capped at $25/month) — hosting is effectively free under the TechSoup AWS credit ($1,000/year for a $95 fee) | $0, but not shareable and not sustainable |
+| Work | About 3–4 working days: security hardening before the hub faces the internet, switching AI billing to the temple's account, deployment | None |
+| Ownership | AWS and Anthropic accounts owned by the temple with Corey as administrator | Everything sits with one volunteer |
+
+Nothing about the hub's features changes. The web address becomes https://social.gitavalley.org (one DNS entry on the existing gitavalley.org website account).
+
+## 3. Two ways forward for the scheduling engine
 
 | | **Option A: Subscribe to Postiz's hosted service** | **Option B: Rent a cloud server and run Postiz ourselves** |
 |---|---|---|
@@ -22,31 +33,33 @@ The one piece we did not build is the **scheduling engine** that actually delive
 | What we control | Our hub, content, data and analytics stay ours. Postiz holds the platform connections and the delivery queue | Everything, including the server |
 | Risk | Depends on a commercial service (switching back is a one-day job) | Depends on one person, the same situation we are in now |
 
-## 3. What stays exactly the same under either option
+## 4. What stays exactly the same under either option
 
 Nothing about the hub changes for staff. We checked every point where the hub talks to the scheduling engine (five operations: list connected channels, publish or schedule a post, save a draft, attach a photo or video, read performance numbers) and all five are available on Postiz's hosted service, on every plan, with a **higher** request allowance than we have today. The caption writing, media library, knowledge base, content calendar, pillar analytics and Facebook history import do not involve the scheduling engine at all.
 
 One honest note: while verifying this, we found that the hub's publishing connector had never been exercised against a live scheduling engine and needs a one-day correction before first use. That is true under either option and is already scheduled.
 
-## 4. Recommendation
+## 5. Recommendation
 
-**Option A, Postiz hosted service, Standard plan ($348/year), upgrading to Team ($468/year) if individual staff logins are wanted.**
+**Move the hub to AWS at social.gitavalley.org, and use Option A, Postiz hosted service, Standard plan.** Combined: about **$47/month ($565/year)** at list price, or about **$34/month plus a $95 TechSoup fee (≈ $500/year)** with the AWS credit. Upgrade Postiz to Team ($468/year) only if individual staff logins are wanted.
 
 The problem we are solving is dependence on a single volunteer's equipment. Option B moves that dependence rather than removing it, and adds months of platform paperwork whose only purpose is to let us keep running the engine ourselves. Option A removes the dependence, removes the paperwork, costs the same, and can be reversed later if the service disappoints.
 
-## 5. What we need from you
+## 6. What we need from you
 
 1. **Approval to subscribe:** $348/year (Standard) or $468/year (Team). Monthly billing is available at $29 or $39 if preferred.
-2. **A shared organisational email** (for example `social@gitavalley.org`) to own the Postiz account, so it never sits with one person.
-3. **Which staff should post:** one shared login (Standard) or named logins per person (Team).
-4. **Only if Option B is chosen:** the organisation's EIN and an official document showing its legal name and address (Meta business verification), and access to the website's SiteGround account for DNS changes.
+2. **A shared organisational email** (for example `social@gitavalley.org`) to own the Postiz, AWS and Anthropic accounts, so none of them sits with one person.
+3. **Approval for the hub's hosting:** AWS Lightsail at $12/month (and TechSoup registration, $95/year, which covers it) plus an Anthropic API account for the AI writing, about $5/month with a $25 cap.
+4. **Which staff should post:** one shared login (Standard) or named logins per person (Team).
+5. **Only if Option B (self-hosting the scheduling engine) is chosen:** the organisation's EIN and an official document showing its legal name and address (Meta business verification), and access to the website's SiteGround account for DNS changes.
 
-## 6. What happens next
+## 7. What happens next
 
 | When | What |
 |---|---|
-| Day 1 after approval | Create the Postiz account, connect the four channels, switch the hub to the new engine, publish a first post to each channel |
-| Day 2 | Retire the volunteer's installation and rotate the secret keys it held |
+| Days 1–4 after approval | Harden the hub for the internet, switch AI billing to the temple's account, deploy to AWS at social.gitavalley.org |
+| Day 5 | Create the Postiz account, connect the four channels, switch the hub to the new engine, publish a first post to each channel |
+| Day 6 | Retire the volunteer's installation and the laptop services; rotate the secret keys they held |
 | Week 1 | Resume the normal publishing rhythm from the hub |
 
 ---

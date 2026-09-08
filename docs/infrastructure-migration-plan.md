@@ -1,7 +1,7 @@
 # Infrastructure Migration Plan — Leaving sethpc.xyz
 
 **Date:** 2026-09-07 · **Status:** DECISION NEEDED (§2) · **Owner:** Corey
-**Research behind this plan:** `docs/research/postiz-hosting-migration.md` (hosting options, prices, Postiz requirements) and `docs/research/platform-oauth-domain-requirements.md` (what Meta / Google / TikTok bind to the domain). Every factual claim below is sourced there; this document is the runbook.
+**See also:** `docs/hub-hosting-plan.md` (hosting the Hub itself at social.gitavalley.org). **Research behind this plan:** `docs/research/postiz-hosting-migration.md` (hosting options, prices, Postiz requirements) and `docs/research/platform-oauth-domain-requirements.md` (what Meta / Google / TikTok bind to the domain). Every factual claim below is sourced there; this document is the runbook.
 
 ---
 
@@ -16,7 +16,7 @@ Verified against the repo and live DNS on 2026-09-07:
 | Postiz **channel OAuth tokens** (FB, IG, YouTube) + our Public API key | Yes (Postiz Postgres) | Yes | Reconnect on the new instance (2-min OAuth each); new API key |
 | n8n at `n8n.sethpc.xyz` | Yes | **No** — appears in docs/README only; zero references in `api/`, `src/`, `frontend/` | Drop; delete stale docs |
 | Gitea `git.sethpc.xyz` | Yes | **No** — this repo's remote is GitHub | Nothing |
-| Content Hub (FastAPI :8000 + React :3000) | No — Corey's machine | — | Unchanged. Must stay on a host with the Claude CLI OAuth login (compose comment: "$0/call via Max") |
+| Content Hub (FastAPI :8000 + React :3000) | No — Corey's machine (its own single point of failure) | — | **Move to AWS Lightsail at social.gitavalley.org — see `docs/hub-hosting-plan.md`.** The Claude Max login cannot follow it (Anthropic terms); the server uses a temple-owned Anthropic Console API key (≈ $5/mo) |
 | `gitavalley.org` (WordPress) | No — **SiteGround** (`ns1/ns2.siteground.net`, not Cloudflare) | Privacy/Terms URLs | DNS record for a Postiz subdomain is added in SiteGround Site Tools (Path B only) |
 
 **What Seth's box holds that we would lose:** nothing we need. Content, captions, analytics history and the media library live in our own SQLite (`data/gvsa.db`) and Drive. Postiz there holds 4 channel connections and zero scheduled posts.
