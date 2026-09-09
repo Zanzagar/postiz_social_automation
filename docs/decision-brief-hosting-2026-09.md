@@ -1,6 +1,6 @@
-# Where the Social Hub Should Live — Decision Brief for the Temple President
+# Where the Social Hub Should Live — Decision Brief for Parijata devi dasi, Temple President
 
-**Prepared by:** Corey Hoydic · **Date:** 2026-09-07 · **Decision needed by:** before the next social media publishing push
+**Prepared for:** Parijata devi dasi, Temple President · **Prepared by:** Corey Hoydic · **Date:** 2026-09-07 · **Decision needed by:** before the next social media publishing push
 **Companion documents:** `docs/decision-matrices-hosting.md` (weighted decision matrices for both choices), `docs/hub-hosting-plan.md` (hosting the hub itself), `docs/infrastructure-migration-plan.md` (the scheduling-engine runbook), `docs/research/postiz-hosting-migration.md`, `docs/research/platform-oauth-domain-requirements.md` (sources for every figure below).
 
 ---
