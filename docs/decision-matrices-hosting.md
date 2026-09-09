@@ -1,6 +1,6 @@
 # Hosting Decision Matrices — Content Hub and Scheduling Engine
 
-**Date:** 2026-09-08 · **Owner:** Corey · **Audience:** Corey and the temple president
+**Date:** 2026-09-08 · **Owner:** Corey · **Audience:** Corey and Parijata devi dasi, Temple President
 **Evidence:** `docs/research/hub-wordpress-linkage.md`, `docs/research/social-data-access-own-apps.md`, `docs/research/hub-hosting-aws-vps.md`, `docs/research/claude-on-server-options.md`, `docs/research/postiz-hosting-migration.md`, `docs/research/platform-oauth-domain-requirements.md`. Every verdict below was adversarially re-verified against primary sources on 2026-09-07/08. Scores are the maintainer's judgment on a 1–5 scale; weights are stated so the president can change them.
 
 ---
