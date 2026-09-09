@@ -1,7 +1,7 @@
 # Where the Social Hub Should Live — Decision Brief for the Temple President
 
 **Prepared by:** Corey Hoydic · **Date:** 2026-09-07 · **Decision needed by:** before the next social media publishing push
-**Companion documents:** `docs/hub-hosting-plan.md` (hosting the hub itself), `docs/infrastructure-migration-plan.md` (the scheduling-engine runbook), `docs/research/postiz-hosting-migration.md`, `docs/research/platform-oauth-domain-requirements.md` (sources for every figure below).
+**Companion documents:** `docs/decision-matrices-hosting.md` (weighted decision matrices for both choices), `docs/hub-hosting-plan.md` (hosting the hub itself), `docs/infrastructure-migration-plan.md` (the scheduling-engine runbook), `docs/research/postiz-hosting-migration.md`, `docs/research/platform-oauth-domain-requirements.md` (sources for every figure below).
 
 ---
 
@@ -36,6 +36,8 @@ Nothing about the hub's features changes. The web address becomes https://social
 ## 4. What stays exactly the same under either option
 
 Nothing about the hub changes for staff. We checked every point where the hub talks to the scheduling engine (five operations: list connected channels, publish or schedule a post, save a draft, attach a photo or video, read performance numbers) and all five are available on Postiz's hosted service, on every plan, with a **higher** request allowance than we have today. The caption writing, media library, knowledge base, content calendar, pillar analytics and Facebook history import do not involve the scheduling engine at all.
+
+**On our own data.** The hub's knowledge database is built from our own Facebook, Instagram, YouTube and TikTok accounts, and that reading happens through the temple's own developer apps, not through the scheduling engine. We verified this week that those apps, exactly as they are today, can read our entire Facebook history (1,598 posts with engagement) and 825+ Instagram posts with reach and saves; no platform review is needed to read our own accounts. The scheduling engine, hosted or self-hosted, returns only a small live snapshot of metrics and stores none, so self-hosting it would not give us any more of our data. Publishing and reading are separate decisions.
 
 One honest note: while verifying this, we found that the hub's publishing connector had never been exercised against a live scheduling engine and needs a one-day correction before first use. That is true under either option and is already scheduled.
 
@@ -95,3 +97,7 @@ Live check on 2026-09-07 against the current instance, using a draft that was de
 ## Appendix C: why the project did not choose the hosted service in February
 
 The February 2026 assessment (`docs/social-media-automation-assessment.md`) chose self-hosting for three reasons: cost ($10–25/month for a server versus $29–39/month hosted), data ownership, and a volunteer's offer to host for free. It did not anticipate two things that have since dominated the project: the developer-review burden that comes with running our own platform apps, and the fragility of volunteer-run infrastructure. Its hosted-plan facts are also outdated (the Standard plan no longer caps posts per month). The reasoning was sound for the information available; the information has changed.
+
+## Appendix D: decision matrices
+
+The weighted decision matrices for both choices (hub hosting including how it links to the WordPress site, and scheduling-engine hosting including data access), with scores and adjustable weights, are in `docs/decision-matrices-hosting.md`. Headline results: Hub on AWS Lightsail at social.gitavalley.org scores 4.70 of 5 (SiteGround options 2.55–2.65, laptop 3.20); Postiz Cloud scores 4.20–4.25 (self-hosting 2.65–2.95 until platform reviews pass). Data access scores identically for every scheduling-engine option because it comes from our own apps.
