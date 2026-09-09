@@ -18,6 +18,50 @@
 
 **Data-pipeline gaps found (hosting-independent, all fixable):** the Facebook import must be re-run for 1,598 posts; the Instagram import is coded but unconfigured (`META_INSTAGRAM_ACCOUNT_ID` unset); the insights backfill uses `post_impressions*` metrics that Meta deprecated above Graph API v25 and now return 400, so it needs rewriting to current metrics; the CLI scripts read `META_PAGE_ACCESS_TOKEN` while `.env` defines `META_PAGE_TOKEN`; there is no YouTube or TikTok importer yet; and the Postiz per-post analytics chain is dead until the publish-connector defect is fixed. These are the real work items behind "maximum functionality", and none of them depend on the hosting choice.
 
+## 0b. The volunteer-administrator dependency, and the self-sustainability test
+
+The decision against self-hosting is, at root, a decision against depending on any single volunteer's equipment and attention, whoever the volunteer is. The current arrangement makes the cost of that dependency concrete. None of this is a criticism of Seth, who has hosted the scheduler for free since February; it is a description of what the organisation does not control.
+
+### What Seth controls today (verified 2026-09-07)
+
+| Asset | Where it lives | What the temple can do without him |
+|---|---|---|
+| The production scheduler (`postiz.sethpc.xyz`) | Docker on his home hardware, on a **residential Verizon connection** (71.178.159.217) | Nothing: no SSH, no admin access ("Need admin login from Seth", `docs/platform-setup-guide.md`; "We do NOT have direct access to push updates", `docs/gita-valley-context.md`) |
+| The domain and DNS `sethpc.xyz` | His registrar and Google Cloud DNS account | Nothing; if the domain lapses, every `*.sethpc.xyz` address dies, including any OAuth redirect URI a platform review was bound to |
+| The temple's platform secrets (Meta app secret, Google client secret, TikTok keys) | Plaintext in his `postiz.env` | Cannot revoke his copy except by rotating every secret |
+| The channel OAuth tokens and the Public API key | His PostgreSQL database | Cannot rotate the once-exposed API key: it needs one SQL statement on his host, requested in July and still pending |
+| Software currency | Postiz v2.18.0; four security releases (v2.21.5–v2.21.10, April–June 2026) have shipped since | Cannot patch |
+| Backups | Unknown | Cannot verify or restore |
+| Second-order infrastructure (n8n, Gitea) | Same host and domain | Unused by the Hub, but any credential stored there (the Postiz key in n8n) is outside our control |
+
+### The tensions this creates
+
+1. **Velocity.** The TikTok sandbox-key swap has been pending since 2026-08-17; the API-key rotation since July. Recording week stalled on messages to a Discord bot. Every future change to the scheduler (an upgrade, a new provider key, a redirect URI for a review) queues behind the same channel.
+2. **Security.** The organisation's platform secrets sit on hardware and a home network it cannot audit, shared in plaintext with a non-staff volunteer, and a compromised API key cannot be rotated on demand.
+3. **Availability.** A home uplink, a single machine, no stated SLA, and no known backup or restore procedure. An ISP outage, a power cut, a hardware failure or a move ends publishing until one person is reachable.
+4. **Governance and ownership.** There is no agreement, no handover document, no second administrator, and no organisational login. The temple cannot compel, audit, or replace the arrangement; goodwill is the only guarantee.
+5. **Compliance coupling.** Any platform review submitted from `postiz.sethpc.xyz` would bind reviewer access, demo videos, verified URL properties and redirect URIs to a domain the organisation does not own (`docs/research/platform-oauth-domain-requirements.md`). A later move would re-trigger Google brand verification and a full TikTok re-review.
+6. **Exit cost grows with time.** Every channel connected, every scheduled post, and every review artifact tied to his domain raises the cost of leaving later. It is cheapest to leave now, with four channels and an empty calendar.
+
+### The same test applied to self-hosting under Corey
+
+Self-hosting Postiz on the temple's own server removes Seth but re-creates the pattern with Corey: one volunteer holding root, patching a seven-container stack monthly, owning three platform reviews and their yearly upkeep, and being the only person who knows how it fits together. That is a better position than today (the organisation would at least own the server and accounts), but it is not self-sustaining. The Cloud option moves the operational burden to a vendor with an SLA and support channel, leaves the organisation owning the account, and reduces Corey's role to administrator, which any successor can inherit from a shared login.
+
+### Self-sustainability test
+
+Six conditions the organisation should be able to answer "yes" to for its publishing stack. Pass/fail per option:
+
+| Condition | Stay on Seth's server | Self-host Postiz (Corey admin) | Postiz Cloud + Hub on Lightsail (recommended) |
+|---|---|---|---|
+| Every account and domain is owned by the organisation (shared org email), not an individual | No | Yes | Yes |
+| No volunteer-controlled hardware or home network in the publishing path | No | Partly (temple-owned cloud server, volunteer-operated) | Yes (vendor-operated scheduler; Lightsail with automatic snapshots for the Hub) |
+| Credentials can be rotated by the organisation without any specific person | No | Yes | Yes |
+| Security patches and backups happen without a volunteer remembering | No | No (monthly manual routine) | Yes for the scheduler; Hub patches remain a light monthly task with a runbook |
+| A documented runbook exists and a second administrator is named | No | Only if written and staffed | Runbooks in `docs/`; a second admin is a login away |
+| Losing any one person costs less than a day to recover from | No | No (server knowledge concentrated in one person) | Yes |
+
+**Reading the table:** the recommended configuration is the only one that passes every row. Self-hosting passes ownership and rotation but fails the "no single volunteer" rows, which are the rows that failed under Seth. Two follow-through items make the recommended option fully self-sustaining rather than nearly: name a second administrator with access to the shared org email and the AWS, Anthropic and Postiz accounts, and keep `docs/DEPLOYMENT.md` current so a successor can operate the Hub from the runbook alone.
+
 ---
 
 ## 1. Matrix A — Hosting the Content Hub (the social.gitavalley.org question)
