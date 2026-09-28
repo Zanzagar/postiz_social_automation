@@ -1,0 +1,6 @@
+# The gate's hook, checker and baseline stay LF in every checkout, here and in
+# every project adopt.sh copies them to: a CRLF copy breaks sh. adopt.sh adds
+# these lines to a project's own .githooks/.gitattributes, never replacing it.
+commit-msg text eol=lf
+check-trailers text eol=lf
+grill-gate.baseline text eol=lf

@@ -1,0 +1,753 @@
+#!/bin/sh
+# check-trailers: the grilling gate's ONE checker (claude-harness docs/git-hygiene.md, rule 14).
+# The commit-msg hook and CI both run this file: one rule, one parse. CI reads
+# the commit git made; the hook reads the message BEFORE git cleans it up, and
+# works out what git will make of it. Where it cannot tell (THE HOOK'S LIMITS,
+# below) the two can disagree, and CI, which checks every commit, decides.
+#
+# POSIX sh + git + awk only: it runs in WSL/Linux, in Git for Windows' bash
+# (which has no node) and on GitHub Actions.
+#
+#   check-trailers --message-file <file>   the commit-msg hook: a proposed message,
+#                                          checked against the index being committed
+#   check-trailers --pr-message <file> <rev>   CI: a pull request's title + description (a
+#                                          squash merge's message), against <rev>'s tree
+#   check-trailers [--baseline <file>] --commit <rev> | --pr <base> <head>
+#                  | --push <before> <after> [<default-ref>]
+#                                          CI: every new commit, each against its own tree;
+#                                          history reachable from a baseline tip is exempt
+#   check-trailers --anchors               stdin: a markdown file; stdout: every anchor
+#                                          it offers (explicit ids, then heading slugs)
+#   check-trailers --slug                  stdin: one heading text per line; stdout: its
+#                                          GitHub slug, de-duplicated like one page
+#
+# THE RULE. A commit message ends with a trailer block (the last paragraph, as
+# `git interpret-trailers --parse` reads it with no configuration) containing either
+#   Decided: <repo-relative-path>#<anchor>   the path exists in what is committed and the
+#                                            anchor is an <a id="..."> or a heading's
+#                                            GitHub slug in that file, or
+#   Fix: | Docs: | Chore: | Test: <why>      non-empty.
+# Every gate trailer present must be valid. Keys match case-insensitively, as
+# git's own trailer keys do.
+#
+# THE HOOK'S LIMITS. Git does not tell the commit-msg hook how it will clean the
+# message up. The hook knows commit.cleanup, the comment string in force, and
+# whether an editor runs (git sets GIT_EDITOR=: for it when none does); it does
+# not know the command line. So:
+#   - a --cleanup=<mode> given there overrides what the hook goes by, either way:
+#     with --cleanup=verbatim and an editor it drops comment lines git keeps (and
+#     may ACCEPT what CI refuses); with --cleanup=strip and -F it keeps comment
+#     lines git drops (and may REFUSE what CI accepts);
+#   - a scissors line typed into the message is cut at as for -v, which it
+#     cannot see; git cuts there only for -v, or for commit.cleanup=scissors
+#     with an editor. Otherwise, when git KEEPS comment lines (whitespace,
+#     verbatim), CI stops reading at a # scissors line and reads past any
+#     other; when git STRIPS them (an editor without -v, commit.cleanup=
+#     strip), git drops the scissors line itself and CI reads what follows.
+#     Either way the hook, having cut, may ACCEPT what CI refuses;
+#   - with no commit.cleanup and no editor (-m or -F without -e), it drops the
+#     comment lines that END the message, as git's template must be dropped if
+#     a writer's own environment sets GIT_EDITOR=: while an editor runs (git
+#     commit -e): git keeps them, and when the comment string is not # CI reads
+#     them as text (it may ACCEPT); and in that editor case it keeps any other
+#     comment line git strips (it may REFUSE);
+#   - with core.commentChar=auto, git picks another character than # when a
+#     line of the message it starts from (-m, -F, --amend) begins with #, and
+#     the hook takes # (either way).
+#   - the hook reads the message bytes as written; CI reads `git show
+#     --format=%B`, re-encoded to UTF-8, so with a non-UTF-8
+#     i18n.commitEncoding a non-ASCII Decided path or anchor can go either way.
+# A comment line kept or dropped wrongly changes the verdict only inside the
+# final paragraph: a # line before an indented continuation line, or any line
+# not beginning with #. CI, which reads each commit as git made it, decides.
+#
+# Exit status: 0 accepted, 1 refused, 2 usage or environment error.
+
+set -u
+LC_ALL=C
+export LC_ALL
+
+say() { printf '%s\n' "$*" >&2; }
+die() { say "grill-gate: $*"; exit 2; }
+
+GATE_KEYS='decided fix docs chore test'
+
+# stdin: a commit message. stdout: "key<TAB>value" for each trailer in its
+# final trailer block, key lower-cased, value trimmed. Git's own parser decides
+# what the trailer block is, so this agrees with `git log --format=%(trailers)`
+# in a clone with no configuration. It parses with NO configuration but the
+# separator: git renames a key by any trailer.<name>.key alias it can read (so
+# an inherited one could make a gate key of another trailer, or hide one), and
+# reads core.commentChar, so the hook and a clean CI could disagree. So: not in
+# a repository, no system or global file (GIT_CONFIG_GLOBAL from git 2.32; HOME
+# and XDG_CONFIG_HOME for an older git, which ignores it), and no `git -c` or
+# GIT_CONFIG_COUNT from whatever ran this.
+trailers() {
+  (
+    unset GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
+    GIT_DIR=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null HOME=/dev/null XDG_CONFIG_HOME=/dev/null \
+      git -c trailer.separators=: interpret-trailers --parse
+  ) |
+    awk '{
+      i = index($0, ":"); if (i == 0) next
+      k = tolower(substr($0, 1, i - 1)); v = substr($0, i + 1)
+      sub(/^[ \t]+/, "", v); sub(/[ \t\r]+$/, "", v)
+      printf "%s\t%s\n", k, v
+    }'
+}
+
+# Display form of a trailer key.
+label() {
+  case $1 in decided) echo Decided ;; fix) echo Fix ;; docs) echo Docs ;; chore) echo Chore ;; test) echo Test ;; *) echo "$1" ;; esac
+}
+
+refuse_missing() {
+  say "grill-gate: REFUSED: $1 carries no Decided: or class trailer."
+  say ""
+  say "  Every commit message ends with a trailer block (its LAST paragraph, the one"
+  say "  holding any Co-Authored-By line) containing ONE of:"
+  say "    Decided: <repo-path>#<anchor>   the recorded grilling decision this commit implements"
+  say "    Fix: <why> | Docs: <why> | Chore: <why> | Test: <why>   when no decision is involved"
+  say ""
+  say "  Add one with   git commit --trailer \"Fix: <why>\" ...   or edit the last paragraph."
+  say "  Rule 14 of claude-harness docs/git-hygiene.md."
+}
+
+PROBLEMS=''
+problem() { PROBLEMS="${PROBLEMS}  - $*
+"; }
+
+# ---------------------------------------------------------------------------
+# Anchors: what a markdown file offers as #fragments on GitHub.
+#   <a ... id="x"> outside fenced code  -> x
+#   an ATX heading outside fenced code  -> its GitHub slug, de-duplicated with
+#                                          -1, -2 ... exactly as github-slugger does
+# Slugs follow github-slugger (vendor/github-slugger): lower-case, delete what its
+# regex deletes, each space becomes "-", over the text GitHub renders (links keep
+# their text, tags and entities go, _emphasis_ pairs are removed, `code` is
+# literal). Its two Unicode tables are generated below. A heading with no
+# rendered text gets no anchor, as on GitHub.
+# Not anchors: YAML front matter; fenced code; `code spans`; HTML comments; a
+# heading inside an HTML block (CommonMark types 1, 6, 7); a backslash-escaped
+# \<a; an <a id> on a line indented four spaces or a tab.
+# Measured 2026-09-24 against GitHub's own rendering: 2,117 of 2,117 anchors
+# agree (SS2 docs at two refs, this harness's docs). Known approximations, which
+# mostly REFUSE a valid pointer (an unindented <a id> is the way round them):
+# setext headings, headings inside lists or blockquotes, an <a id> indented in a
+# list item, HTML block types 3-5, entities for letters (&eacute;), images in a
+# heading, emphasis flanking next to non-ASCII punctuation, and lower-casing
+# that depends on context (a word-final Greek capital sigma).
+# ---------------------------------------------------------------------------
+
+# BEGIN GENERATED SLUG TABLES (node tools/slug-tables.mjs; do not edit by hand)
+SLUG_REMOVE='80-a9,ab-b4,b6-b9,bb-bf,d7,f7,2c2-2c5,2d2-2df,2e5-2eb,2ed,2ef-2ff,375,378-379,37e,380-385,387,
+38b,38d,3a2,3f6,482,530,557-558,55a-55f,589-590,5be,5c0,5c3,5c6,5c8-5cf,5eb-5ee,5f3-60f,61b-61f,
+66a-66d,6d4,6dd-6de,6e9,6fd-6fe,700-70f,74b-74c,7b2-7bf,7f6-7f9,7fb-7fc,7fe-7ff,82e-83f,85c-85f,
+86b-89f,8b5,8c8-8d2,8e2,964-965,970,984,98d-98e,991-992,9a9,9b1,9b3-9b5,9ba-9bb,9c5-9c6,9c9-9ca,
+9cf-9d6,9d8-9db,9de,9e4-9e5,9f2-9fb,9fd,9ff-a00,a04,a0b-a0e,a11-a12,a29,a31,a34,a37,a3a-a3b,a3d,
+a43-a46,a49-a4a,a4e-a50,a52-a58,a5d,a5f-a65,a76-a80,a84,a8e,a92,aa9,ab1,ab4,aba-abb,ac6,aca,
+ace-acf,ad1-adf,ae4-ae5,af0-af8,b00,b04,b0d-b0e,b11-b12,b29,b31,b34,b3a-b3b,b45-b46,b49-b4a,
+b4e-b54,b58-b5b,b5e,b64-b65,b70,b72-b81,b84,b8b-b8d,b91,b96-b98,b9b,b9d,ba0-ba2,ba5-ba7,bab-bad,
+bba-bbd,bc3-bc5,bc9,bce-bcf,bd1-bd6,bd8-be5,bf0-bff,c0d,c11,c29,c3a-c3c,c45,c49,c4e-c54,c57,
+c5b-c5f,c64-c65,c70-c7f,c84,c8d,c91,ca9,cb4,cba-cbb,cc5,cc9,cce-cd4,cd7-cdd,cdf,ce4-ce5,cf0,
+cf3-cff,d0d,d11,d45,d49,d4f-d53,d58-d5e,d64-d65,d70-d79,d80,d84,d97-d99,db2,dbc,dbe-dbf,dc7-dc9,
+dcb-dce,dd5,dd7,de0-de5,df0-df1,df4-e00,e3b-e3f,e4f,e5a-e80,e83,e85,e8b,ea4,ea6,ebe-ebf,ec5,ec7,
+ece-ecf,eda-edb,ee0-eff,f01-f17,f1a-f1f,f2a-f34,f36,f38,f3a-f3d,f48,f6d-f70,f85,f98,fbd-fc5,
+fc7-fff,104a-104f,109e-109f,10c6,10c8-10cc,10ce-10cf,10fb,1249,124e-124f,1257,1259,125e-125f,
+1289,128e-128f,12b1,12b6-12b7,12bf,12c1,12c6-12c7,12d7,1311,1316-1317,135b-135c,1360-137f,
+1390-139f,13f6-13f7,13fe-1400,166d-166e,1680,169b-169f,16eb-16ed,16f9-16ff,170d,1715-171f,
+1735-173f,1754-175f,176d,1771,1774-177f,17d4-17d6,17d8-17db,17de-17df,17ea-180a,180e-180f,
+181a-181f,1879-187f,18ab-18af,18f6-18ff,191f,192c-192f,193c-1945,196e-196f,1975-197f,19ac-19af,
+19ca-19cf,19da-19ff,1a1c-1a1f,1a5f,1a7d-1a7e,1a8a-1a8f,1a9a-1aa6,1aa8-1aaf,1ac1-1aff,1b4c-1b4f,
+1b5a-1b6a,1b74-1b7f,1bf4-1bff,1c38-1c3f,1c4a-1c4c,1c7e-1c7f,1c89-1c8f,1cbb-1cbc,1cc0-1ccf,1cd3,
+1cfb-1cff,1dfa,1f16-1f17,1f1e-1f1f,1f46-1f47,1f4e-1f4f,1f58,1f5a,1f5c,1f5e,1f7e-1f7f,1fb5,1fbd,
+1fbf-1fc1,1fc5,1fcd-1fcf,1fd4-1fd5,1fdc-1fdf,1fed-1ff1,1ff5,1ffd-203e,2041-2053,2055-2070,
+2072-207e,2080-208f,209d-20cf,20f1-2101,2103-2106,2108-2109,2114,2116-2118,211e-2123,2125,2127,
+2129,212e,213a-213b,2140-2144,214a-214d,214f-215f,2189-24b5,24ea-2bff,2c2f,2c5f,2ce5-2cea,
+2cf4-2cff,2d26,2d28-2d2c,2d2e-2d2f,2d68-2d6e,2d70-2d7e,2d97-2d9f,2da7,2daf,2db7,2dbf,2dc7,2dcf,
+2dd7,2ddf,2e00-2e2e,2e30-3004,3008-3020,3030,3036-3037,303d-3040,3097-3098,309b-309c,30a0,30fb,
+3100-3104,3130,318f-319f,31c0-31ef,3200-33ff,4dc0-4dff,9ffd-9fff,a48d-a4cf,a4fe-a4ff,a60d-a60f,
+a62c-a63f,a673,a67e,a6f2-a716,a720-a721,a789-a78a,a7c0-a7c1,a7cb-a7f4,a828-a82b,a82d-a83f,
+a874-a87f,a8c6-a8cf,a8da-a8df,a8f8-a8fa,a8fc,a92e-a92f,a954-a95f,a97d-a97f,a9c1-a9ce,a9da-a9df,
+a9ff,aa37-aa3f,aa4e-aa4f,aa5a-aa5f,aa77-aa79,aac3-aada,aade-aadf,aaf0-aaf1,aaf7-ab00,ab07-ab08,
+ab0f-ab10,ab17-ab1f,ab27,ab2f,ab5b,ab6a-ab6f,abeb,abee-abef,abfa-abff,d7a4-d7af,d7c7-d7ca,
+d7fc-f8ff,fa6e-fa6f,fada-faff,fb07-fb12,fb18-fb1c,fb29,fb37,fb3d,fb3f,fb42,fb45,fbb2-fbd2,
+fd3e-fd4f,fd90-fd91,fdc8-fdef,fdfc-fdff,fe10-fe1f,fe30-fe32,fe35-fe4c,fe50-fe6f,fe75,fefd-ff0f,
+ff1a-ff20,ff3b-ff3e,ff40,ff5b-ff65,ffbf-ffc1,ffc8-ffc9,ffd0-ffd1,ffd8-ffd9,ffdd-ffff,1000c,10027,
+1003b,1003e,1004e-1004f,1005e-1007f,100fb-1013f,10175-101fc,101fe-1027f,1029d-1029f,102d1-102df,
+102e1-102ff,10320-1032c,1034b-1034f,1037b-1037f,1039e-1039f,103c4-103c7,103d0,103d6-103ff,
+1049e-1049f,104aa-104af,104d4-104d7,104fc-104ff,10528-1052f,10564-105ff,10737-1073f,10756-1075f,
+10768-107ff,10806-10807,10809,10836,10839-1083b,1083d-1083e,10856-1085f,10877-1087f,1089f-108df,
+108f3,108f6-108ff,10916-1091f,1093a-1097f,109b8-109bd,109c0-109ff,10a04,10a07-10a0b,10a14,10a18,
+10a36-10a37,10a3b-10a3e,10a40-10a5f,10a7d-10a7f,10a9d-10abf,10ac8,10ae7-10aff,10b36-10b3f,
+10b56-10b5f,10b73-10b7f,10b92-10bff,10c49-10c7f,10cb3-10cbf,10cf3-10cff,10d28-10d2f,10d3a-10e7f,
+10eaa,10ead-10eaf,10eb2-10eff,10f1d-10f26,10f28-10f2f,10f51-10faf,10fc5-10fdf,10ff7-10fff,
+11047-11065,11070-1107e,110bb-110cf,110e9-110ef,110fa-110ff,11135,11140-11143,11148-1114f,
+11174-11175,11177-1117f,111c5-111c8,111cd,111db,111dd-111ff,11212,11238-1123d,1123f-1127f,11287,
+11289,1128e,1129e,112a9-112af,112eb-112ef,112fa-112ff,11304,1130d-1130e,11311-11312,11329,11331,
+11334,1133a,11345-11346,11349-1134a,1134e-1134f,11351-11356,11358-1135c,11364-11365,1136d-1136f,
+11375-113ff,1144b-1144f,1145a-1145d,11462-1147f,114c6,114c8-114cf,114da-1157f,115b6-115b7,
+115c1-115d7,115de-115ff,11641-11643,11645-1164f,1165a-1167f,116b9-116bf,116ca-116ff,1171b-1171c,
+1172c-1172f,1173a-117ff,1183b-1189f,118ea-118fe,11907-11908,1190a-1190b,11914,11917,11936,
+11939-1193a,11944-1194f,1195a-1199f,119a8-119a9,119d8-119d9,119e2,119e5-119ff,11a3f-11a46,
+11a48-11a4f,11a9a-11a9c,11a9e-11abf,11af9-11bff,11c09,11c37,11c41-11c4f,11c5a-11c71,11c90-11c91,
+11ca8,11cb7-11cff,11d07,11d0a,11d37-11d39,11d3b,11d3e,11d48-11d4f,11d5a-11d5f,11d66,11d69,11d8f,
+11d92,11d99-11d9f,11daa-11edf,11ef7-11faf,11fb1-11fff,1239a-123ff,1246f-1247f,12544-12fff,
+1342f-143ff,14647-167ff,16a39-16a3f,16a5f,16a6a-16acf,16aee-16aef,16af5-16aff,16b37-16b3f,
+16b44-16b4f,16b5a-16b62,16b78-16b7c,16b90-16e3f,16e80-16eff,16f4b-16f4e,16f88-16f8e,16fa0-16fdf,
+16fe2,16fe5-16fef,16ff2-16fff,187f8-187ff,18cd6-18cff,18d09-1afff,1b11f-1b14f,1b153-1b163,
+1b168-1b16f,1b2fc-1bbff,1bc6b-1bc6f,1bc7d-1bc7f,1bc89-1bc8f,1bc9a-1bc9c,1bc9f-1d164,1d16a-1d16c,
+1d173-1d17a,1d183-1d184,1d18c-1d1a9,1d1ae-1d241,1d245-1d3ff,1d455,1d49d,1d4a0-1d4a1,1d4a3-1d4a4,
+1d4a7-1d4a8,1d4ad,1d4ba,1d4bc,1d4c4,1d506,1d50b-1d50c,1d515,1d51d,1d53a,1d53f,1d545,1d547-1d549,
+1d551,1d6a6-1d6a7,1d6c1,1d6db,1d6fb,1d715,1d735,1d74f,1d76f,1d789,1d7a9,1d7c3,1d7cc-1d7cd,
+1d800-1d9ff,1da37-1da3a,1da6d-1da74,1da76-1da83,1da85-1da9a,1daa0,1dab0-1dfff,1e007,1e019-1e01a,
+1e022,1e025,1e02b-1e0ff,1e12d-1e12f,1e13e-1e13f,1e14a-1e14d,1e14f-1e2bf,1e2fa-1e7ff,1e8c5-1e8cf,
+1e8d7-1e8ff,1e94c-1e94f,1e95a-1edff,1ee04,1ee20,1ee23,1ee25-1ee26,1ee28,1ee33,1ee38,1ee3a,
+1ee3c-1ee41,1ee43-1ee46,1ee48,1ee4a,1ee4c,1ee50,1ee53,1ee55-1ee56,1ee58,1ee5a,1ee5c,1ee5e,1ee60,
+1ee63,1ee65-1ee66,1ee6b,1ee73,1ee78,1ee7d,1ee7f,1ee8a,1ee9c-1eea0,1eea4,1eeaa,1eebc-1f12f,
+1f14a-1f14f,1f16a-1f16f,1f18a-1fbef,1fbfa-1ffff,2a6de-2a6ff,2b735-2b73f,2b81e-2b81f,2cea2-2ceaf,
+2ebe1-2f7ff,2fa1e-2ffff,3134b-e00ff,e01f0-10ffff'
+SLUG_LOWER='c0-d6:32,d8-de:32,100-12e/2:1,132-136/2:1,139-147/2:1,14a-176/2:1,178:-121,179-17d/2:1,181:210,
+182-184/2:1,186:206,187:1,189-18a:205,18b:1,18e:79,18f:202,190:203,191:1,193:205,194:207,196:211,
+197:209,198:1,19c:211,19d:213,19f:214,1a0-1a4/2:1,1a6:218,1a7:1,1a9:218,1ac:1,1ae:218,1af:1,
+1b1-1b2:217,1b3-1b5/2:1,1b7:219,1b8:1,1bc:1,1c4:2,1c5:1,1c7:2,1c8:1,1ca:2,1cb-1db/2:1,
+1de-1ee/2:1,1f1:2,1f2-1f4/2:1,1f6:-97,1f7:-56,1f8-21e/2:1,220:-130,222-232/2:1,23a:10795,23b:1,
+23d:-163,23e:10792,241:1,243:-195,244:69,245:71,246-24e/2:1,370-372/2:1,376:1,37f:116,386:38,
+388-38a:37,38c:64,38e-38f:63,391-3a1:32,3a3-3ab:32,3cf:8,3d8-3ee/2:1,3f4:-60,3f7:1,3f9:-7,3fa:1,
+3fd-3ff:-130,400-40f:80,410-42f:32,460-480/2:1,48a-4be/2:1,4c0:15,4c1-4cd/2:1,4d0-52e/2:1,
+531-556:48,10a0-10c5:7264,10c7:7264,10cd:7264,13a0-13ef:38864,13f0-13f5:8,1c89:1,1c90-1cba:-3008,
+1cbd-1cbf:-3008,1e00-1e94/2:1,1e9e:-7615,1ea0-1efe/2:1,1f08-1f0f:-8,1f18-1f1d:-8,1f28-1f2f:-8,
+1f38-1f3f:-8,1f48-1f4d:-8,1f59-1f5f/2:-8,1f68-1f6f:-8,1f88-1f8f:-8,1f98-1f9f:-8,1fa8-1faf:-8,
+1fb8-1fb9:-8,1fba-1fbb:-74,1fbc:-9,1fc8-1fcb:-86,1fcc:-9,1fd8-1fd9:-8,1fda-1fdb:-100,
+1fe8-1fe9:-8,1fea-1feb:-112,1fec:-7,1ff8-1ff9:-128,1ffa-1ffb:-126,1ffc:-9,2126:-7517,212a:-8383,
+212b:-8262,2132:28,2160-216f:16,2183:1,24b6-24cf:26,2c00-2c2f:48,2c60:1,2c62:-10743,2c63:-3814,
+2c64:-10727,2c67-2c6b/2:1,2c6d:-10780,2c6e:-10749,2c6f:-10783,2c70:-10782,2c72:1,2c75:1,
+2c7e-2c7f:-10815,2c80-2ce2/2:1,2ceb-2ced/2:1,2cf2:1,a640-a66c/2:1,a680-a69a/2:1,a722-a72e/2:1,
+a732-a76e/2:1,a779-a77b/2:1,a77d:-35332,a77e-a786/2:1,a78b:1,a78d:-42280,a790-a792/2:1,
+a796-a7a8/2:1,a7aa:-42308,a7ab:-42319,a7ac:-42315,a7ad:-42305,a7ae:-42308,a7b0:-42258,
+a7b1:-42282,a7b2:-42261,a7b3:928,a7b4-a7c2/2:1,a7c4:-48,a7c5:-42307,a7c6:-35384,a7c7-a7c9/2:1,
+a7cb:-42343,a7cc-a7da/2:1,a7dc:-42561,a7f5:1,ff21-ff3a:32,10400-10427:40,104b0-104d3:40,
+10570-1057a:39,1057c-1058a:39,1058c-10592:39,10594-10595:39,10c80-10cb2:64,10d50-10d65:32,
+118a0-118bf:32,16e40-16e5f:32,16ea0-16eb8:27,1e900-1e921:34'
+# END GENERATED SLUG TABLES
+
+ANCHORS_AWK='
+function hex(s,   n, i) { n = 0; for (i = 1; i <= length(s); i++) n = n * 16 + HEXV[substr(s, i, 1)]; return n }
+function removed(cp,   lo, hi, m) {
+  lo = 1; hi = NRM
+  while (lo <= hi) { m = int((lo + hi) / 2); if (cp < RLO[m]) hi = m - 1; else if (cp > RHI[m]) lo = m + 1; else return 1 }
+  return 0
+}
+function lower(cp,   lo, hi, m) {
+  lo = 1; hi = NLW
+  while (lo <= hi) {
+    m = int((lo + hi) / 2)
+    if (cp < LLO[m]) hi = m - 1
+    else if (cp > LHI[m]) lo = m + 1
+    else return ((cp - LLO[m]) % LST[m] == 0) ? cp + LDT[m] : cp
+  }
+  return cp
+}
+function utf8(cp) {
+  if (cp < 128) return CHR[cp]
+  if (cp < 2048) return CHR[192 + int(cp / 64)] CHR[128 + cp % 64]
+  if (cp < 65536) return CHR[224 + int(cp / 4096)] CHR[128 + int(cp / 64) % 64] CHR[128 + cp % 64]
+  return CHR[240 + int(cp / 262144)] CHR[128 + int(cp / 4096) % 64] CHR[128 + int(cp / 64) % 64] CHR[128 + cp % 64]
+}
+function slug(s,   out, n, i, c, b, len, cp, k, d, lc) {
+  out = ""; n = length(s); i = 1
+  while (i <= n) {
+    c = substr(s, i, 1); b = ORD[c] + 0
+    if (b < 128) {
+      c = tolower(c)
+      if (c == " ") out = out "-"
+      else if (c ~ /[a-z0-9_-]/) out = out c
+      i++; continue
+    }
+    len = (b >= 240 && b < 248) ? 4 : (b >= 224 && b < 240) ? 3 : (b >= 192 && b < 224) ? 2 : 1
+    cp = (len == 4) ? b - 240 : (len == 3) ? b - 224 : b - 192
+    for (k = 1; k < len; k++) {
+      d = ORD[substr(s, i + k, 1)] + 0
+      if (d < 128 || d > 191) { len = 1; break }
+      cp = cp * 64 + d - 128
+    }
+    if (len == 1) { out = out c; i++; continue }
+    if (cp == 304) { out = out "i" utf8(775); i += len; continue }
+    lc = lower(cp)
+    if (!removed(lc)) out = out ((lc == cp) ? substr(s, i, len) : utf8(lc))
+    i += len
+  }
+  return out
+}
+function uniq(s,   r) {
+  r = s
+  while (r in OCC) { OCC[s]++; r = s "-" OCC[s] }
+  OCC[r] = 0
+  return r
+}
+# Rendered text of a heading: links keep their text, tags and entities go,
+# except inside `code spans`, whose content is literal (CommonMark).
+function markup(t,   m) {
+  # Autolinks keep their text: <https://a.b> renders as "https://a.b".
+  while (match(t, /<[A-Za-z][A-Za-z0-9.+-]+:[^ <>]*>/) || match(t, /<[^ <>@]+@[^ <>]+>/)) {
+    t = substr(t, 1, RSTART - 1) substr(t, RSTART + 1, RLENGTH - 2) substr(t, RSTART + RLENGTH)
+  }
+  while (match(t, /\[[^]]*\]\([^)]*\)/) || match(t, /\[[^]]*\]\[[^]]*\]/)) {
+    m = substr(t, RSTART, RLENGTH)
+    t = substr(t, 1, RSTART - 1) substr(m, 2, index(m, "]") - 2) substr(t, RSTART + RLENGTH)
+  }
+  gsub(/<[^>]*>/, "", t)
+  gsub(/&[A-Za-z][A-Za-z0-9]*;|&#[0-9]+;|&#[xX][0-9A-Fa-f]+;/, "", t)
+  return t
+}
+function inline(t,   out, run, cl, rest, code) {
+  out = ""
+  while (match(t, /`+/)) {
+    run = substr(t, RSTART, RLENGTH); rest = substr(t, RSTART + RLENGTH)
+    cl = index(rest, run)
+    if (!cl) break
+    # Underscores in a code span are text: hidden from emphasis as \001.
+    code = substr(rest, 1, cl - 1); gsub(/_/, "\001", code)
+    out = out markup(substr(t, 1, RSTART - 1)) code
+    t = substr(rest, cl + length(run))
+  }
+  out = unemph(out markup(t))
+  gsub("\001", "_", out)
+  return out
+}
+# CommonMark emphasis with "_": delete the delimiter runs that pair up, so
+# "_Decision_" is the text "Decision" while snake_case keeps its underscores.
+# ("*" needs no pairing: it is deleted from every slug anyway.)
+function ws(c) { return c == " " || c == "\t" || c == "" }
+function pu(c) { return c != "" && index(PUNCT, c) > 0 }
+function unemph(t,   n, i, j, c, k, pb, nb, lf, rf, m, top, o, use, out) {
+  n = length(t); k = 0; i = 1
+  while (i <= n) {
+    c = substr(t, i, 1)
+    if (c == "\\") { i += 2; continue }
+    if (c != "_") { i++; continue }
+    j = i; while (j < n && substr(t, j + 1, 1) == "_") j++
+    pb = (i > 1) ? substr(t, i - 1, 1) : ""; nb = (j < n) ? substr(t, j + 1, 1) : ""
+    lf = !ws(nb) && (!pu(nb) || ws(pb) || pu(pb))
+    rf = !ws(pb) && (!pu(pb) || ws(nb) || pu(nb))
+    k++; RUNAT[k] = i; RUNLEN[k] = j - i + 1; REM[k] = RUNLEN[k]
+    OPN[k] = lf && (!rf || pu(pb)); CLS[k] = rf && (!lf || pu(nb))
+    i = j + 1
+  }
+  top = 0
+  for (m = 1; m <= k; m++) {
+    while (CLS[m] && REM[m] > 0 && top > 0) {
+      o = ST[top]
+      use = (REM[o] >= 2 && REM[m] >= 2) ? 2 : 1
+      REM[o] -= use; REM[m] -= use
+      if (REM[o] == 0) top--
+    }
+    if (OPN[m] && REM[m] > 0) ST[++top] = m
+  }
+  # Each run keeps the underscores no pair consumed (all of them, if unpaired).
+  out = ""; i = 1
+  for (m = 1; m <= k; m++) {
+    out = out substr(t, i, RUNAT[m] - i) substr(t, RUNAT[m], REM[m])
+    i = RUNAT[m] + RUNLEN[m]
+  }
+  return out substr(t, i)
+}
+# The line without its HTML comments; one left open sets INCOMMENT.
+function uncomment(s,   i, j, rest) {
+  while ((i = index(s, "<!--"))) {
+    rest = substr(s, i + 4); j = index(rest, "-->")
+    if (j) s = substr(s, 1, i - 1) substr(rest, j + 3)
+    else { s = substr(s, 1, i - 1); INCOMMENT = 1; break }
+  }
+  return s
+}
+# The line without its `code spans`, whose content is text, not markup.
+function nocode(t,   out, run, rest, cl) {
+  out = ""
+  while (match(t, /`+/)) {
+    run = substr(t, RSTART, RLENGTH); rest = substr(t, RSTART + RLENGTH)
+    cl = index(rest, run)
+    if (!cl) break
+    out = out substr(t, 1, RSTART - 1)
+    t = substr(rest, cl + length(run))
+  }
+  return out t
+}
+function ids(line,   lc, tag, at, v, q, esc) {
+  lc = tolower(line)
+  while (match(lc, /<a[ \t][^>]*>/)) {
+    tag = substr(line, RSTART, RLENGTH)
+    esc = RSTART > 1 && substr(line, RSTART - 1, 1) == "\\"
+    line = substr(line, RSTART + RLENGTH); lc = substr(lc, RSTART + RLENGTH)
+    if (esc) continue
+    if (!match(tolower(tag), /[ \t]id[ \t]*=[ \t]*/)) continue
+    v = substr(tag, RSTART + RLENGTH)
+    q = substr(v, 1, 1)
+    if (q == "\"" || q == "\047") { v = substr(v, 2); v = substr(v, 1, index(v, q) - 1) }
+    else { sub(/[ \t>].*$/, "", v) }
+    if (v != "") print v
+  }
+}
+function fence_run(s,   c, n) {
+  c = substr(s, 1, 1); n = 0
+  while (substr(s, n + 1, 1) == c) n++
+  return n
+}
+BEGIN {
+  for (i = 1; i < 256; i++) { c = sprintf("%c", i); ORD[c] = i; CHR[i] = c }
+  for (i = 0; i < 16; i++) HEXV[substr("0123456789abcdef", i + 1, 1)] = i
+  s = ENVIRON["SLUG_REMOVE"]; gsub(/[^0-9a-f,-]/, "", s)
+  NRM = split(s, P, ",")
+  for (i = 1; i <= NRM; i++) {
+    j = index(P[i], "-")
+    if (j) { RLO[i] = hex(substr(P[i], 1, j - 1)); RHI[i] = hex(substr(P[i], j + 1)) }
+    else { RLO[i] = hex(P[i]); RHI[i] = RLO[i] }
+  }
+  s = ENVIRON["SLUG_LOWER"]; gsub(/[^0-9a-f,:\/-]/, "", s)
+  NLW = split(s, P, ",")
+  for (i = 1; i <= NLW; i++) {
+    j = index(P[i], ":"); r = substr(P[i], 1, j - 1); LDT[i] = substr(P[i], j + 1) + 0
+    LST[i] = 1; if (index(r, "/")) { LST[i] = 2; r = substr(r, 1, index(r, "/") - 1) }
+    j = index(r, "-")
+    if (j) { LLO[i] = hex(substr(r, 1, j - 1)); LHI[i] = hex(substr(r, j + 1)) }
+    else { LLO[i] = hex(r); LHI[i] = LLO[i] }
+  }
+  FENCE = ""
+  PUNCT = "!\"#$%&\047()*+,-./:;<=>?@[\\]^_`{|}~"
+  BLOCK1 = "^<(pre|script|style|textarea)([ \t>]|$)"
+  END1 = "</(pre|script|style|textarea)>"
+  BLOCK6 = "^</?(address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h1|h2|h3|h4|h5|h6|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)([ \t>]|/>|$)"
+  BLOCK7 = "^(<[A-Za-z][A-Za-z0-9-]*([ \t][^<>]*)?>|</[A-Za-z][A-Za-z0-9-]*[ \t]*>)[ \t]*$"
+}
+MODE == "slug" { print uniq(slug($0)); next }
+{ sub(/\r$/, "") }
+# YAML front matter: GitHub renders it as a table, not as markdown.
+NR == 1 && $0 == "---" { FRONT = 1; next }
+FRONT { if ($0 == "---" || $0 == "...") FRONT = 0; next }
+FENCE != "" {
+  t = $0; sub(/^ ? ? ?/, "", t)
+  if (substr(t, 1, 1) == substr(FENCE, 1, 1) && fence_run(t) >= length(FENCE) && substr(t, fence_run(t) + 1) ~ /^[ \t]*$/) FENCE = ""
+  PARA = 0; next
+}
+# Inside an HTML block (CommonMark types 1, 6 and 7) the lines are raw HTML: an
+# <a id> there is real, but nothing is a heading until the block ends.
+HTMLB {
+  line = $0
+  if (HTMLB == 6 && line ~ /^[ \t]*$/) { HTMLB = 0; PARA = 0; next }
+  if (!INCOMMENT) ids(uncomment(line))
+  else if (index(line, "-->")) { INCOMMENT = 0; ids(uncomment(substr(line, index(line, "-->") + 3))) }
+  if (HTMLB == 1 && tolower(line) ~ END1) HTMLB = 0
+  next
+}
+{
+  line = $0; nohead = 0; blank = (line ~ /^[ \t]*$/)
+  # Inside an HTML comment nothing is an anchor, until the line that closes it.
+  if (INCOMMENT) {
+    i = index(line, "-->"); if (!i) next
+    line = substr(line, i + 3); INCOMMENT = 0; nohead = 1
+  }
+  t = line; sub(/^ ? ? ?/, "", t); lt = tolower(t)
+  if (!nohead && t ~ /^(```|~~~)/) {
+    n = fence_run(t)
+    if (!(substr(t, 1, 1) == "`" && index(substr(t, n + 1), "`"))) { FENCE = substr(t, 1, n); PARA = 0; next }
+  }
+  if (!nohead && (lt ~ BLOCK1 || lt ~ BLOCK6 || (!PARA && t ~ BLOCK7 && lt !~ /^<\/?(script|style|pre)[ \t>]/))) {
+    HTMLB = (lt ~ BLOCK1) ? 1 : 6
+    ids(uncomment(line))
+    if (HTMLB == 1 && lt ~ END1) HTMLB = 0
+    PARA = 0; next
+  }
+  if (t ~ /^<!--/) nohead = 1
+  scan = uncomment(nocode(line))
+  # Four spaces or a tab of indent may be an indented code block: an <a id>
+  # there is not trusted (a real one inside a list item is refused; add it unindented).
+  if (line !~ /^(    |\t)/) ids(scan)
+  head = 0
+  if (!nohead && t ~ /^#+([ \t]|$)/) {
+    n = fence_run(t)
+    if (n <= 6) {
+      head = 1
+      t = substr(t, n + 1)
+      sub(/[ \t]+$/, "", t)
+      if (t ~ /^[ \t]*#*$/) t = ""
+      else sub(/[ \t]+#+$/, "", t)
+      sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
+      # GitHub gives a heading with no rendered text no id at all.
+      t = slug(inline(t)); if (t != "") print uniq(t)
+    }
+  }
+  PARA = !blank && !head
+}
+'
+
+anchors_awk() { SLUG_REMOVE=$SLUG_REMOVE SLUG_LOWER=$SLUG_LOWER awk -v MODE="$1" "$ANCHORS_AWK"; }
+
+# ---------------------------------------------------------------------------
+# Decided: <path>#<anchor>, resolved in a tree: $2 = ":" (the index being
+# committed; git honours GIT_INDEX_FILE, so `git commit -a` works) or "<sha>:".
+# $3 = where that is, for the refusal.
+# ---------------------------------------------------------------------------
+check_decided() {
+  v=$1 at=$2 where=$3
+  shape="Decided: $v must be <repo-relative-path>#<anchor>, e.g. Decided: docs/design/battle-ui.md#decided-hud-2026-09-24"
+  case $v in *'#'*) ;; *) problem "$shape"; return ;; esac
+  path=${v%%#*} anchor=${v#*#}
+  case $path in ''|/*) problem "$shape"; return ;; esac
+  case $anchor in ''|*'#'*|*' '*|*'	'*) problem "$shape"; return ;; esac
+  typ=$(git cat-file -t "$at$path" 2>/dev/null) || typ=''
+  # The index holds files, not directories: a path with files under it is one.
+  [ -z "$typ" ] && [ "$at" = ":" ] && [ -n "$(git ls-files -- "$path" | head -n 1)" ] && typ=tree
+  if [ -z "$typ" ]; then
+    if [ "$at" = ":" ]; then remedy="Stage it (git add $path) or correct the path."
+    else remedy="Correct the path; the decision record must be in the commit's own tree."; fi
+    problem "Decided: $v: $path is not in $where. $remedy"
+    return
+  fi
+  if [ "$typ" != blob ]; then
+    [ "$typ" = tree ] && typ=directory
+    problem "Decided: $v: $path is a $typ in $where, not a file."
+    return
+  fi
+  if ! git cat-file blob "$at$path" | anchors_awk anchors | grep -Fqx -- "$anchor"; then
+    problem "Decided: $v: $path has no <a id=\"$anchor\"> and no heading whose GitHub slug is \"$anchor\"."
+    problem "  Point at an existing section, or put <a id=\"$anchor\"></a> on its own line above it."
+  fi
+}
+
+# Git's own revert message: subject `Revert "<subject>"` AND a body line
+# `This reverts commit <hex>` (plain or --reference form). Both, so a look-alike
+# subject cannot walk past the gate.
+is_git_revert() {
+  awk 'NR == 1 { if ($0 !~ /^Revert ".*"$/) { bad = 1; exit } next }
+       /^This reverts commit [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/ { found = 1 }
+       END { exit (bad || !found) }' "$1"
+}
+
+# Lines that look like gate trailers but sit outside the final trailer block.
+misplaced() {
+  awk '{ sub(/\r$/, "") } tolower($0) ~ /^(decided|fix|docs|chore|test)[ \t]*:/ { print }' "$1"
+}
+
+# $1 = file holding a clean message; $2/$3 as check_decided; $4 = what to call it.
+check_message() {
+  msg=$1 at=$2 where=$3 what=$4
+  found=0
+  PROBLEMS=''
+  tr_out=$(trailers < "$msg") || die "git interpret-trailers failed"
+  tab=$(printf '\t')
+  while IFS="$tab" read -r key val; do
+    [ -n "$key" ] || continue
+    case " $GATE_KEYS " in *" $key "*) ;; *) continue ;; esac
+    found=1
+    case $key in
+      decided) check_decided "$val" "$at" "$where" ;;
+      *) [ -n "$val" ] || problem "$(label "$key"): is empty. Say why, e.g. $(label "$key"): <what this commit does and why>" ;;
+    esac
+  done <<EOF
+$tr_out
+EOF
+  if [ "$found" -eq 0 ]; then
+    refuse_missing "$what"
+    misplaced "$msg" | while IFS= read -r line; do
+      say "  \"$line\" is not in the trailer block. Move it into the LAST paragraph,"
+      say "  with no blank line between it and Co-Authored-By, and nothing but \"Key: value\" lines there."
+    done
+    return 1
+  fi
+  if [ -n "$PROBLEMS" ]; then
+    say "grill-gate: REFUSED: $what has a gate trailer that does not hold:"
+    printf '%s' "$PROBLEMS" >&2
+    return 1
+  fi
+  return 0
+}
+
+# One private temp directory, made in THIS shell so the trap can see it (a
+# file made inside $(...) is made in a subshell whose variables are lost).
+TMPD=''
+cleanup() { [ -z "$TMPD" ] || rm -rf "$TMPD"; }
+trap cleanup EXIT
+trap 'exit 2' HUP INT TERM
+make_tmpd() { TMPD=$(mktemp -d "${TMPDIR:-/tmp}/grill-gate.XXXXXX") || die "mktemp failed"; }
+
+# ---------------------------------------------------------------------------
+# CI: check a list of commits, each against its own tree.
+# ---------------------------------------------------------------------------
+
+# History written before a project adopted the gate is exempt ONLY by
+# identity: commits reachable from a tip recorded in .githooks/grill-gate.baseline.
+# No date exempts anything (the owner's decision, 2026-09-24): an amend, a
+# rebase or a cherry-pick of an old commit is a new commit and needs a trailer.
+
+is_zero() { case $1 in '' | *[!0]*) return 1 ;; *) return 0 ;; esac; }
+
+N_OK=0 N_BAD=0 N_MERGE=0 N_REVERT=0
+
+# fd 3: "sha parent..." lines, oldest first (not stdin, which the
+# git commands inside the loop must not be able to swallow).
+check_commits() {
+  msgf=$TMPD/message
+  while read -r sha parents <&3; do
+    [ -n "$sha" ] || continue
+    short=$(git rev-parse --short "$sha")
+    case $parents in *' '*)
+      echo "exempt $short merge"; N_MERGE=$((N_MERGE + 1)); continue ;;
+    esac
+    git show -s --format=%B "$sha" > "$msgf" || die "cannot read commit $sha"
+    if is_git_revert "$msgf"; then echo "exempt $short revert"; N_REVERT=$((N_REVERT + 1)); continue; fi
+    subject=$(git show -s --format=%s "$sha")
+    if check_message "$msgf" "$sha:" "commit $short's tree" "commit $short ($subject)"; then
+      echo "ok $short $subject"; N_OK=$((N_OK + 1))
+    else
+      echo "REFUSED $short $subject"; N_BAD=$((N_BAD + 1))
+      [ "${GITHUB_ACTIONS:-}" = true ] &&
+        echo "::error title=grill-gate::$short $subject: needs a Decided: or class trailer (Fix:, Docs:, Chore:, Test:) that holds"
+    fi
+  done
+}
+
+# $@ = rev-list arguments naming the commits to check.
+check_range() {
+  list=$TMPD/commits
+  # shellcheck disable=SC2086  # BASELINE_EXCL holds hex ids only, one word each
+  git log --reverse --format='%H %P' "$@" $BASELINE_EXCL -- > "$list" || die "git log $* failed"
+  check_commits 3< "$list"
+  echo "grill-gate: $((N_OK + N_BAD)) commit(s) checked, $N_BAD refused; exempt: $N_MERGE merge, $N_REVERT revert."
+  [ "$N_BAD" -eq 0 ]
+}
+
+need_commit() {
+  git rev-parse -q --verify "$1^{commit}" > /dev/null ||
+    die "$1 is not a commit in this clone. In CI, actions/checkout needs fetch-depth: 0."
+}
+
+case "${1:-}" in
+  --message-file)
+    [ $# -eq 2 ] || die "usage: check-trailers --message-file <file>"
+    [ -r "$2" ] || die "cannot read $2"
+    make_tmpd
+    clean=$TMPD/message
+    # A merge commit (git merge, or git commit concluding one) is exempt.
+    [ -f "$(git rev-parse --git-path MERGE_HEAD)" ] && exit 0
+    # What git will commit. The hook sees the message before git cleans it up,
+    # so it does what git will do, as far as it can tell (see THE HOOK'S LIMITS).
+    # 1. Cut at the scissors line (git commit -v), always: -v is not visible
+    #    here, and git writes that line even when GIT_EDITOR=: (set by a writer,
+    #    with git commit -v -e). Git cuts only at its own line, exactly, which
+    #    begins with the comment string in force: `git stripspace
+    #    --comment-lines` writes it as git does.
+    cc=$(printf 'x\n' | git stripspace --comment-lines) || die "git stripspace failed"
+    cc=${cc%' x'}
+    CUT="$cc ------------------------ >8 ------------------------" awk '$0 == ENVIRON["CUT"] { exit } { print }' "$2" > "$TMPD/cut" ||
+      die "cannot read $2"
+    # 2. Clean up as git will. Its mode is commit.cleanup, else its default:
+    #    strip (comment lines dropped) when an editor runs, whitespace when none
+    #    does (-m, -F), and git sets GIT_EDITOR=: for this hook when none does.
+    case $(git config commit.cleanup 2>/dev/null) in
+      strip) mode=strip ;;
+      verbatim) mode=verbatim ;;
+      whitespace | scissors) mode=whitespace ;;   # scissors: the cut is step 1
+      *) if [ "${GIT_EDITOR-}" = : ]; then mode=unsure; else mode=strip; fi ;;
+    esac
+    case $mode in
+      strip) git stripspace --strip-comments < "$TMPD/cut" ;;
+      verbatim) cat "$TMPD/cut" ;;
+      whitespace) git stripspace < "$TMPD/cut" ;;
+      unsure)
+        # Whitespace, but not a run of comment lines at the END: a writer whose
+        # own environment has GIT_EDITOR=: runs an editor path (git commit -e)
+        # that looks like none, and git's template, which git then strips, is
+        # that run.
+        git stripspace < "$TMPD/cut" | CC=$cc awk '{ l[++n] = $0 } END {
+          while (n > 0 && (l[n] == "" || index(l[n], ENVIRON["CC"]) == 1)) n--
+          for (i = 1; i <= n; i++) print l[i]
+        }' ;;
+    esac > "$clean" || die "git stripspace failed"
+    is_git_revert "$clean" && exit 0
+    check_message "$clean" ":" "the index" "this commit message" || exit 1
+    exit 0
+    ;;
+  --pr-message)
+    # CI, on a pull request: its title and description, which a squash merge
+    # (repository setting "Pull request title and description") makes the
+    # squashed commit's message, checked against <rev>'s tree (the merge result).
+    [ $# -eq 3 ] || die "usage: check-trailers --pr-message <file: title, blank line, description> <rev>"
+    [ -r "$2" ] || die "cannot read $2"
+    need_commit "$3"
+    make_tmpd
+    clean=$TMPD/message
+    tr -d '\r' < "$2" > "$clean"          # GitHub stores descriptions with CRLF
+    short=$(git rev-parse --short "$3")
+    check_message "$clean" "$(git rev-parse "$3"):" "the pull request's tree ($short)" \
+      "the pull request description (a squash merge's commit message)" || exit 1
+    echo "grill-gate: the pull request description carries a trailer that holds."
+    exit 0
+    ;;
+  --anchors) anchors_awk anchors; exit ;;
+  --slug) anchors_awk slug; exit ;;
+esac
+
+make_tmpd
+BASELINE_EXCL=''
+while :; do
+  case "${1:-}" in
+    --baseline)
+      # Branch tips recorded when the project adopted the gate: everything
+      # reachable from one is pre-gate history, whatever its date. A tip this
+      # clone does not have grandfathers nothing and is not an error.
+      [ $# -ge 2 ] && [ -r "$2" ] || die "usage: --baseline <file of commit ids> (cannot read ${2:-nothing})"
+      total=0 have=0
+      for sha in $(sed 's/#.*//' "$2" | tr -d '\r'); do
+        total=$((total + 1))
+        case $sha in *[!0-9a-f]*) die "--baseline $2: \"$sha\" is not a commit id" ;; esac
+        if git rev-parse -q --verify "$sha^{commit}" > /dev/null; then
+          have=$((have + 1)); BASELINE_EXCL="$BASELINE_EXCL ^$sha"
+        fi
+      done
+      echo "grill-gate: baseline: $have of $total tips are in this clone; their history is pre-gate."
+      shift 2
+      ;;
+    *) break ;;
+  esac
+done
+
+case "${1:-}" in
+  --commit)
+    [ $# -eq 2 ] || die "usage: check-trailers --commit <rev>"
+    need_commit "$2"
+    check_range --no-walk "$2" || exit 1
+    ;;
+  --pr)
+    [ $# -eq 3 ] || die "usage: check-trailers --pr <base> <head>"
+    need_commit "$2"; need_commit "$3"
+    check_range "$3" "^$2" || exit 1
+    ;;
+  --push)
+    # <default-ref> is given for a push to any OTHER branch: what the default
+    # branch already has was checked on its way there. A push TO the default
+    # branch gives none: a squash merge writes a new commit there that no pull
+    # request run ever saw.
+    [ $# -eq 3 ] || [ $# -eq 4 ] || die "usage: check-trailers --push <before> <after> [<default-ref>]"
+    before=$2 after=$3 default=${4:-}
+    if is_zero "$after"; then echo "grill-gate: the branch was deleted; nothing to check."; exit 0; fi
+    need_commit "$after"
+    [ -z "$default" ] || need_commit "$default"
+    if is_zero "$before" || ! git rev-parse -q --verify "$before^{commit}" > /dev/null; then
+      is_zero "$before" && what="a new branch" || what="$before is not in this clone (a force-push?)"
+      if [ -n "$default" ]; then
+        echo "grill-gate: $what: checking the commits not on $default."
+        check_range "$after" "^$default" || exit 1
+      else
+        echo "grill-gate: $what: checking every commit reachable from the push."
+        check_range "$after" || exit 1
+      fi
+    elif [ -n "$default" ]; then
+      check_range "$after" "^$before" "^$default" || exit 1
+    else
+      check_range "$after" "^$before" || exit 1
+    fi
+    ;;
+  *)
+    die "usage: check-trailers --message-file <file> | --pr-message <file> <rev> | [--baseline <file>] (--commit <rev> | --pr <base> <head> | --push <before> <after> [<default-ref>]) | --anchors | --slug"
+    ;;
+esac

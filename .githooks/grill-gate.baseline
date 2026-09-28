@@ -1,0 +1,20 @@
+# grill-gate baseline: the branch tips (local and remote-tracking) when this project
+# adopted the gate (2026-09-28T19:35:02Z, claude-harness adopt.sh). CI exempts ONLY commits
+# reachable from one of these. Add a tip only for history that predates the gate
+# (e.g. pre-gate work rebased since), in a pull request of its own whose trailer says
+# why: CI reads this file from a pull request's base, so it takes effect once merged.
+0d3e366d17c9d39acff897392949c688b4546703
+0e0abe3b2a9aa517ad8b1c0cfaada29b8b31c4b4
+3ff94a6f66250e6feb42752863af651b1a8d430c
+42968997ef53c5bd2f5ec36ea99e06c364d0c5c9
+4c3acd9c3c5c2113805c2047836e9fb01b423ad6
+6fb2992f331573509718eb475aa9304934beccf2
+8f906afb77b68f994c5737cd67030b3c611cb9a2
+90fd77a4fd74954f48273462455ff8b61a85b3f0
+ac451b341a61a63c6e49159b1821fd1c9d2c40fa
+ac463bfb29e9a445f3235a8a9e925a6a5a45d69c
+d1335130d80f3d6fd02232a82fc9e46ac71fc33f
+e3edcb4cbddf4b5db6d9cae792d26b71410b3c67
+e44fba24ac64ca745806f354e13b86cd606c6ef2
+fb7e3d245a70918196a70c7b271f391f00f098de
+ff2684670a619cd6576e78deb19a82b11771ef09

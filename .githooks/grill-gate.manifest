@@ -1,0 +1,8 @@
+# grill-gate manifest: what claude-harness adopt.sh installed here. Written by adopt.sh; do not edit.
+# One line per thing adopt.sh installed: the git blob id of its content as installed
+# (CR dropped), then its path. adopt.sh replaces a listed file only while it still has
+# that content; once edited, the file is the project's, and adopt.sh refuses to touch it.
+bec81c995485c0e9a4730d8ea703f5c3bcde16ff .githooks/commit-msg
+720ad56838441e8008c0ed355ff22c01582e9f72 .githooks/check-trailers
+aa9e419f8f06e6fefd02b34422b617b4c6572582 .github/workflows/grill-gate.yml
+cc3115797d9d8b18517d76afaaf07a19432495f9 .github/pull_request_template.md

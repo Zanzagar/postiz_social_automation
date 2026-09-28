@@ -1,5 +1,7 @@
 # Project: Postiz Social Media Automation
 
+@AGENTS.md
+
 Automation layer for Gita Valley (ISKCON Gita Nagari) social media scheduling using Postiz, Docker infrastructure with PostgreSQL, Redis, and Temporal.
 
 ## Tech Stack

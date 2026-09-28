@@ -1,0 +1,47 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(~/.ssh/*)",
+      "Read(~/.aws/*)",
+      "Read(~/.env)",
+      "Read(**/credentials*)",
+      "Read(**/.env*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Write(~/.ssh/*)",
+      "Write(~/.aws/*)",
+      "Write(**/.env*)",
+      "Write(**/*.pem)",
+      "Write(**/*.key)",
+      "Write(**/credentials*)",
+      "Bash(git * push --force *)",
+      "Bash(git * push -f *)",
+      "Bash(git * push --force-with-lease *)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git push --force-with-lease *)",
+      "Bash(git branch -D main)",
+      "Bash(git branch -D master)",
+      "Bash(git commit --no-verify *)",
+      "Bash(git commit * --no-verify)",
+      "Bash(git commit * --no-verify *)",
+      "Bash(git commit -n *)",
+      "Bash(git commit * -n)",
+      "Bash(git commit * -n *)",
+      "Bash(git * commit --no-verify *)",
+      "Bash(git * commit * --no-verify)",
+      "Bash(git * commit * --no-verify *)",
+      "Bash(git * commit -n *)",
+      "Bash(git * commit * -n)",
+      "Bash(git * commit * -n *)"
+    ],
+    "ask": [
+      "Workflow",
+      "Bash(git reset --hard *)",
+      "Bash(git push --delete *)",
+      "Bash(git push origin --delete *)",
+      "Bash(gh repo delete *)"
+    ]
+  },
+  "_harness": "claude-harness settings/permissions-deny.snippet.json + settings/git-hygiene.snippet.json (floor as amended 2026-09-24) merged 2026-09-28 with the grilling gate adopted (.githooks + .github/workflows/grill-gate.yml, core.hooksPath=.githooks per clone), on the owner's decision of 2026-09-28: every project gets the rules and the commit gate. Deny = credential guards, force-push in any spelling, deleting main/master, --no-verify/-n; ask = Workflow, reset --hard, remote-branch deletion, repository deletion."
+}

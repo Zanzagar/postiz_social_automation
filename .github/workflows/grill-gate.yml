@@ -1,0 +1,120 @@
+# grill-gate: every NEW commit ends with a `Decided: <path>#<anchor>` trailer or a
+# class trailer (Fix:, Docs:, Chore:, Test:). claude-harness docs/git-hygiene.md,
+# rule 14. The commit-msg hook checks the same rule with the same file
+# (.githooks/check-trailers) at commit time; this re-checks it here, where
+# --no-verify and a missing core.hooksPath cannot reach.
+#
+# On a pull request it also checks the title and description, which a squash
+# merge set to "Pull request title and description" makes the commit message.
+#
+# Installed by claude-harness adopt.sh, which also records the baseline
+# (.githooks/grill-gate.baseline): the only history this job exempts.
+#
+# The checker and the baseline are read from a TRUSTED revision, never from the
+# change under review: a pull request's base; for a push to another branch, the
+# default branch; for a push to the default branch, what it held before. So a
+# change cannot exempt its own commits or swap the checker that judges them;
+# its edits to .githooks/ take effect once it has merged. THIS FILE is the
+# limit: on pull_request GitHub runs the pull request's own copy of it, so an
+# edit here is judged by itself. Review every change to .github/workflows/.
+# The owner accepted that limit (2026-09-24) instead of pull_request_target or
+# a required-workflow ruleset: a change to the gate's own files, this one
+# included, lands in a pull request that touches nothing else and merges only
+# on the owner's go. claude-harness docs/git-hygiene.md rule 14, "Changes to
+# the gate itself".
+name: grill-gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]   # edited: a fixed description re-runs the check
+  push:
+    branches: ['**']
+
+permissions:
+  contents: read
+
+jobs:
+  trailers:
+    # A push to the default branch is checked too: a squash merge writes a new
+    # commit there. The pull request run already checked that commit's message
+    # (the description), so this is the backstop for a repository whose squash
+    # setting differs, or a merge made outside a pull request.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0              # the ranges need the default branch and the whole history
+          persist-credentials: false  # this job only reads
+      - name: Every new commit carries a Decided or class trailer
+        env:
+          # History from before the gate is exempt ONLY if it is reachable from a
+          # branch tip recorded in .githooks/grill-gate.baseline (adopt.sh writes it
+          # once). No date exempts anything. Untrusted text (the PR title and body)
+          # arrives through env, never through ${{ }} inside the script.
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          # The rule and the exemptions come from the trusted revision (see the top).
+          if [ "$EVENT_NAME" = pull_request ]; then
+            trusted=$PR_BASE what="the pull request's base"
+          elif [ "$REF_NAME" != "$DEFAULT_BRANCH" ]; then
+            # Fully qualified and pinned to an id: git would take a TAG named
+            # origin/<default> before the branch (gitrevisions(7)).
+            what=refs/remotes/origin/$DEFAULT_BRANCH
+            trusted=$(git rev-parse -q --verify "$what^{commit}") || trusted=$what
+          else
+            case $BEFORE in
+              '' | *[!0]*) trusted=$BEFORE what="$REF_NAME before this push" ;;
+              *) echo "grill-gate: $REF_NAME is new with this push: no earlier revision of it holds the gate, so nothing is checked."
+                 exit 0 ;;
+            esac
+          fi
+          # Missing (e.g. force-pushed away): fail. The change is never its own judge.
+          if ! git rev-parse -q --verify "$trusted^{commit}" > /dev/null; then
+            echo "grill-gate: the trusted revision $trusted is not a commit in this clone (on a push to the default branch: a force-push?), and the change under review is never trusted to judge itself. In CI, actions/checkout needs fetch-depth: 0." >&2
+            exit 2
+          fi
+          if ! git cat-file -e "$trusted:.githooks/check-trailers" 2> /dev/null; then
+            echo "grill-gate: $trusted has no .githooks/check-trailers: the gate is not in force there, so nothing is checked. The change that adopts it is the owner's; every one after it is checked."
+            exit 0
+          fi
+          # A symlink's blob is its target path, which sh would run from the checkout.
+          case $(git ls-tree "$trusted" -- .githooks/check-trailers) in
+            '100644 blob '* | '100755 blob '*) ;;
+            *) echo "grill-gate: .githooks/check-trailers at $trusted is not a regular file, so it is not run." >&2
+               exit 2 ;;
+          esac
+          echo "grill-gate: the checker and the baseline are read from $what ($trusted)."
+          gate=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/grill-gate.XXXXXX") || exit 2
+          trap 'rm -rf "$gate"' EXIT
+          git show "$trusted:.githooks/check-trailers" > "$gate/check-trailers" || exit 2
+          # The branch tips adopt.sh recorded: their whole history is pre-gate.
+          set --
+          if git cat-file -e "$trusted:.githooks/grill-gate.baseline" 2> /dev/null; then
+            git show "$trusted:.githooks/grill-gate.baseline" > "$gate/baseline" || exit 2
+            set -- --baseline "$gate/baseline"
+          fi
+          if [ "$EVENT_NAME" = pull_request ]; then
+            if ! git diff --quiet "$PR_BASE...$PR_HEAD" -- .githooks/grill-gate.baseline; then
+              echo "grill-gate: this pull request changes .githooks/grill-gate.baseline. The baseline is read from the base, so the amendment exempts nothing here; it takes effect once merged. To grandfather rebased pre-gate work, land the amendment in a pull request of its own first."
+            fi
+            status=0
+            sh "$gate/check-trailers" "$@" --pr "$PR_BASE" "$PR_HEAD" || status=1
+            # With squash merges set to "Pull request title and description", the
+            # title and description ARE the squashed commit's message: check them
+            # now, against the merge result, so the squash commit is valid before it lands.
+            printf '%s\n\n%s\n' "$PR_TITLE" "$PR_BODY" > "$gate/pr-message"
+            sh "$gate/check-trailers" --pr-message "$gate/pr-message" HEAD || status=1
+            exit $status
+          elif [ "$REF_NAME" = "$DEFAULT_BRANCH" ]; then
+            sh "$gate/check-trailers" "$@" --push "$BEFORE" "$AFTER"
+          else
+            sh "$gate/check-trailers" "$@" --push "$BEFORE" "$AFTER" "$trusted"
+          fi
