@@ -38,4 +38,4 @@ owner's decision of that day.
   is fixed with `git revert`. The one exception to merging your own PR (rule 14, "Changes to the gate
   itself"): a change to the grilling gate's own files lands in a PR by itself and merges only on the
   owner's explicit go. The checked-in `.claude/settings.json` carries the deny/ask rules.
-- **Grilling gate:** placeholder, replaced by adopt.sh. <!-- grill-gate:pointer -->
+- **Grilling gate:** every commit ends with a `Decided: <path>#<anchor>` trailer (the recorded decision it implements) or a `Fix:`/`Docs:`/`Chore:`/`Test:` trailer saying why; rule 14 of claude-harness `docs/git-hygiene.md`. `.githooks/commit-msg` refuses anything else once a clone has run `git config core.hooksPath .githooks` (once per clone), and `.github/workflows/grill-gate.yml` re-checks every new commit, and a pull request's description, in CI. <!-- grill-gate:pointer -->
